@@ -1,0 +1,348 @@
+# John Agwom's Personal Coding Standards
+
+## Purpose
+
+This document defines my personal coding standards.
+
+These standards apply to every project I build regardless of the technology, project size, or industry.
+
+The goal is to produce code that is:
+
+* Easy to read
+* Easy to debug
+* Easy to edit
+* Easy to maintain
+* Consistent throughout the entire project
+
+Code should always be written for humans first and computers second.
+
+Readability is more important than writing fewer lines of code.
+
+---
+
+# Core Principles
+
+Always prefer:
+
+* Readable code over clever code.
+* Explicit logic over hidden logic.
+* Simplicity over unnecessary complexity.
+* Consistency over personal preference.
+* Maintainability over short code.
+
+Every file in the project should feel like it was written by one developer.
+
+---
+
+# JavaScript Standards
+
+## Use
+
+* async/await
+* try...catch
+* const and let appropriately
+* Descriptive variable names
+* Early returns to reduce nesting
+
+## Avoid
+
+* .then().catch()
+* Excessive chaining
+* Deep nesting
+* Unnecessary abstractions
+* One-line code that reduces readability
+
+---
+
+# Readability
+
+Code should be understandable without requiring additional explanation.
+
+If two approaches produce the same result, always choose the one that is easier for another developer to understand.
+
+Longer code is acceptable if it improves readability.
+
+---
+
+# Variable Naming
+
+Variable names should clearly describe their purpose.
+
+Good examples
+
+```text
+user
+
+loggedInUser
+
+registrationData
+
+loginData
+
+studentRecord
+
+attendanceRecord
+
+candidateList
+
+faceEmbedding
+
+databaseConnection
+```
+
+Avoid
+
+```text
+x
+
+temp
+
+obj
+
+abc
+
+data1
+
+test
+
+value
+```
+
+Names should explain what the variable contains without requiring comments.
+
+---
+
+# Function Design
+
+Every function should perform one responsibility.
+
+Avoid functions that perform multiple unrelated tasks.
+
+Good examples
+
+```text
+createUser()
+
+loginUser()
+
+uploadImage()
+
+generateQRCode()
+
+calculateAttendance()
+
+compareFaceEmbedding()
+```
+
+Function names should clearly describe what they do.
+
+---
+
+# Error Handling
+
+Every asynchronous function should use try...catch.
+
+Do not rely on .then().catch().
+
+---
+
+# Controller Standard
+
+Every backend controller must contain its own try...catch block.
+
+Example
+
+```javascript
+try {
+
+    // Controller logic
+
+} catch (error) {
+
+    console.log(error);
+    console.log("error in auth controller");
+
+    return res.status(500).json({
+        success: false,
+        message: "Internal Server Error"
+    });
+
+}
+```
+
+Every controller should identify itself inside the catch block.
+
+Examples
+
+```javascript
+console.log("error in auth controller");
+```
+
+```javascript
+console.log("error in user controller");
+```
+
+```javascript
+console.log("error in attendance controller");
+```
+
+```javascript
+console.log("error in payment controller");
+```
+
+This makes debugging significantly easier because the failing controller is immediately identified in the server logs.
+
+---
+
+# API Call Style
+
+Frontend API calls should always follow a consistent structure.
+
+Example
+
+```javascript
+async function fetchData() {
+
+    try {
+
+        const response = await fetch(...);
+
+        const result = await response.json();
+
+        console.log(result);
+
+    } catch (error) {
+
+        console.log(error);
+
+    }
+
+}
+```
+
+This structure should remain consistent for:
+
+* GET
+* POST
+* PUT
+* PATCH
+* DELETE
+
+Only the request configuration should change.
+
+---
+
+# Comments
+
+Comments should explain WHY.
+
+Do not comment obvious code.
+
+Bad
+
+```javascript
+// Increment counter
+counter++;
+```
+
+Good
+
+```javascript
+// Skip users whose accounts have already been verified.
+```
+
+Comments should provide context rather than repeat what the code already says.
+
+---
+
+# Code Formatting
+
+Use consistent spacing throughout the project.
+
+Separate logical sections with blank lines.
+
+Do not compress code to reduce scrolling.
+
+Readable formatting is preferred over compact formatting.
+
+---
+
+# Code Organization
+
+Keep files organized.
+
+Avoid unnecessary abstraction.
+
+Avoid creating additional files unless they improve maintainability or reusability.
+
+A small amount of duplication is acceptable if it makes the code easier to understand.
+
+---
+
+# Nesting
+
+Avoid excessive nesting.
+
+Prefer early returns.
+
+Instead of
+
+```javascript
+if (user) {
+
+    if (user.isVerified) {
+
+        if (!user.hasVoted) {
+
+        }
+
+    }
+
+}
+```
+
+Prefer
+
+```javascript
+if (!user) {
+    return;
+}
+
+if (!user.isVerified) {
+    return;
+}
+
+if (user.hasVoted) {
+    return;
+}
+
+// Continue processing
+```
+
+Code should remain visually easy to follow.
+
+---
+
+# Consistency
+
+The same task should always be solved using the same coding style throughout the project.
+
+Avoid mixing multiple programming styles in the same codebase.
+
+Consistency is more important than individual preference.
+
+---
+
+# AI Coding Instructions
+
+When generating code for me:
+
+* Follow these coding standards consistently.
+* Prioritize readability over brevity.
+* Do not introduce unnecessary design patterns.
+* Do not rewrite existing code into a different style unless requested.
+* Keep all generated code beginner-friendly while following professional development practices.
+* Generate code that is easy to debug, modify, explain, and maintain.
+* When multiple valid solutions exist, choose the one that is easiest for humans to read.
+
+The objective is to create code that remains understandable months or years after it is written.

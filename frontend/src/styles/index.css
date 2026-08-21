@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --page-background: #171918;
+  --page-sidebar: #1D201F;
+  --page-surface: #242725;
+  --page-surface-2: #2B2E2C;
+  --page-border: #1e293b;
+  --page-text: #F2F3F2;
+  --page-text-secondary: #B4B7B5;
+  --page-muted: #858987;
+  --page-accent: rgba(52, 92, 255, 0.18);
+  --page-accent-solid: #345CFF;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--page-background);
+  color: var(--page-text);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: var(--page-accent);
+  color: #ffffff;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@layer components {
+  .app-shell {
+    background: var(--page-background);
+    color: var(--page-text);
+  }
+
+  .app-sidebar {
+    background: var(--page-sidebar);
+  }
+
+  .app-surface {
+    @apply rounded-2xl border border-slate-800/80 shadow-soft backdrop-blur;
+    background: var(--page-surface);
+  }
+
+  .app-section {
+    @apply space-y-4 rounded-2xl border border-slate-800 p-6;
+    background: var(--page-surface-2);
+  }
+
+  .app-overlay {
+    background: rgba(23, 25, 24, 0.72);
+    backdrop-filter: blur(8px);
+  }
+}
