@@ -1,4 +1,5 @@
 import { API_URL } from "../constants/app.constants";
+import { getStoredAccessToken } from "../utils/authToken";
 
 function buildUrl(path) {
   if (!path) {
@@ -15,7 +16,15 @@ function buildUrl(path) {
   return `${normalizedBaseUrl}${normalizedPath}`;
 }
 
-async function parseResponse(response) {
+async function parseResponse(response, responseType = "json") {
+  if (responseType === "blob") {
+    return response.blob();
+  }
+
+  if (responseType === "arrayBuffer") {
+    return response.arrayBuffer();
+  }
+
   const contentType = response.headers.get("content-type") || "";
 
   if (contentType.includes("application/json")) {
@@ -27,11 +36,17 @@ async function parseResponse(response) {
 
 export async function request(method, path, options = {}) {
   try {
-    const { body, headers = {}, signal } = options;
+    const { body, headers = {}, signal, responseType = "json" } = options;
     const isFormData = body instanceof FormData;
     const requestHeaders = {
       ...headers,
     };
+
+    const storedAccessToken = getStoredAccessToken();
+
+    if (storedAccessToken && !requestHeaders.Authorization && !requestHeaders.authorization) {
+      requestHeaders.Authorization = `Bearer ${storedAccessToken}`;
+    }
 
     if (!isFormData && body !== undefined) {
       requestHeaders["Content-Type"] = "application/json";
@@ -45,15 +60,24 @@ export async function request(method, path, options = {}) {
       signal,
     });
 
-    const payload = await parseResponse(response);
-
     if (!response.ok) {
+      const payload = await parseResponse(response, "json").catch(() => null);
       const message =
         payload && typeof payload === "object" && payload.message
           ? payload.message
           : "Something went wrong";
 
       throw new Error(message);
+    }
+
+    const payload = await parseResponse(response, responseType);
+
+    if (responseType === "blob" || responseType === "arrayBuffer") {
+      return {
+        body: payload,
+        headers: response.headers,
+        status: response.status,
+      };
     }
 
     return payload;

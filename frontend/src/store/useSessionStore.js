@@ -1,5 +1,9 @@
 import { create } from "zustand";
 import * as authService from "../services/auth.service";
+import { clearStoredAccessToken, setStoredAccessToken } from "../utils/authToken";
+
+let initializeSessionPromise = null;
+let refreshCurrentUserPromise = null;
 
 const initialState = {
   currentUser: null,
@@ -47,15 +51,19 @@ export const useSessionStore = create((set, get) => ({
   },
 
   async initializeSession() {
-    const { currentUser, isInitializing } = get();
+    const { currentUser } = get();
 
-    if (!isInitializing && currentUser) {
+    if (currentUser) {
       return currentUser;
+    }
+
+    if (initializeSessionPromise) {
+      return initializeSessionPromise;
     }
 
     set({ isLoading: true });
 
-    try {
+    initializeSessionPromise = (async () => {
       const response = await authService.getCurrentUser();
       const user = response?.user || null;
       const organizationPermissions = response?.organizationPermissions || user?.organizationPermissions || [];
@@ -68,13 +76,28 @@ export const useSessionStore = create((set, get) => ({
       });
 
       return user;
+    })();
+
+    try {
+      return await initializeSessionPromise;
     } catch (error) {
-      set({
-        ...initialState,
-        isInitializing: false,
-      });
+      const { currentUser: latestCurrentUser, isAuthenticated } = get();
+
+      if (!latestCurrentUser && !isAuthenticated) {
+        set({
+          ...initialState,
+          isInitializing: false,
+        });
+      } else {
+        set({
+          isLoading: false,
+          isInitializing: false,
+        });
+      }
 
       throw new Error(getAuthErrorMessage(error));
+    } finally {
+      initializeSessionPromise = null;
     }
   },
 
@@ -87,6 +110,8 @@ export const useSessionStore = create((set, get) => ({
       const user = currentUserResponse?.user || response?.user || null;
       const organizationPermissions =
         currentUserResponse?.organizationPermissions || response?.organizationPermissions || user?.organizationPermissions || [];
+
+      setStoredAccessToken(response?.accessToken || null);
 
       set({
         currentUser: normalizeSessionUser(user, organizationPermissions),
@@ -112,6 +137,8 @@ export const useSessionStore = create((set, get) => ({
       const organizationPermissions =
         currentUserResponse?.organizationPermissions || response?.organizationPermissions || user?.organizationPermissions || [];
 
+      setStoredAccessToken(response?.accessToken || null);
+
       set({
         currentUser: normalizeSessionUser(user, organizationPermissions),
         isAuthenticated: Boolean(user),
@@ -134,6 +161,7 @@ export const useSessionStore = create((set, get) => ({
     } catch (error) {
       console.log(error);
     } finally {
+      clearStoredAccessToken();
       set({
         ...initialState,
         isInitializing: false,
@@ -142,9 +170,13 @@ export const useSessionStore = create((set, get) => ({
   },
 
   async refreshCurrentUser() {
+    if (currentUserRefreshInProgress()) {
+      return refreshCurrentUserPromise;
+    }
+
     set({ isLoading: true });
 
-    try {
+    refreshCurrentUserPromise = (async () => {
       const response = await authService.getCurrentUser();
       const user = response?.user || null;
       const organizationPermissions = response?.organizationPermissions || user?.organizationPermissions || [];
@@ -157,15 +189,34 @@ export const useSessionStore = create((set, get) => ({
       });
 
       return normalizeSessionUser(user, organizationPermissions);
+    })();
+
+    try {
+      return await refreshCurrentUserPromise;
     } catch (error) {
-      set({
-        ...initialState,
-        isInitializing: false,
-      });
+      const { currentUser: latestCurrentUser, isAuthenticated } = get();
+
+      if (!latestCurrentUser && !isAuthenticated) {
+        set({
+          ...initialState,
+          isInitializing: false,
+        });
+      } else {
+        set({
+          isLoading: false,
+          isInitializing: false,
+        });
+      }
 
       throw new Error(getAuthErrorMessage(error));
+    } finally {
+      refreshCurrentUserPromise = null;
     }
   },
 }));
+
+function currentUserRefreshInProgress() {
+  return Boolean(refreshCurrentUserPromise);
+}
 
 export const useAuthStore = useSessionStore;

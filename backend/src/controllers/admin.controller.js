@@ -36,6 +36,7 @@ export async function login(req, res) {
     return res.status(HTTP_STATUS.OK).json(
       successResponse("Operation successful", {
         user: result.user,
+        accessToken: result.accessToken,
       })
     );
   } catch (error) {

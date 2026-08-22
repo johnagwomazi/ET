@@ -1,4 +1,4 @@
-import { get, patch, post } from "../api/httpClient";
+import { get, patch, post, remove } from "../api/httpClient";
 import { unwrapResponse } from "../utils/response";
 import { buildQueryString } from "../utils/query";
 
@@ -64,8 +64,26 @@ export async function getOrganizationEventManagers(eventId, query = {}) {
   return unwrapResponse(response);
 }
 
+export async function assignOrganizationEventManager(eventId, payload) {
+  const response = await post(buildOrganizationEventPath(`/${eventId}/managers`), payload);
+
+  return unwrapResponse(response);
+}
+
+export async function removeOrganizationEventManager(eventId, userId) {
+  const response = await remove(buildOrganizationEventPath(`/${eventId}/managers/${userId}`));
+
+  return unwrapResponse(response);
+}
+
 export async function getOrganizationEventAttendance(eventId, query = {}) {
   const response = await get(buildOrganizationEventPath(`/${eventId}/attendance`, query));
+
+  return unwrapResponse(response);
+}
+
+export async function recordOrganizationEventAttendance(eventId, payload) {
+  const response = await post(buildOrganizationEventPath(`/${eventId}/attendance`), payload);
 
   return unwrapResponse(response);
 }
@@ -77,11 +95,45 @@ export async function getOrganizationEventAttendanceCount(eventId) {
 }
 
 export async function getOrganizationEventAttendancePdf(eventId, query = {}) {
-  return get(buildOrganizationEventPath(`/${eventId}/attendance/export/pdf`, query));
+  return get(buildOrganizationEventPath(`/${eventId}/attendance/export/pdf`, query), {
+    responseType: "blob",
+  });
 }
 
 export async function getOrganizationEventAttendanceExcel(eventId, query = {}) {
-  return get(buildOrganizationEventPath(`/${eventId}/attendance/export/excel`, query));
+  return get(buildOrganizationEventPath(`/${eventId}/attendance/export/excel`, query), {
+    responseType: "blob",
+  });
+}
+
+export async function getManagerEventAttendance(eventId, query = {}) {
+  const response = await get(buildManagerEventPath(`/${eventId}/attendance`, query));
+
+  return unwrapResponse(response);
+}
+
+export async function recordManagerEventAttendance(eventId, payload) {
+  const response = await post(buildManagerEventPath(`/${eventId}/attendance`), payload);
+
+  return unwrapResponse(response);
+}
+
+export async function getManagerEventAttendanceCount(eventId) {
+  const response = await get(buildManagerEventPath(`/${eventId}/attendance/count`));
+
+  return unwrapResponse(response);
+}
+
+export async function getManagerEventAttendancePdf(eventId, query = {}) {
+  return get(buildManagerEventPath(`/${eventId}/attendance/export/pdf`, query), {
+    responseType: "blob",
+  });
+}
+
+export async function getManagerEventAttendanceExcel(eventId, query = {}) {
+  return get(buildManagerEventPath(`/${eventId}/attendance/export/excel`, query), {
+    responseType: "blob",
+  });
 }
 
 export async function createEvent(payload) {

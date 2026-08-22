@@ -7,6 +7,8 @@ import EmptyState from "../../components/common/EmptyState";
 import ErrorState from "../../components/common/ErrorState";
 import StatusBadge from "../../components/dashboard/StatusBadge";
 import SectionHeader from "../../components/dashboard/SectionHeader";
+import EventManagersPanel from "../../components/events/EventManagersPanel";
+import EventAttendancePanel from "../../components/events/EventAttendancePanel";
 import EventLifecyclePanel from "../../components/events/EventLifecyclePanel";
 import { EventDetailSkeleton } from "../../components/events/EventLoadingStates";
 import { ROUTE_PATHS } from "../../routes/routePaths";
@@ -63,7 +65,7 @@ function EventDetailsPage({ scope = "organization" }) {
   const eventId = params.eventId;
   const isManager = scope === "manager";
   const { hasPermission } = useOrganizationPermissions();
-  const canManageLifecycle = !isManager && hasPermission(ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE);
+  const canManageOrganizationEvents = !isManager && hasPermission(ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE);
 
   const [event, setEvent] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -157,7 +159,11 @@ function EventDetailsPage({ scope = "organization" }) {
       <SectionHeader
         eyebrow={isManager ? "Manager workspace" : "Organization management"}
         title="Event Details"
-        description="Read-only event information for the foundation phase. Lifecycle, attendance, and assignment tools will follow later."
+        description={
+          isManager
+            ? "View the assigned event, check attendance, and export reports from the manager workspace."
+            : "Review event details, manage manager assignments, control the lifecycle, and handle attendance operations."
+        }
       actions={[
         {
           label: "Back to events",
@@ -246,8 +252,7 @@ function EventDetailsPage({ scope = "organization" }) {
           <div className="space-y-3">
             <h3 className="text-base font-semibold text-white">Event summary</h3>
             <p className="text-sm leading-6 text-slate-400">
-              This view intentionally stops short of edit and lifecycle controls. Those actions will be added in later
-              event phases once the form and workflow layers are ready.
+              This view now includes the operational controls that Phase 4 adds on top of the existing event summary.
             </p>
           </div>
 
@@ -271,7 +276,11 @@ function EventDetailsPage({ scope = "organization" }) {
           <div className="mt-5 grid gap-3">
             <DetailField
               label="Organization"
-              value={event.organization?.organizationName || event.organization?.name || "Hidden in manager scope"}
+              value={
+                event.organization?.organizationName ||
+                event.organization?.name ||
+                (isManager ? "Hidden in manager scope" : "Organization not attached")
+              }
               icon={Building2}
             />
             <DetailField
@@ -288,7 +297,11 @@ function EventDetailsPage({ scope = "organization" }) {
         </Card>
       </div>
 
-      <EventLifecyclePanel event={event} canManageLifecycle={canManageLifecycle} onEventUpdated={setEvent} />
+      {!isManager ? <EventManagersPanel event={event} canManageManagers={canManageOrganizationEvents} /> : null}
+
+      <EventAttendancePanel event={event} scope={isManager ? "manager" : "organization"} />
+
+      <EventLifecyclePanel event={event} canManageLifecycle={canManageOrganizationEvents} onEventUpdated={setEvent} />
     </div>
   );
 }
