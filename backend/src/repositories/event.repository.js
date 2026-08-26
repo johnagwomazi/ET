@@ -1,4 +1,5 @@
 import Event from "../models/event.model.js";
+import { PUBLIC_DISCOVERY_STATUSES } from "../utils/eventDiscovery.util.js";
 
 const PUBLIC_EVENT_POPULATE = {
   path: "organization",
@@ -6,7 +7,7 @@ const PUBLIC_EVENT_POPULATE = {
 };
 
 const PUBLIC_EVENT_SELECT =
-  "eventName slug description category banner startAt endAt capacity status isFeatured featuredAt venue organization createdAt updatedAt";
+  "eventName slug description category banner startAt endAt capacity status isFeatured featuredAt lifecycle venue organization createdAt updatedAt";
 
 function buildEventQuery(query) {
   return Event.find(query)
@@ -146,6 +147,20 @@ export async function findPublicEvents(filter = {}, options = {}) {
       .sort(options.sort || { startAt: 1, createdAt: -1 })
       .skip(options.skip || 0)
       .limit(options.limit || 10),
+    options
+  );
+}
+
+export async function findPublicEventById(eventId, options = {}) {
+  return applySession(
+    Event.findOne({
+      _id: eventId,
+      status: {
+        $in: PUBLIC_DISCOVERY_STATUSES,
+      },
+    })
+      .select(PUBLIC_EVENT_SELECT)
+      .populate(PUBLIC_EVENT_POPULATE),
     options
   );
 }

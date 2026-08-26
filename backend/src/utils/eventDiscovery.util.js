@@ -97,6 +97,9 @@ export function mapPublicEventResponse(eventDocument) {
     status: event.status || EVENT_STATUS.DRAFT,
     isFeatured: Boolean(event.isFeatured),
     featuredAt: event.featuredAt || null,
+    lifecycle: {
+      reason: event.lifecycle?.reason || null,
+    },
     venue: mapPublicVenueResponse(event.venue),
     organization: mapPublicOrganizationResponse(event.organization),
     createdAt: event.createdAt || null,

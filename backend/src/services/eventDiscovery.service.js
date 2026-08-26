@@ -296,3 +296,18 @@ export async function discoverPublicEvents(query = {}, dependencies = defaultDep
     pagination: buildPaginationMeta(totalItems, pagination),
   };
 }
+
+export async function getPublicEventById(eventId, dependencies = defaultDependencies) {
+  const event = await dependencies.eventRepository.findPublicEventById(eventId);
+
+  if (!event || !isPubliclyDiscoverableEvent(event)) {
+    return {
+      error: "Event not found",
+      statusCode: 404,
+    };
+  }
+
+  return {
+    event: mapPublicEventResponse(event),
+  };
+}
