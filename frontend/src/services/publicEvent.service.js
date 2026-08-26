@@ -11,3 +11,9 @@ export async function discoverPublicEvents(query = {}, options = {}) {
 
   return unwrapResponse(response);
 }
+
+export async function getPublicEventById(eventId, options = {}) {
+  const response = await get(buildPublicEventPath(`/${eventId}`), options);
+
+  return unwrapResponse(response);
+}
