@@ -31,6 +31,7 @@ import SuperAdminDashboardPage from "../pages/super-admin/SuperAdminDashboardPag
 import OrganizationsPage from "../pages/super-admin/OrganizationsPage";
 import UsersPage from "../pages/super-admin/UsersPage";
 import ForbiddenPage from "../pages/ForbiddenPage";
+import PublicEventDetailsPage from "../pages/events/PublicEventDetailsPage";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants";
 import NotFoundPage from "../pages/NotFoundPage";
 import { Navigate } from "react-router-dom";
@@ -42,6 +43,10 @@ const router = createBrowserRouter([
       {
         path: ROUTE_PATHS.HOME,
         element: <HomePage />,
+      },
+      {
+        path: ROUTE_PATHS.PUBLIC_EVENT_DETAILS,
+        element: <PublicEventDetailsPage />,
       },
     ],
   },

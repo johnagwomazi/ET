@@ -1,6 +1,6 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useSessionStore } from "../../store/useSessionStore";
-import { getDashboardRouteForRole } from "../../utils/auth";
+import { getPostLoginRouteForRole } from "../../utils/auth";
 
 function GuestRoute() {
   const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
@@ -12,7 +12,7 @@ function GuestRoute() {
   }
 
   if (isAuthenticated && currentUser) {
-    return <Navigate to={getDashboardRouteForRole(currentUser.role)} replace />;
+    return <Navigate to={getPostLoginRouteForRole(currentUser.role)} replace />;
   }
 
   return <Outlet />;

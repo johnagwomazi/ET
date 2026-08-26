@@ -188,6 +188,19 @@ const eventSchema = new mongoose.Schema(
       default: EVENT_STATUS.DRAFT,
       required: true,
     },
+    isFeatured: {
+      type: Boolean,
+      default: false,
+    },
+    featuredAt: {
+      type: Date,
+      default: null,
+    },
+    featuredBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     organization: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Organization",
@@ -228,6 +241,39 @@ eventSchema.index({
   status: 1,
   startAt: 1,
 });
+
+eventSchema.index({
+  status: 1,
+  isFeatured: -1,
+  featuredAt: -1,
+  startAt: 1,
+});
+
+eventSchema.index(
+  {
+    eventName: "text",
+    description: "text",
+    category: "text",
+    "venue.name": "text",
+    "venue.address.line1": "text",
+    "venue.address.city": "text",
+    "venue.address.state": "text",
+    "venue.address.country": "text",
+  },
+  {
+    name: "event_public_search_text_index",
+    weights: {
+      eventName: 10,
+      category: 6,
+      "venue.name": 5,
+      description: 3,
+      "venue.address.city": 2,
+      "venue.address.state": 2,
+      "venue.address.country": 2,
+      "venue.address.line1": 1,
+    },
+  }
+);
 
 const Event = mongoose.models.Event || mongoose.model("Event", eventSchema);
 

@@ -1,5 +1,6 @@
 export const ROUTE_PATHS = {
   HOME: "/",
+  PUBLIC_EVENT_DETAILS: "/events/:eventId",
   SIGN_UP: "/signup",
   REGISTER_CUSTOMER: "/register/customer",
   REGISTER_ORGANIZER: "/register/organizer",

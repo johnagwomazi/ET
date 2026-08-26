@@ -1,9 +1,23 @@
 import Event from "../models/event.model.js";
 
+const PUBLIC_EVENT_POPULATE = {
+  path: "organization",
+  select: "organizationName logo website socialLinks",
+};
+
+const PUBLIC_EVENT_SELECT =
+  "eventName slug description category banner startAt endAt capacity status isFeatured featuredAt venue organization createdAt updatedAt";
+
 function buildEventQuery(query) {
   return Event.find(query)
     .populate("organization")
     .populate("createdBy");
+}
+
+function buildPublicEventQuery(query) {
+  return Event.find(query)
+    .select(PUBLIC_EVENT_SELECT)
+    .populate(PUBLIC_EVENT_POPULATE);
 }
 
 function applySession(query, options = {}) {
@@ -118,6 +132,20 @@ export async function deleteEventByIdAndOrganization(eventId, organizationId, op
     })
       .populate("organization")
       .populate("createdBy"),
+    options
+  );
+}
+
+export async function countPublicEvents(filter = {}) {
+  return Event.countDocuments(filter);
+}
+
+export async function findPublicEvents(filter = {}, options = {}) {
+  return applySession(
+    buildPublicEventQuery(filter)
+      .sort(options.sort || { startAt: 1, createdAt: -1 })
+      .skip(options.skip || 0)
+      .limit(options.limit || 10),
     options
   );
 }

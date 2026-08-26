@@ -15,3 +15,11 @@ export function getDashboardRouteForRole(role) {
 
   return DASHBOARD_ROUTES.CUSTOMER;
 }
+
+export function getPostLoginRouteForRole(role) {
+  if (role === USER_ROLES.CUSTOMER) {
+    return "/";
+  }
+
+  return getDashboardRouteForRole(role);
+}

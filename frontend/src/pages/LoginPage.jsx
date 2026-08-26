@@ -13,7 +13,7 @@ import PasswordInput from "../components/ui/PasswordInput";
 import { ROUTE_PATHS } from "../routes/routePaths";
 import { loginSchema } from "../utils/authSchemas";
 import { useSessionStore } from "../store/useSessionStore";
-import { getDashboardRouteForRole } from "../utils/auth";
+import { getPostLoginRouteForRole } from "../utils/auth";
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -38,7 +38,7 @@ function LoginPage() {
     try {
       const user = await login(values);
       toast.success("Login successful");
-      navigate(getDashboardRouteForRole(user.role));
+      navigate(getPostLoginRouteForRole(user.role));
     } catch (error) {
       toast.error(error.message || "Something went wrong");
     } finally {
@@ -64,6 +64,12 @@ function LoginPage() {
             title="Log in to your account"
             description="Your role determines where you land after sign in."
           />
+
+          <div className="flex justify-start">
+            <Button as={Link} to={ROUTE_PATHS.HOME} variant="secondary" size="sm">
+              Home
+            </Button>
+          </div>
 
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
             <Input label="Email" type="email" placeholder="name@example.com" error={errors.email?.message} {...register("email")} />
