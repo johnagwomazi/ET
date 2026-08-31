@@ -237,7 +237,7 @@ function SuperAdminDashboardPage() {
             <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Events</p>
               <p className="mt-2 text-2xl font-semibold text-white">{formatNumber(overview?.totalEvents || 0)}</p>
-              <p className="mt-1 text-sm text-slate-500">No event module yet</p>
+              <p className="mt-1 text-sm text-slate-500">Live event module total</p>
             </div>
             <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Tickets sold</p>

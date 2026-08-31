@@ -1,5 +1,6 @@
 import express from "express";
 import * as organizationController from "../controllers/organization.controller.js";
+import * as ticketingController from "../controllers/ticketing.controller.js";
 import eventRoutes from "./event.routes.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -13,6 +14,11 @@ import {
   organizationMemberRoleUpdateSchema,
   organizationSettingsUpdateSchema,
 } from "../validators/admin.validator.js";
+import {
+  orderReferenceParamSchema,
+  refundCreateSchema,
+  withdrawalCreateSchema,
+} from "../validators/ticketing.validator.js";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants.js";
 
 const organizationRouter = express.Router();
@@ -57,6 +63,21 @@ organizationRouter.get(
   "/me/dashboard",
   requireOrganizationPermission(ORGANIZATION_PERMISSIONS.DASHBOARD_VIEW),
   organizationController.getMyOrganizationDashboard
+);
+
+organizationRouter.post(
+  "/me/orders/:reference/refunds",
+  requireOrganizationPermission(ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE),
+  validate(orderReferenceParamSchema, "params"),
+  validate(refundCreateSchema),
+  ticketingController.createOrderRefund
+);
+
+organizationRouter.post(
+  "/me/withdrawals",
+  requireOrganizationPermission(ORGANIZATION_PERMISSIONS.SETTINGS_UPDATE),
+  validate(withdrawalCreateSchema),
+  ticketingController.requestWithdrawal
 );
 
 organizationRouter.get(

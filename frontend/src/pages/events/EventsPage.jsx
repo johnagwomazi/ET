@@ -486,9 +486,11 @@ function EventsPage({ scope = "organization" }) {
                         <Button as={Link} to={getDetailsRoute(scope, event._id || event.id)} variant="ghost" size="sm">
                           View
                         </Button>
-                        <Button as={Link} to={getEditRoute(scope, event._id || event.id)} variant="secondary" size="sm">
-                          Edit
-                        </Button>
+                        {!isManager ? (
+                          <Button as={Link} to={getEditRoute(scope, event._id || event.id)} variant="secondary" size="sm">
+                            Edit
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   </Card>

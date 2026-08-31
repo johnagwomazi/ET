@@ -6,12 +6,14 @@ import { validate } from "../middleware/validate.middleware.js";
 import { USER_ROLES } from "../constants/roles.constants.js";
 import * as eventManagerController from "../controllers/eventManager.controller.js";
 import * as eventAttendanceController from "../controllers/eventAttendance.controller.js";
+import * as ticketingController from "../controllers/ticketing.controller.js";
 import {
   attendanceCreateSchema,
   attendanceEventIdParamSchema,
   attendanceListQuerySchema,
 } from "../validators/attendance.validator.js";
 import { eventIdParamSchema, eventManagerListQuerySchema } from "../validators/event.validator.js";
+import { ticketValidationSchema } from "../validators/ticketing.validator.js";
 
 const managerRouter = express.Router();
 
@@ -61,6 +63,20 @@ managerRouter.get(
   "/events/:eventId/attendance/export/excel",
   validate(attendanceEventIdParamSchema, "params"),
   eventAttendanceController.exportAttendanceExcel
+);
+
+managerRouter.post(
+  "/events/:eventId/tickets/validate",
+  validate(eventIdParamSchema, "params"),
+  validate(ticketValidationSchema),
+  ticketingController.validateEventTicket
+);
+
+managerRouter.post(
+  "/events/:eventId/tickets/check-in",
+  validate(eventIdParamSchema, "params"),
+  validate(ticketValidationSchema),
+  ticketingController.checkInEventTicket
 );
 
 export default managerRouter;

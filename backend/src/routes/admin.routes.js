@@ -2,6 +2,7 @@ import express from "express";
 import * as adminController from "../controllers/admin.controller.js";
 import * as organizationController from "../controllers/organization.controller.js";
 import * as userController from "../controllers/user.controller.js";
+import * as ticketingController from "../controllers/ticketing.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { authorizeRoles } from "../middleware/role.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -18,6 +19,11 @@ import {
   userIdParamSchema,
   userListQuerySchema,
 } from "../validators/admin.validator.js";
+import {
+  withdrawalApproveSchema,
+  withdrawalIdParamSchema,
+  withdrawalRejectSchema,
+} from "../validators/ticketing.validator.js";
 
 const adminRouter = express.Router();
 
@@ -78,5 +84,19 @@ adminRouter.patch(
   userController.reactivateUser
 );
 adminRouter.delete("/users/:userId", validate(userIdParamSchema, "params"), userController.deleteUser);
+
+adminRouter.patch(
+  "/withdrawals/:withdrawalId/approve",
+  validate(withdrawalIdParamSchema, "params"),
+  validate(withdrawalApproveSchema),
+  ticketingController.approveWithdrawal
+);
+
+adminRouter.patch(
+  "/withdrawals/:withdrawalId/reject",
+  validate(withdrawalIdParamSchema, "params"),
+  validate(withdrawalRejectSchema),
+  ticketingController.rejectWithdrawal
+);
 
 export default adminRouter;

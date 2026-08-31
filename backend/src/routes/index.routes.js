@@ -5,6 +5,8 @@ import adminRoutes from "./admin.routes.js";
 import publicEventRoutes from "./publicEvent.routes.js";
 import organizationRoutes from "./organization.routes.js";
 import managerRoutes from "./manager.routes.js";
+import ticketingRoutes from "./ticketing.routes.js";
+import paymentRoutes from "./payment.routes.js";
 
 const router = express.Router();
 
@@ -14,5 +16,7 @@ router.use("/admin", adminRoutes);
 router.use("/events", publicEventRoutes);
 router.use("/organizations", organizationRoutes);
 router.use("/manager", managerRoutes);
+router.use("/ticketing", ticketingRoutes);
+router.use("/payments", paymentRoutes);
 
 export default router;

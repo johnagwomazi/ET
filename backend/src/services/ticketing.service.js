@@ -1,0 +1,883 @@
+import crypto from "node:crypto";
+import mongoose from "mongoose";
+import QRCode from "qrcode";
+import { EVENT_STATUS } from "../constants/eventStatus.constants.js";
+import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
+import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants.js";
+import { USER_ROLES } from "../constants/roles.constants.js";
+import {
+  DEFAULT_CURRENCY,
+  ORDER_STATUS,
+  PAYMENT_STATUS,
+  REFUND_STATUS,
+  TICKET_STATUS,
+  TICKET_TYPE_STATUS,
+  WITHDRAWAL_STATUS,
+} from "../constants/ticketing.constants.js";
+import * as authRepository from "../repositories/auth.repository.js";
+import * as eventAttendanceRepository from "../repositories/eventAttendance.repository.js";
+import * as eventManagerAssignmentRepository from "../repositories/eventManagerAssignment.repository.js";
+import * as eventRepository from "../repositories/event.repository.js";
+import * as orderRepository from "../repositories/order.repository.js";
+import * as paymentEventRepository from "../repositories/paymentEvent.repository.js";
+import * as refundRepository from "../repositories/refund.repository.js";
+import * as ticketRepository from "../repositories/ticket.repository.js";
+import * as ticketTypeRepository from "../repositories/ticketType.repository.js";
+import * as withdrawalRepository from "../repositories/withdrawal.repository.js";
+import * as paystackService from "./paystack.service.js";
+import * as notificationService from "./notification.service.js";
+import { buildPaginationMeta, buildPaginationOptions, escapeRegex } from "../utils/query.util.js";
+import { hasOrganizationPermission } from "../utils/organizationPermission.util.js";
+import {
+  getDocumentId,
+  mapOrderResponse,
+  mapRefundResponse,
+  mapTicketResponse,
+  mapTicketTypeResponse,
+  mapWithdrawalResponse,
+} from "../utils/ticketingResponse.util.js";
+import { mapEventAttendanceResponse } from "../utils/eventAttendanceResponse.util.js";
+
+const defaultDependencies = {
+  authRepository,
+  eventAttendanceRepository,
+  eventManagerAssignmentRepository,
+  eventRepository,
+  orderRepository,
+  paymentEventRepository,
+  refundRepository,
+  ticketRepository,
+  ticketTypeRepository,
+  withdrawalRepository,
+  paystackService,
+  notificationService,
+  mongoose,
+};
+
+function canUseTransactions(dependencies) {
+  return Boolean(
+    dependencies?.mongoose &&
+    dependencies.mongoose.connection &&
+    dependencies.mongoose.connection.readyState === 1 &&
+    typeof dependencies.mongoose.startSession === "function"
+  );
+}
+
+async function runInTransaction(dependencies, executor) {
+  if (!canUseTransactions(dependencies)) {
+    return executor(null);
+  }
+
+  const session = await dependencies.mongoose.startSession();
+
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      result = await executor(session);
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
+}
+
+function createReference(prefix) {
+  return `${prefix}_${Date.now()}_${crypto.randomBytes(8).toString("hex")}`;
+}
+
+function hashValue(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeAttendee(value = {}, fallback = {}) {
+  return {
+    name: String(value.name || fallback.name || "").trim(),
+    phone: String(value.phone || fallback.phone || "").trim(),
+    email: normalizeEmail(value.email || fallback.email),
+  };
+}
+
+function isTicketTypeAvailable(ticketType, quantity, now = new Date()) {
+  if (!ticketType || ticketType.status !== TICKET_TYPE_STATUS.ACTIVE) {
+    return false;
+  }
+
+  if (ticketType.saleStartsAt && ticketType.saleStartsAt > now) {
+    return false;
+  }
+
+  if (ticketType.saleEndsAt && ticketType.saleEndsAt < now) {
+    return false;
+  }
+
+  if (quantity > Number(ticketType.maxPerOrder || 1)) {
+    return false;
+  }
+
+  return Number(ticketType.quantity || 0) - Number(ticketType.soldQuantity || 0) >= quantity;
+}
+
+function isEventPurchasable(event) {
+  return [EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED].includes(event?.status);
+}
+
+async function getOrganizationActorContext(organizationId, actorUserId, dependencies = defaultDependencies) {
+  const [actorUser, eventCount] = await Promise.all([
+    dependencies.authRepository.findAuthUserById(actorUserId),
+    dependencies.eventRepository.countEvents({ organization: organizationId }),
+  ]);
+
+  if (!actorUser) {
+    return { error: "Not authorized", statusCode: HTTP_STATUS.UNAUTHORIZED };
+  }
+
+  if (getDocumentId(actorUser.organization) !== getDocumentId(organizationId)) {
+    return { error: "You cannot access another organization", statusCode: HTTP_STATUS.FORBIDDEN };
+  }
+
+  return { actorUser, eventCount };
+}
+
+async function getAdminEventContext(organizationId, actorUserId, eventId, dependencies = defaultDependencies) {
+  const actorContext = await getOrganizationActorContext(organizationId, actorUserId, dependencies);
+
+  if (actorContext.error) {
+    return actorContext;
+  }
+
+  const event = await dependencies.eventRepository.findEventByIdAndOrganization(eventId, organizationId);
+
+  if (!event) {
+    return { error: "Event not found", statusCode: HTTP_STATUS.NOT_FOUND };
+  }
+
+  if (!hasOrganizationPermission(actorContext.actorUser, ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE, event.organization)) {
+    return { error: "You do not have access to this resource", statusCode: HTTP_STATUS.FORBIDDEN };
+  }
+
+  return { actorUser: actorContext.actorUser, event, organization: event.organization };
+}
+
+export async function createEventTicketType(organizationId, actorUserId, eventId, payload, dependencies = defaultDependencies) {
+  const context = await getAdminEventContext(organizationId, actorUserId, eventId, dependencies);
+
+  if (context.error) {
+    return context;
+  }
+
+  if (![EVENT_STATUS.DRAFT, EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED].includes(context.event.status)) {
+    return { error: "Ticket types cannot be changed for this event status", statusCode: HTTP_STATUS.BAD_REQUEST };
+  }
+
+  const ticketType = await dependencies.ticketTypeRepository.createTicketType({
+    event: eventId,
+    organization: organizationId,
+    name: payload.name,
+    description: payload.description || "",
+    price: payload.price,
+    currency: payload.currency || DEFAULT_CURRENCY,
+    quantity: payload.quantity,
+    saleStartsAt: payload.saleStartsAt || null,
+    saleEndsAt: payload.saleEndsAt || null,
+    maxPerOrder: payload.maxPerOrder || 10,
+    status: payload.status || TICKET_TYPE_STATUS.ACTIVE,
+    position: payload.position || 0,
+    createdBy: actorUserId,
+  });
+
+  return { ticketType: mapTicketTypeResponse(ticketType) };
+}
+
+export async function updateEventTicketType(organizationId, actorUserId, eventId, ticketTypeId, payload, dependencies = defaultDependencies) {
+  const context = await getAdminEventContext(organizationId, actorUserId, eventId, dependencies);
+
+  if (context.error) {
+    return context;
+  }
+
+  const currentTicketType = await dependencies.ticketTypeRepository.findTicketTypeByIdAndEvent(ticketTypeId, eventId, organizationId);
+
+  if (!currentTicketType) {
+    return { error: "Ticket type not found", statusCode: HTTP_STATUS.NOT_FOUND };
+  }
+
+  if (payload.quantity !== undefined && Number(payload.quantity) < Number(currentTicketType.soldQuantity || 0)) {
+    return { error: "Quantity cannot be lower than tickets already sold", statusCode: HTTP_STATUS.BAD_REQUEST };
+  }
+
+  const ticketType = await dependencies.ticketTypeRepository.updateTicketTypeByIdAndEvent(
+    ticketTypeId,
+    eventId,
+    organizationId,
+    payload
+  );
+
+  return { ticketType: mapTicketTypeResponse(ticketType) };
+}
+
+export async function getEventTicketTypes(organizationId, actorUserId, eventId, query = {}, dependencies = defaultDependencies) {
+  const context = await getAdminEventContext(organizationId, actorUserId, eventId, dependencies);
+
+  if (context.error) {
+    return context;
+  }
+
+  const pagination = buildPaginationOptions(query, { page: 1, limit: 50, sortBy: "position", sortOrder: 1 });
+  const filter = { event: eventId, organization: organizationId };
+  const [ticketTypes, totalItems] = await Promise.all([
+    dependencies.ticketTypeRepository.findTicketTypes(filter, pagination),
+    dependencies.ticketTypeRepository.countTicketTypes(filter),
+  ]);
+
+  return {
+    ticketTypes: ticketTypes.map(mapTicketTypeResponse),
+    pagination: buildPaginationMeta(totalItems, pagination),
+  };
+}
+
+export async function getPublicEventTicketTypes(eventId, dependencies = defaultDependencies) {
+  const event = await dependencies.eventRepository.findPublicEventById(eventId);
+
+  if (!event) {
+    return { error: "Event not found", statusCode: HTTP_STATUS.NOT_FOUND };
+  }
+
+  const ticketTypes = await dependencies.ticketTypeRepository.findTicketTypes({
+    event: eventId,
+    status: TICKET_TYPE_STATUS.ACTIVE,
+  }, { limit: 100 });
+
+  return {
+    ticketTypes: ticketTypes.map(mapTicketTypeResponse),
+  };
+}
+
+export async function createCheckoutOrder(customerId, payload, dependencies = defaultDependencies) {
+  const customer = customerId ? await dependencies.authRepository.findAuthUserById(customerId) : null;
+
+  if (!customer) {
+    return { error: "Not authorized", statusCode: HTTP_STATUS.UNAUTHORIZED };
+  }
+
+  if (payload.idempotencyKey) {
+    const existingOrder = await dependencies.orderRepository.findOrderByCustomerAndIdempotencyKey(customerId, payload.idempotencyKey);
+    if (existingOrder) {
+      return {
+        order: mapOrderResponse(existingOrder),
+        payment: {
+          reference: existingOrder.paymentReference,
+          authorizationUrl: existingOrder.metadata?.authorizationUrl || null,
+          reused: true,
+        },
+      };
+    }
+  }
+
+  const event = await dependencies.eventRepository.findPublicEventById(payload.eventId);
+
+  if (!event || !isEventPurchasable(event)) {
+    return { error: "Event is not available for checkout", statusCode: HTTP_STATUS.BAD_REQUEST };
+  }
+
+  const orderReference = createReference("ord");
+  const paymentReference = createReference("pay");
+  const reservedItems = [];
+
+  try {
+    const result = await runInTransaction(dependencies, async (session) => {
+      const orderItems = [];
+      let subtotal = 0;
+
+      for (const item of payload.items) {
+        const ticketType = await dependencies.ticketTypeRepository.findTicketTypeByIdAndEvent(
+          item.ticketTypeId,
+          payload.eventId,
+          getDocumentId(event.organization),
+          { session }
+        );
+
+        if (!isTicketTypeAvailable(ticketType, item.quantity)) {
+          return { error: "Ticket type is unavailable or sold out", statusCode: HTTP_STATUS.CONFLICT };
+        }
+
+        const reservedTicketType = await dependencies.ticketTypeRepository.reserveTicketInventory(
+          item.ticketTypeId,
+          payload.eventId,
+          getDocumentId(event.organization),
+          item.quantity,
+          { session }
+        );
+
+        if (!reservedTicketType) {
+          return { error: "Ticket inventory is no longer available", statusCode: HTTP_STATUS.CONFLICT };
+        }
+
+        reservedItems.push({ ticketTypeId: item.ticketTypeId, quantity: item.quantity });
+        const lineTotal = Number(ticketType.price || 0) * Number(item.quantity || 0);
+        subtotal += lineTotal;
+        orderItems.push({
+          ticketType: item.ticketTypeId,
+          name: ticketType.name,
+          quantity: item.quantity,
+          unitPrice: Number(ticketType.price || 0),
+          total: lineTotal,
+        });
+      }
+
+      const order = await dependencies.orderRepository.createOrder(
+        {
+          reference: orderReference,
+          idempotencyKey: payload.idempotencyKey || "",
+          customer: customerId,
+          organization: getDocumentId(event.organization),
+          event: payload.eventId,
+          items: orderItems,
+          subtotal,
+          fees: 0,
+          total: subtotal,
+          currency: orderItems[0]?.currency || DEFAULT_CURRENCY,
+          paymentStatus: PAYMENT_STATUS.PENDING,
+          orderStatus: ORDER_STATUS.PENDING,
+          paymentReference,
+          customerInfo: normalizeAttendee(payload.customerInfo),
+          metadata: {
+            attendeeLines: payload.items.map((item) => ({
+              ticketTypeId: item.ticketTypeId,
+              attendees: item.attendees || [],
+            })),
+          },
+        },
+        { session }
+      );
+
+      return { order };
+    });
+
+    if (result.error) {
+      return result;
+    }
+
+    const payment = await dependencies.paystackService.initializeTransaction({
+      email: payload.customerInfo.email,
+      amount: result.order.total,
+      reference: paymentReference,
+      metadata: {
+        orderReference,
+        customerId,
+        eventId: payload.eventId,
+      },
+    });
+
+    const authorizationUrl = payment?.data?.authorization_url || null;
+    const updatedOrder = await dependencies.orderRepository.updateOrderByReference(orderReference, {
+      paymentStatus: payment?.status ? PAYMENT_STATUS.INITIALIZED : PAYMENT_STATUS.PENDING,
+      metadata: {
+        ...result.order.metadata,
+        paystackConfigured: Boolean(payment?.configured),
+        authorizationUrl,
+      },
+    });
+
+    return {
+      order: mapOrderResponse(updatedOrder || result.order),
+      payment: {
+        reference: paymentReference,
+        authorizationUrl,
+        accessCode: payment?.data?.access_code || null,
+        providerConfigured: Boolean(payment?.configured),
+      },
+    };
+  } catch (error) {
+    for (const item of reservedItems) {
+      await dependencies.ticketTypeRepository.releaseTicketInventory(item.ticketTypeId, item.quantity).catch(() => {});
+    }
+
+    if (error?.code === 11000) {
+      return { error: "Duplicate order request", statusCode: HTTP_STATUS.CONFLICT };
+    }
+
+    return { error: "Something went wrong", statusCode: HTTP_STATUS.INTERNAL_SERVER_ERROR };
+  }
+}
+
+async function buildTicketsForPaidOrder(order, dependencies, session = null) {
+  const existingTickets = await dependencies.ticketRepository.findTickets({ order: order._id }, { limit: 1, session });
+
+  if (existingTickets.length > 0) {
+    return dependencies.ticketRepository.findTickets({ order: order._id }, { limit: 500, session });
+  }
+
+  const attendeeLines = order.metadata?.attendeeLines || [];
+  const ticketRows = [];
+
+  for (const item of order.items || []) {
+    const line = attendeeLines.find((entry) => String(entry.ticketTypeId) === String(getDocumentId(item.ticketType)));
+    const attendees = line?.attendees || [];
+
+    for (let index = 0; index < Number(item.quantity || 0); index += 1) {
+      const rawToken = createReference("tkn");
+      const qrCodeDataUrl = await QRCode.toDataURL(rawToken);
+
+      ticketRows.push({
+        reference: createReference("tkt"),
+        tokenHash: hashValue(rawToken),
+        qrToken: rawToken,
+        qrCodeDataUrl,
+        order: order._id,
+        event: getDocumentId(order.event),
+        organization: getDocumentId(order.organization),
+        ticketType: getDocumentId(item.ticketType),
+        purchaser: getDocumentId(order.customer),
+        attendee: normalizeAttendee(attendees[index], order.customerInfo),
+        status: TICKET_STATUS.VALID,
+      });
+    }
+  }
+
+  return dependencies.ticketRepository.createTickets(ticketRows, { session });
+}
+
+export async function markOrderPaidFromProvider(paymentReference, providerPayload = {}, dependencies = defaultDependencies) {
+  return runInTransaction(dependencies, async (session) => {
+    const order = await dependencies.orderRepository.findOrderByPaymentReference(paymentReference, { session });
+
+    if (!order) {
+      return { error: "Order not found", statusCode: HTTP_STATUS.NOT_FOUND };
+    }
+
+    if (order.paymentStatus === PAYMENT_STATUS.PAID) {
+      const tickets = await dependencies.ticketRepository.findTickets({ order: order._id }, { limit: 500, session });
+      return { order: mapOrderResponse(order), tickets: tickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true })), reused: true };
+    }
+
+    const paidOrder = await dependencies.orderRepository.updateOrderByReference(
+      order.reference,
+      {
+        paymentStatus: PAYMENT_STATUS.PAID,
+        orderStatus: ORDER_STATUS.PAID,
+        paidAt: new Date(),
+        metadata: {
+          ...(order.metadata || {}),
+          providerPayload,
+        },
+      },
+      { session }
+    );
+
+    const tickets = await buildTicketsForPaidOrder(paidOrder, dependencies, session);
+    await dependencies.notificationService.sendPaymentSuccessNotification(paidOrder).catch(() => {});
+    await dependencies.notificationService.sendTicketIssuedNotification(paidOrder, tickets).catch(() => {});
+
+    return {
+      order: mapOrderResponse(paidOrder),
+      tickets: tickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true })),
+    };
+  });
+}
+
+export async function verifyPayment(reference, dependencies = defaultDependencies) {
+  const verification = await dependencies.paystackService.verifyTransaction(reference);
+
+  if (!verification?.status || verification?.data?.status !== "success") {
+    const currentOrder = await dependencies.orderRepository.findOrderByPaymentReference(reference);
+
+    if (!currentOrder) {
+      return { error: "Payment verification failed", statusCode: HTTP_STATUS.BAD_REQUEST };
+    }
+
+    const order = await dependencies.orderRepository.updateOrderByReference(currentOrder.reference, {
+      paymentStatus: PAYMENT_STATUS.FAILED,
+      orderStatus: ORDER_STATUS.FAILED,
+      failedAt: new Date(),
+    });
+
+    return { order: mapOrderResponse(order), verified: false };
+  }
+
+  return markOrderPaidFromProvider(reference, verification.data, dependencies);
+}
+
+export async function handlePaystackWebhook(rawBody, signature, payload, dependencies = defaultDependencies) {
+  if (!dependencies.paystackService.verifyWebhookSignature(rawBody, signature)) {
+    return { error: "Invalid webhook signature", statusCode: HTTP_STATUS.UNAUTHORIZED };
+  }
+
+  const reference = payload?.data?.reference;
+  const event = payload?.event;
+
+  if (!reference || !event) {
+    return { error: "Invalid webhook payload", statusCode: HTTP_STATUS.BAD_REQUEST };
+  }
+
+  try {
+    await dependencies.paymentEventRepository.createPaymentEvent({
+      provider: "paystack",
+      event,
+      reference,
+      payload,
+      processedAt: new Date(),
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return { processed: true, duplicate: true };
+    }
+
+    throw error;
+  }
+
+  if (event === "charge.success") {
+    return markOrderPaidFromProvider(reference, payload.data, dependencies);
+  }
+
+  return { processed: true };
+}
+
+export async function getCustomerOrders(customerId, query = {}, dependencies = defaultDependencies) {
+  const pagination = buildPaginationOptions(query, { page: 1, limit: 20, sortBy: "createdAt", sortOrder: -1 });
+  const [orders, totalItems] = await Promise.all([
+    dependencies.orderRepository.findOrders({ customer: customerId }, pagination),
+    dependencies.orderRepository.countOrders({ customer: customerId }),
+  ]);
+
+  return {
+    orders: orders.map(mapOrderResponse),
+    pagination: buildPaginationMeta(totalItems, pagination),
+  };
+}
+
+export async function getCustomerTickets(customerId, query = {}, dependencies = defaultDependencies) {
+  const pagination = buildPaginationOptions(query, { page: 1, limit: 20, sortBy: "createdAt", sortOrder: -1 });
+  const [tickets, totalItems] = await Promise.all([
+    dependencies.ticketRepository.findTickets({ purchaser: customerId }, pagination),
+    dependencies.ticketRepository.countTickets({ purchaser: customerId }),
+  ]);
+
+  return {
+    tickets: tickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true })),
+    pagination: buildPaginationMeta(totalItems, pagination),
+  };
+}
+
+async function resolveTicketForValidation(payload, dependencies) {
+  if (payload.token) {
+    return dependencies.ticketRepository.findTicketByTokenHash(hashValue(payload.token));
+  }
+
+  return dependencies.ticketRepository.findTicketByReference(payload.reference);
+}
+
+async function getManagerTicketContext(organizationId, actorUserId, eventId, dependencies) {
+  const actorUser = await dependencies.authRepository.findAuthUserById(actorUserId);
+
+  if (!actorUser || actorUser.role !== USER_ROLES.MANAGER) {
+    return { error: "You do not have access to this resource", statusCode: HTTP_STATUS.FORBIDDEN };
+  }
+
+  if (getDocumentId(actorUser.organization) !== getDocumentId(organizationId)) {
+    return { error: "You cannot access another organization", statusCode: HTTP_STATUS.FORBIDDEN };
+  }
+
+  const assignment = await dependencies.eventManagerAssignmentRepository.findActiveEventManagerAssignment(eventId, actorUserId);
+
+  if (!assignment) {
+    return { error: "You do not have access to this resource", statusCode: HTTP_STATUS.FORBIDDEN };
+  }
+
+  return { actorUser };
+}
+
+export async function validateEventTicket(organizationId, actorUserId, eventId, payload, dependencies = defaultDependencies) {
+  const context = await getManagerTicketContext(organizationId, actorUserId, eventId, dependencies);
+
+  if (context.error) {
+    return context;
+  }
+
+  const ticket = await resolveTicketForValidation(payload, dependencies);
+
+  if (!ticket) {
+    return { valid: false, reason: "Ticket not found" };
+  }
+
+  if (getDocumentId(ticket.event) !== getDocumentId(eventId)) {
+    return { valid: false, reason: "Ticket belongs to a different event", ticket: mapTicketResponse(ticket) };
+  }
+
+  if ([TICKET_STATUS.CANCELED, TICKET_STATUS.REFUNDED].includes(ticket.status)) {
+    return { valid: false, reason: "Ticket is not eligible for check-in", ticket: mapTicketResponse(ticket) };
+  }
+
+  if (ticket.status === TICKET_STATUS.USED || ticket.checkedInAt) {
+    return { valid: false, reason: "Ticket is already checked in", ticket: mapTicketResponse(ticket) };
+  }
+
+  return { valid: true, ticket: mapTicketResponse(ticket) };
+}
+
+export async function checkInEventTicket(organizationId, actorUserId, eventId, payload, dependencies = defaultDependencies) {
+  const validation = await validateEventTicket(organizationId, actorUserId, eventId, payload, dependencies);
+
+  if (validation.error || !validation.valid) {
+    return validation;
+  }
+
+  return runInTransaction(dependencies, async (session) => {
+    const ticket = await resolveTicketForValidation(payload, dependencies);
+    const attendee = ticket.attendee || {};
+    const existingAttendance = await dependencies.eventAttendanceRepository.findAttendanceByEventAndEmail(
+      eventId,
+      normalizeEmail(attendee.email),
+      { session }
+    );
+
+    if (existingAttendance) {
+      return {
+        valid: false,
+        reason: "Attendee is already checked in",
+        ticket: mapTicketResponse(ticket),
+        attendance: mapEventAttendanceResponse(existingAttendance),
+      };
+    }
+
+    const usedTicket = await dependencies.ticketRepository.markTicketUsed(ticket._id, actorUserId, { session });
+
+    if (!usedTicket) {
+      return { valid: false, reason: "Ticket is already checked in" };
+    }
+
+    const attendance = await dependencies.eventAttendanceRepository.createEventAttendance(
+      {
+        event: eventId,
+        attendeeName: attendee.name,
+        attendeePhone: attendee.phone,
+        attendeeEmail: normalizeEmail(attendee.email),
+        checkedInBy: actorUserId,
+        checkedInAt: usedTicket.checkedInAt || new Date(),
+        ticket: usedTicket._id,
+        order: getDocumentId(usedTicket.order),
+      },
+      { session }
+    );
+
+    return {
+      checkedIn: true,
+      ticket: mapTicketResponse(usedTicket),
+      attendance: mapEventAttendanceResponse(attendance),
+    };
+  });
+}
+
+export async function createOrderRefund(organizationId, actorUserId, orderReference, payload, dependencies = defaultDependencies) {
+  const order = await dependencies.orderRepository.findOrderByReference(orderReference);
+
+  if (!order) {
+    return { error: "Order not found", statusCode: HTTP_STATUS.NOT_FOUND };
+  }
+
+  if (getDocumentId(order.organization) !== getDocumentId(organizationId)) {
+    return { error: "You cannot access another organization", statusCode: HTTP_STATUS.FORBIDDEN };
+  }
+
+  const refundableAmount = Number(order.total || 0) - Number(order.refundedAmount || 0);
+  const refundAmount = payload.amount || refundableAmount;
+
+  if (refundAmount > refundableAmount) {
+    return { error: "Refund amount exceeds refundable balance", statusCode: HTTP_STATUS.BAD_REQUEST };
+  }
+
+  const refund = await dependencies.refundRepository.createRefund({
+    reference: createReference("ref"),
+    order: order._id,
+    organization: organizationId,
+    event: getDocumentId(order.event),
+    requestedBy: actorUserId,
+    amount: refundAmount,
+    reason: payload.reason,
+    status: REFUND_STATUS.PENDING,
+  });
+
+  const providerRefund = await dependencies.paystackService.createRefund?.({
+    transaction: order.paymentReference,
+    amount: refundAmount,
+    currency: order.currency || DEFAULT_CURRENCY,
+    customerNote: payload.reason,
+    merchantNote: `Refund for order ${order.reference}`,
+  });
+
+  let finalRefund = refund;
+
+  if (providerRefund?.status) {
+    const nextRefundedAmount = Number(order.refundedAmount || 0) + refundAmount;
+    const isFullRefund = nextRefundedAmount >= Number(order.total || 0);
+
+    const updatedRefund = await dependencies.refundRepository.updateRefundByReference(refund.reference, {
+      status: REFUND_STATUS.SUCCEEDED,
+      providerReference: providerRefund.data?.reference || providerRefund.data?.id || "",
+      processedAt: new Date(),
+    });
+    finalRefund = updatedRefund?.amount === undefined ? { ...refund, ...updatedRefund } : updatedRefund;
+
+    await dependencies.orderRepository.updateOrderByReference(order.reference, {
+      refundedAmount: nextRefundedAmount,
+      paymentStatus: isFullRefund ? PAYMENT_STATUS.REFUNDED : PAYMENT_STATUS.PARTIALLY_REFUNDED,
+      orderStatus: isFullRefund ? ORDER_STATUS.REFUNDED : ORDER_STATUS.PARTIALLY_REFUNDED,
+    });
+
+    if (isFullRefund) {
+      await dependencies.ticketRepository.markTicketsByOrder(order._id, TICKET_STATUS.REFUNDED);
+    }
+  } else if (providerRefund?.configured) {
+    const updatedRefund = await dependencies.refundRepository.updateRefundByReference(refund.reference, {
+      status: REFUND_STATUS.FAILED,
+      failureReason: providerRefund.message || "Refund provider request failed",
+    });
+    finalRefund = updatedRefund?.amount === undefined ? { ...refund, ...updatedRefund } : updatedRefund;
+  }
+
+  await dependencies.notificationService.sendRefundStatusNotification(finalRefund).catch(() => {});
+
+  return {
+    refund: mapRefundResponse(finalRefund),
+    refundableAmount: refundableAmount - refundAmount,
+  };
+}
+
+export async function getEventFinancialSummary(organizationId, actorUserId, eventId, dependencies = defaultDependencies) {
+  const context = await getAdminEventContext(organizationId, actorUserId, eventId, dependencies);
+
+  if (context.error) {
+    return context;
+  }
+
+  const [ticketTypes, attendanceCount, financial] = await Promise.all([
+    dependencies.ticketTypeRepository.findTicketTypes({ event: eventId, organization: organizationId }, { limit: 100 }),
+    dependencies.eventAttendanceRepository.countAttendanceByEvent(eventId),
+    dependencies.orderRepository.getOrganizationFinancialAggregation(organizationId, eventId),
+  ]);
+
+  const totalInventory = ticketTypes.reduce((total, ticketType) => total + Number(ticketType.quantity || 0), 0);
+  const ticketsSold = ticketTypes.reduce((total, ticketType) => total + Number(ticketType.soldQuantity || 0), 0);
+
+  return {
+    summary: {
+      totalInventory,
+      ticketsSold,
+      ticketsRemaining: Math.max(0, totalInventory - ticketsSold),
+      attendance: attendanceCount,
+      noShows: Math.max(0, ticketsSold - attendanceCount),
+      grossSales: Number(financial.grossSales || 0),
+      refundedAmount: Number(financial.refundedAmount || 0),
+      netRevenue: Math.max(0, Number(financial.grossSales || 0) - Number(financial.refundedAmount || 0)),
+      paidOrders: Number(financial.paidOrders || 0),
+      ticketTypes: ticketTypes.map(mapTicketTypeResponse),
+    },
+  };
+}
+
+export async function requestWithdrawal(organizationId, actorUserId, payload, dependencies = defaultDependencies) {
+  const financial = await dependencies.orderRepository.getOrganizationFinancialAggregation(organizationId);
+  const committedWithdrawals = await dependencies.withdrawalRepository.sumWithdrawals(organizationId, [
+    WITHDRAWAL_STATUS.PENDING,
+    WITHDRAWAL_STATUS.APPROVED,
+    WITHDRAWAL_STATUS.PROCESSING,
+    WITHDRAWAL_STATUS.PAID,
+  ]);
+  const availableBalance = Math.max(0, Number(financial.grossSales || 0) - Number(financial.refundedAmount || 0) - committedWithdrawals);
+
+  if (payload.amount > availableBalance) {
+    return { error: "Withdrawal amount exceeds available balance", statusCode: HTTP_STATUS.BAD_REQUEST };
+  }
+
+  const withdrawal = await dependencies.withdrawalRepository.createWithdrawal({
+    reference: createReference("wd"),
+    organization: organizationId,
+    requestedBy: actorUserId,
+    amount: payload.amount,
+    status: WITHDRAWAL_STATUS.PENDING,
+  });
+
+  return { withdrawal: mapWithdrawalResponse(withdrawal), availableBalance: availableBalance - payload.amount };
+}
+
+export async function reviewWithdrawal(withdrawalId, reviewerId, action, payload = {}, dependencies = defaultDependencies) {
+  const withdrawal = await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId);
+
+  if (!withdrawal) {
+    return { error: "Withdrawal not found", statusCode: HTTP_STATUS.NOT_FOUND };
+  }
+
+  if (withdrawal.status !== WITHDRAWAL_STATUS.PENDING) {
+    return { error: "Withdrawal has already been reviewed", statusCode: HTTP_STATUS.CONFLICT };
+  }
+
+  if (action === "reject") {
+    const rejected = await dependencies.withdrawalRepository.updateWithdrawalById(withdrawalId, {
+      status: WITHDRAWAL_STATUS.REJECTED,
+      reviewedBy: reviewerId,
+      reviewedAt: new Date(),
+      failureReason: payload.reason,
+    });
+
+    return { withdrawal: mapWithdrawalResponse(rejected) };
+  }
+
+  const approved = await dependencies.withdrawalRepository.updateWithdrawalById(withdrawalId, {
+    status: WITHDRAWAL_STATUS.APPROVED,
+    reviewedBy: reviewerId,
+    reviewedAt: new Date(),
+  });
+
+  if (!payload.recipientCode) {
+    return { withdrawal: mapWithdrawalResponse(approved) };
+  }
+
+  const transferReference = createReference("trf");
+  const transfer = await dependencies.paystackService.initiateTransfer?.({
+    amount: withdrawal.amount,
+    recipient: payload.recipientCode,
+    reason: payload.reason || `Withdrawal ${withdrawal.reference}`,
+    reference: transferReference,
+  });
+
+  if (transfer?.status) {
+    const paid = await dependencies.withdrawalRepository.updateWithdrawalById(withdrawalId, {
+      status: WITHDRAWAL_STATUS.PAID,
+      transferReference: transfer.data?.reference || transferReference,
+      paidAt: new Date(),
+    });
+
+    return { withdrawal: mapWithdrawalResponse(paid), transfer: transfer.data || null };
+  }
+
+  if (transfer?.configured) {
+    const failed = await dependencies.withdrawalRepository.updateWithdrawalById(withdrawalId, {
+      status: WITHDRAWAL_STATUS.FAILED,
+      transferReference,
+      failureReason: transfer.message || "Transfer provider request failed",
+    });
+
+    return { withdrawal: mapWithdrawalResponse(failed), transfer: null };
+  }
+
+  return { withdrawal: mapWithdrawalResponse(approved), transfer: null };
+}
+
+export function buildOrderSearchFilter(query = {}) {
+  if (!query.search) {
+    return {};
+  }
+
+  const expression = new RegExp(escapeRegex(query.search), "i");
+  return {
+    $or: [
+      { reference: expression },
+      { paymentReference: expression },
+      { "customerInfo.email": expression },
+      { "customerInfo.name": expression },
+    ],
+  };
+}

@@ -25,6 +25,7 @@ app.use(helmet(helmetOptions));
 app.use(cors(corsOptions));
 app.use(compression());
 app.use(cookieParser());
+app.use(`${appConfig.apiPrefix}/payments/paystack/webhook`, express.raw({ type: "application/json" }));
 app.use(express.json({ limit: appConfig.requestBodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: appConfig.requestBodyLimit }));
 app.use(createRequestLogger());

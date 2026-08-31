@@ -355,8 +355,8 @@ function PublicEventDetailsPage() {
                     </h1>
                     <p className="max-w-3xl text-sm leading-6 text-slate-200 sm:text-base">
                       {scheduleLabel}
-                      {location.venueName ? ` · ${location.venueName}` : ""}
-                      {location.secondaryLocation ? ` · ${location.secondaryLocation}` : ""}
+                      {location.venueName ? ` | ${location.venueName}` : ""}
+                      {location.secondaryLocation ? ` | ${location.secondaryLocation}` : ""}
                     </p>
                   </div>
                 </div>

@@ -323,7 +323,7 @@ function HomePage() {
                   {search || category ? (
                     <p className="mt-2 text-sm text-slate-500">
                       {search ? `Search: "${search}"` : null}
-                      {search && category ? " · " : null}
+                      {search && category ? " | " : null}
                       {category ? `Category: ${category}` : null}
                     </p>
                   ) : null}

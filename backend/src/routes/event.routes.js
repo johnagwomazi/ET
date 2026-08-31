@@ -23,6 +23,12 @@ import {
 } from "../validators/event.validator.js";
 import * as eventManagerController from "../controllers/eventManager.controller.js";
 import * as eventAttendanceController from "../controllers/eventAttendance.controller.js";
+import * as ticketingController from "../controllers/ticketing.controller.js";
+import {
+  ticketTypeCreateSchema,
+  ticketTypeParamSchema,
+  ticketTypeUpdateSchema,
+} from "../validators/ticketing.validator.js";
 
 const eventRouter = express.Router({ mergeParams: true });
 
@@ -38,6 +44,32 @@ eventRouter.post(
   "/",
   validate(eventCreateSchema),
   eventController.createOrganizationEvent
+);
+
+eventRouter.get(
+  "/:eventId/ticket-types",
+  validate(eventIdParamSchema, "params"),
+  ticketingController.getEventTicketTypes
+);
+
+eventRouter.post(
+  "/:eventId/ticket-types",
+  validate(eventIdParamSchema, "params"),
+  validate(ticketTypeCreateSchema),
+  ticketingController.createEventTicketType
+);
+
+eventRouter.patch(
+  "/:eventId/ticket-types/:ticketTypeId",
+  validate(ticketTypeParamSchema, "params"),
+  validate(ticketTypeUpdateSchema),
+  ticketingController.updateEventTicketType
+);
+
+eventRouter.get(
+  "/:eventId/financial-summary",
+  validate(eventIdParamSchema, "params"),
+  ticketingController.getEventFinancialSummary
 );
 
 eventRouter.get(
