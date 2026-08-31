@@ -108,6 +108,10 @@ function EventAttendancePanel({ event, scope = "organization" }) {
     email: "",
   });
   const [formErrors, setFormErrors] = useState({});
+  const [ticketCode, setTicketCode] = useState("");
+  const [ticketResult, setTicketResult] = useState(null);
+  const [isValidatingTicket, setIsValidatingTicket] = useState(false);
+  const [isCheckingInTicket, setIsCheckingInTicket] = useState(false);
 
   const debouncedSearch = useDebouncedValue(searchValue, 300);
 
@@ -265,6 +269,56 @@ function EventAttendancePanel({ event, scope = "organization" }) {
     }
   }
 
+  async function handleValidateTicket() {
+    if (!ticketCode.trim()) {
+      toast.error("Enter a ticket reference or token");
+      return;
+    }
+
+    setIsValidatingTicket(true);
+    setTicketResult(null);
+
+    try {
+      const response = await eventService.validateManagerTicket(eventId, {
+        reference: ticketCode.trim(),
+      });
+      setTicketResult(response);
+    } catch (validateError) {
+      setTicketResult({ valid: false, reason: validateError.message || "Ticket validation failed" });
+    } finally {
+      setIsValidatingTicket(false);
+    }
+  }
+
+  async function handleTicketCheckIn() {
+    if (!ticketCode.trim()) {
+      toast.error("Enter a ticket reference or token");
+      return;
+    }
+
+    setIsCheckingInTicket(true);
+
+    try {
+      const response = await eventService.checkInManagerTicket(eventId, {
+        reference: ticketCode.trim(),
+      });
+      setTicketResult(response);
+
+      if (response?.checkedIn) {
+        toast.success("Ticket checked in successfully");
+        setTicketCode("");
+        await handleRefresh();
+      } else {
+        toast.error(response?.reason || "Ticket could not be checked in");
+      }
+    } catch (checkInError) {
+      setTicketResult({ valid: false, reason: checkInError.message || "Ticket check-in failed" });
+      toast.error(checkInError.message || "Ticket check-in failed");
+    } finally {
+      setIsCheckingInTicket(false);
+    }
+  }
+
   return (
     <Card className="border-slate-800/70 bg-slate-950/85">
       <div className="flex flex-col gap-4 border-b border-slate-800/70 pb-4 lg:flex-row lg:items-start lg:justify-between">
@@ -327,6 +381,43 @@ function EventAttendancePanel({ event, scope = "organization" }) {
         </Card>
 
         <div className="space-y-4">
+          {scope === "manager" ? (
+            <Card className="space-y-4 border-slate-800 bg-slate-950/70 p-4">
+              <div>
+                <p className="text-sm font-semibold text-white">Ticket validation</p>
+                <p className="mt-1 text-sm text-slate-400">Enter the backend-issued ticket reference or QR token.</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+                <Input
+                  label="Ticket reference/token"
+                  value={ticketCode}
+                  onChange={(event) => setTicketCode(event.target.value)}
+                  placeholder="tkt_..."
+                />
+                <div className="flex items-end">
+                  <Button variant="secondary" onClick={handleValidateTicket} isLoading={isValidatingTicket}>
+                    Validate
+                  </Button>
+                </div>
+                <div className="flex items-end">
+                  <Button onClick={handleTicketCheckIn} isLoading={isCheckingInTicket}>
+                    Check in
+                  </Button>
+                </div>
+              </div>
+              {ticketResult ? (
+                <div className={`rounded-2xl border p-4 ${ticketResult.checkedIn || ticketResult.valid ? "border-emerald-500/20 bg-emerald-500/10" : "border-rose-500/20 bg-rose-500/10"}`}>
+                  <p className={`text-sm font-semibold ${ticketResult.checkedIn || ticketResult.valid ? "text-emerald-100" : "text-rose-100"}`}>
+                    {ticketResult.checkedIn ? "Checked in" : ticketResult.valid ? "Valid ticket" : "Invalid ticket"}
+                  </p>
+                  <p className={`mt-1 text-sm ${ticketResult.checkedIn || ticketResult.valid ? "text-emerald-50/80" : "text-rose-50/80"}`}>
+                    {ticketResult.reason || ticketResult.ticket?.attendee?.name || ticketResult.attendance?.name || "Backend validation complete"}
+                  </p>
+                </div>
+              ) : null}
+            </Card>
+          ) : null}
+
           <Card className="border-slate-800 bg-slate-950/70 p-4">
             <SearchInput
               label="Search attendance"

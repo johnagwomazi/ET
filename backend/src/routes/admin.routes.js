@@ -22,6 +22,7 @@ import {
 import {
   withdrawalApproveSchema,
   withdrawalIdParamSchema,
+  withdrawalListQuerySchema,
   withdrawalRejectSchema,
 } from "../validators/ticketing.validator.js";
 
@@ -84,6 +85,12 @@ adminRouter.patch(
   userController.reactivateUser
 );
 adminRouter.delete("/users/:userId", validate(userIdParamSchema, "params"), userController.deleteUser);
+
+adminRouter.get(
+  "/withdrawals",
+  validate(withdrawalListQuerySchema, "query"),
+  ticketingController.getPlatformWithdrawals
+);
 
 adminRouter.patch(
   "/withdrawals/:withdrawalId/approve",

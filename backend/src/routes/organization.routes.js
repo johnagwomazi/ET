@@ -18,6 +18,7 @@ import {
   orderReferenceParamSchema,
   refundCreateSchema,
   withdrawalCreateSchema,
+  withdrawalListQuerySchema,
 } from "../validators/ticketing.validator.js";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants.js";
 
@@ -78,6 +79,19 @@ organizationRouter.post(
   requireOrganizationPermission(ORGANIZATION_PERMISSIONS.SETTINGS_UPDATE),
   validate(withdrawalCreateSchema),
   ticketingController.requestWithdrawal
+);
+
+organizationRouter.get(
+  "/me/withdrawals",
+  requireOrganizationPermission(ORGANIZATION_PERMISSIONS.SETTINGS_VIEW),
+  validate(withdrawalListQuerySchema, "query"),
+  ticketingController.getOrganizationWithdrawals
+);
+
+organizationRouter.get(
+  "/me/withdrawals/balance",
+  requireOrganizationPermission(ORGANIZATION_PERMISSIONS.SETTINGS_VIEW),
+  ticketingController.getOrganizationWithdrawalBalance
 );
 
 organizationRouter.get(

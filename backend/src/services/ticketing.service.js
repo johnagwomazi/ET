@@ -779,14 +779,13 @@ export async function getEventFinancialSummary(organizationId, actorUserId, even
 }
 
 export async function requestWithdrawal(organizationId, actorUserId, payload, dependencies = defaultDependencies) {
-  const financial = await dependencies.orderRepository.getOrganizationFinancialAggregation(organizationId);
-  const committedWithdrawals = await dependencies.withdrawalRepository.sumWithdrawals(organizationId, [
-    WITHDRAWAL_STATUS.PENDING,
-    WITHDRAWAL_STATUS.APPROVED,
-    WITHDRAWAL_STATUS.PROCESSING,
-    WITHDRAWAL_STATUS.PAID,
-  ]);
-  const availableBalance = Math.max(0, Number(financial.grossSales || 0) - Number(financial.refundedAmount || 0) - committedWithdrawals);
+  const balance = await getOrganizationWithdrawalBalance(organizationId, actorUserId, dependencies);
+
+  if (balance.error) {
+    return balance;
+  }
+
+  const availableBalance = balance.availableBalance;
 
   if (payload.amount > availableBalance) {
     return { error: "Withdrawal amount exceeds available balance", statusCode: HTTP_STATUS.BAD_REQUEST };
@@ -801,6 +800,80 @@ export async function requestWithdrawal(organizationId, actorUserId, payload, de
   });
 
   return { withdrawal: mapWithdrawalResponse(withdrawal), availableBalance: availableBalance - payload.amount };
+}
+
+export async function getOrganizationWithdrawalBalance(organizationId, actorUserId, dependencies = defaultDependencies) {
+  const actorContext = await getOrganizationActorContext(organizationId, actorUserId, dependencies);
+
+  if (actorContext.error) {
+    return actorContext;
+  }
+
+  const financial = await dependencies.orderRepository.getOrganizationFinancialAggregation(organizationId);
+  const committedWithdrawals = await dependencies.withdrawalRepository.sumWithdrawals(organizationId, [
+    WITHDRAWAL_STATUS.PENDING,
+    WITHDRAWAL_STATUS.APPROVED,
+    WITHDRAWAL_STATUS.PROCESSING,
+    WITHDRAWAL_STATUS.PAID,
+  ]);
+  const availableBalance = Math.max(0, Number(financial.grossSales || 0) - Number(financial.refundedAmount || 0) - committedWithdrawals);
+
+  return {
+    grossSales: Number(financial.grossSales || 0),
+    refundedAmount: Number(financial.refundedAmount || 0),
+    committedWithdrawals,
+    availableBalance,
+  };
+}
+
+function buildWithdrawalFilter(query = {}, organizationId = null) {
+  const filter = {};
+
+  if (organizationId) {
+    filter.organization = organizationId;
+  }
+
+  if (query.status) {
+    filter.status = query.status;
+  }
+
+  return filter;
+}
+
+export async function getOrganizationWithdrawals(organizationId, actorUserId, query = {}, dependencies = defaultDependencies) {
+  const actorContext = await getOrganizationActorContext(organizationId, actorUserId, dependencies);
+
+  if (actorContext.error) {
+    return actorContext;
+  }
+
+  const pagination = buildPaginationOptions(query, { page: 1, limit: 20, sortBy: "createdAt", sortOrder: -1 });
+  const filter = buildWithdrawalFilter(query, organizationId);
+  const [withdrawals, totalItems, balance] = await Promise.all([
+    dependencies.withdrawalRepository.findWithdrawals(filter, pagination),
+    dependencies.withdrawalRepository.countWithdrawals(filter),
+    getOrganizationWithdrawalBalance(organizationId, actorUserId, dependencies),
+  ]);
+
+  return {
+    withdrawals: withdrawals.map(mapWithdrawalResponse),
+    balance,
+    pagination: buildPaginationMeta(totalItems, pagination),
+  };
+}
+
+export async function getPlatformWithdrawals(query = {}, dependencies = defaultDependencies) {
+  const pagination = buildPaginationOptions(query, { page: 1, limit: 20, sortBy: "createdAt", sortOrder: -1 });
+  const filter = buildWithdrawalFilter(query);
+  const [withdrawals, totalItems] = await Promise.all([
+    dependencies.withdrawalRepository.findWithdrawals(filter, pagination),
+    dependencies.withdrawalRepository.countWithdrawals(filter),
+  ]);
+
+  return {
+    withdrawals: withdrawals.map(mapWithdrawalResponse),
+    pagination: buildPaginationMeta(totalItems, pagination),
+  };
 }
 
 export async function reviewWithdrawal(withdrawalId, reviewerId, action, payload = {}, dependencies = defaultDependencies) {

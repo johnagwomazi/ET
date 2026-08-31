@@ -14,6 +14,8 @@ import SignUpChoicePage from "../pages/SignUpChoicePage";
 import CustomerRegisterPage from "../pages/CustomerRegisterPage";
 import OrganizerRegisterPage from "../pages/OrganizerRegisterPage";
 import LoginPage from "../pages/LoginPage";
+import CheckoutPage from "../pages/CheckoutPage";
+import PaymentConfirmationPage from "../pages/PaymentConfirmationPage";
 import AdminLoginPage from "../pages/AdminLoginPage";
 import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import ResetPasswordPage from "../pages/ResetPasswordPage";
@@ -26,10 +28,13 @@ import EventEditorPage from "../pages/events/EventEditorPage";
 import OrganizationProfilePage from "../pages/organization/OrganizationProfilePage";
 import OrganizationSettingsPage from "../pages/organization/OrganizationSettingsPage";
 import OrganizationMembersPage from "../pages/organization/OrganizationMembersPage";
+import CustomerOrdersPage from "../pages/customer/CustomerOrdersPage";
+import CustomerTicketsPage from "../pages/customer/CustomerTicketsPage";
 import SuperAdminRolesPermissionsPage from "../pages/super-admin/SuperAdminRolesPermissionsPage";
 import SuperAdminDashboardPage from "../pages/super-admin/SuperAdminDashboardPage";
 import OrganizationsPage from "../pages/super-admin/OrganizationsPage";
 import UsersPage from "../pages/super-admin/UsersPage";
+import WithdrawalsPage from "../pages/super-admin/WithdrawalsPage";
 import ForbiddenPage from "../pages/ForbiddenPage";
 import PublicEventDetailsPage from "../pages/events/PublicEventDetailsPage";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants";
@@ -114,6 +119,38 @@ const router = createBrowserRouter([
             ),
           },
           {
+            path: ROUTE_PATHS.CUSTOMER_ORDERS,
+            element: (
+              <RoleRoute allowedRoles={["CUSTOMER"]}>
+                <CustomerOrdersPage />
+              </RoleRoute>
+            ),
+          },
+          {
+            path: ROUTE_PATHS.CUSTOMER_TICKETS,
+            element: (
+              <RoleRoute allowedRoles={["CUSTOMER"]}>
+                <CustomerTicketsPage />
+              </RoleRoute>
+            ),
+          },
+          {
+            path: ROUTE_PATHS.CHECKOUT,
+            element: (
+              <RoleRoute allowedRoles={["CUSTOMER"]}>
+                <CheckoutPage />
+              </RoleRoute>
+            ),
+          },
+          {
+            path: ROUTE_PATHS.PAYMENT_CONFIRMATION,
+            element: (
+              <RoleRoute allowedRoles={["CUSTOMER"]}>
+                <PaymentConfirmationPage />
+              </RoleRoute>
+            ),
+          },
+          {
             path: ROUTE_PATHS.MANAGER_DASHBOARD,
             element: (
               <RoleRoute allowedRoles={["MANAGER"]}>
@@ -169,6 +206,14 @@ const router = createBrowserRouter([
             element: (
               <RoleRoute allowedRoles={["SUPER_ADMIN"]}>
                 <SuperAdminRolesPermissionsPage />
+              </RoleRoute>
+            ),
+          },
+          {
+            path: ROUTE_PATHS.SUPER_ADMIN_WITHDRAWALS,
+            element: (
+              <RoleRoute allowedRoles={["SUPER_ADMIN"]}>
+                <WithdrawalsPage />
               </RoleRoute>
             ),
           },

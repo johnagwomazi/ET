@@ -36,6 +36,20 @@ export const USER_STATUS_META = {
   },
 };
 
+export const PAYMENT_STATUS_META = {
+  PENDING: { label: "Pending", tone: "warning" },
+  INITIALIZED: { label: "Initialized", tone: "warning" },
+  PAID: { label: "Paid", tone: "success" },
+  FAILED: { label: "Failed", tone: "danger" },
+  REFUNDED: { label: "Refunded", tone: "neutral" },
+  PARTIALLY_REFUNDED: { label: "Partially refunded", tone: "warning" },
+  VALID: { label: "Valid", tone: "success" },
+  USED: { label: "Used", tone: "neutral" },
+  CANCELED: { label: "Canceled", tone: "danger" },
+  ACTIVE: { label: "Active", tone: "success" },
+  INACTIVE: { label: "Inactive", tone: "neutral" },
+};
+
 export const DEFAULT_STATUS_META = {
   label: "Unknown",
   tone: "neutral",

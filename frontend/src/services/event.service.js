@@ -167,3 +167,15 @@ export async function createOrganizationEvent(payload) {
 export async function updateOrganizationEvent(eventId, payload) {
   return updateEvent(eventId, payload);
 }
+
+export async function validateManagerTicket(eventId, payload) {
+  const response = await post(buildManagerEventPath(`/${eventId}/tickets/validate`), payload);
+
+  return unwrapResponse(response);
+}
+
+export async function checkInManagerTicket(eventId, payload) {
+  const response = await post(buildManagerEventPath(`/${eventId}/tickets/check-in`), payload);
+
+  return unwrapResponse(response);
+}

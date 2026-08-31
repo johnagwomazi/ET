@@ -10,6 +10,8 @@ import SectionHeader from "../../components/dashboard/SectionHeader";
 import EventManagersPanel from "../../components/events/EventManagersPanel";
 import EventAttendancePanel from "../../components/events/EventAttendancePanel";
 import EventLifecyclePanel from "../../components/events/EventLifecyclePanel";
+import AdminTicketManagementPanel from "../../components/ticketing/AdminTicketManagementPanel";
+import EventFinancialPanel from "../../components/ticketing/EventFinancialPanel";
 import { EventDetailSkeleton } from "../../components/events/EventLoadingStates";
 import { ROUTE_PATHS } from "../../routes/routePaths";
 import { formatDateTime, formatNumber } from "../../utils/formatters";
@@ -298,6 +300,10 @@ function EventDetailsPage({ scope = "organization" }) {
       </div>
 
       {!isManager ? <EventManagersPanel event={event} canManageManagers={canManageOrganizationEvents} /> : null}
+
+      {!isManager ? <AdminTicketManagementPanel event={event} canManage={canManageOrganizationEvents} /> : null}
+
+      {!isManager ? <EventFinancialPanel event={event} canView={canManageOrganizationEvents} /> : null}
 
       <EventAttendancePanel event={event} scope={isManager ? "manager" : "organization"} />
 

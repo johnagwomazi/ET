@@ -23,6 +23,7 @@ import { Skeleton } from "../../components/common/Skeleton";
 import { ROUTE_PATHS } from "../../routes/routePaths";
 import { getPublicEventById } from "../../services/publicEvent.service";
 import { formatDate, formatDateTime, formatNumber } from "../../utils/formatters";
+import PublicTicketSelectionPanel from "../../components/ticketing/PublicTicketSelectionPanel";
 
 function formatTime(value) {
   if (!value) {
@@ -465,28 +466,7 @@ function PublicEventDetailsPage() {
                 ) : null}
               </Card>
 
-              <Card className="space-y-4 border-slate-800/70 bg-slate-950/85">
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-app-300">Ticketing</p>
-                  <h2 className="text-xl font-semibold text-white">Future ticketing CTA</h2>
-                </div>
-
-                <p className="text-sm leading-7 text-slate-400">
-                  {event.status === "POSTPONED"
-                    ? "This event is postponed. Ticketing will open once the new date is confirmed."
-                    : "Ticketing will be added in a future phase. The page is ready for that flow without exposing checkout yet."}
-                </p>
-
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button disabled>
-                    <Ticket className="h-4 w-4" />
-                    {event.status === "POSTPONED" ? "Tickets paused" : "Get Tickets"}
-                  </Button>
-                  <Button as={Link} to={ROUTE_PATHS.HOME} variant="secondary">
-                    Back to discovery
-                  </Button>
-                </div>
-              </Card>
+              <PublicTicketSelectionPanel event={event} />
 
               <Card className="space-y-3">
                 <div className="flex items-center gap-2">

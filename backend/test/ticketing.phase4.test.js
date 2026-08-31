@@ -254,6 +254,22 @@ function createDependencies(overrides = {}) {
       },
     },
     withdrawalRepository: {
+      async findWithdrawals() {
+        return [
+          {
+            _id: "64b64b64b64b64b64b64b650",
+            reference: "wd_test",
+            organization: ids.organization,
+            requestedBy: ids.admin,
+            amount: 1000,
+            status: "PENDING",
+            createdAt: new Date(),
+          },
+        ];
+      },
+      async countWithdrawals() {
+        return 1;
+      },
       async createWithdrawal(data) {
         return { _id: "64b64b64b64b64b64b64b650", ...data };
       },
@@ -471,6 +487,18 @@ test("withdrawals are limited by backend-calculated available balance", async ()
 
   assert.equal(valid.withdrawal.amount, 1000);
   assert.equal(excessive.statusCode, 400);
+});
+
+test("withdrawal balance and history are returned from backend financial data", async () => {
+  const { dependencies } = createDependencies();
+  const balance = await ticketingService.getOrganizationWithdrawalBalance(ids.organization, ids.admin, dependencies);
+  const history = await ticketingService.getOrganizationWithdrawals(ids.organization, ids.admin, {}, dependencies);
+  const platform = await ticketingService.getPlatformWithdrawals({ status: "PENDING" }, dependencies);
+
+  assert.equal(balance.availableBalance, 3500);
+  assert.equal(history.withdrawals.length, 1);
+  assert.equal(history.balance.availableBalance, 3500);
+  assert.equal(platform.withdrawals.length, 1);
 });
 
 test("withdrawal approval can record a Paystack transfer result", async () => {

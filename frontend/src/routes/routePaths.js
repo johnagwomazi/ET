@@ -1,6 +1,8 @@
 export const ROUTE_PATHS = {
   HOME: "/",
   PUBLIC_EVENT_DETAILS: "/events/:eventId",
+  CHECKOUT: "/checkout",
+  PAYMENT_CONFIRMATION: "/payment/confirmation",
   SIGN_UP: "/signup",
   REGISTER_CUSTOMER: "/register/customer",
   REGISTER_ORGANIZER: "/register/organizer",
@@ -10,6 +12,8 @@ export const ROUTE_PATHS = {
   RESET_PASSWORD: "/reset-password",
   VERIFY_EMAIL: "/verify-email",
   CUSTOMER_DASHBOARD: "/customer/dashboard",
+  CUSTOMER_ORDERS: "/customer/orders",
+  CUSTOMER_TICKETS: "/customer/tickets",
   ORGANIZATION_DASHBOARD: "/organization/dashboard",
   ORGANIZATION_EVENTS: "/organization/events",
   ORGANIZATION_EVENT_DETAILS: "/organization/events/:eventId",
@@ -25,6 +29,7 @@ export const ROUTE_PATHS = {
   SUPER_ADMIN_ORGANIZATIONS: "/super-admin/dashboard/organizations",
   SUPER_ADMIN_USERS: "/super-admin/dashboard/users",
   SUPER_ADMIN_ROLES_PERMISSIONS: "/super-admin/dashboard/roles",
+  SUPER_ADMIN_WITHDRAWALS: "/super-admin/dashboard/withdrawals",
   FORBIDDEN: "/forbidden",
   NOT_FOUND: "*",
 };

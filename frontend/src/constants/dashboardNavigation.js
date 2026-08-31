@@ -57,6 +57,11 @@ export const SUPER_ADMIN_NAVIGATION = {
       to: ROUTE_PATHS.SUPER_ADMIN_ROLES_PERMISSIONS,
     },
     {
+      label: "Withdrawals",
+      icon: CreditCard,
+      to: ROUTE_PATHS.SUPER_ADMIN_WITHDRAWALS,
+    },
+    {
       label: "Reports",
       icon: FileText,
       comingSoon: true,
@@ -154,12 +159,12 @@ export const CUSTOMER_NAVIGATION = {
     {
       label: "Tickets",
       icon: Ticket,
-      comingSoon: true,
+      to: ROUTE_PATHS.CUSTOMER_TICKETS,
     },
     {
       label: "Bookings",
       icon: ShieldCheck,
-      comingSoon: true,
+      to: ROUTE_PATHS.CUSTOMER_ORDERS,
     },
   ],
   overflow: [

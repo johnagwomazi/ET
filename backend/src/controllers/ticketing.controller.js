@@ -178,6 +178,36 @@ export async function requestWithdrawal(req, res) {
   return res.status(HTTP_STATUS.CREATED).json(successResponse("Withdrawal requested successfully", result));
 }
 
+export async function getOrganizationWithdrawalBalance(req, res) {
+  const result = await ticketingService.getOrganizationWithdrawalBalance(req.organizationId, req.auth.userId);
+
+  if (result.error) {
+    return sendServiceError(res, result);
+  }
+
+  return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
+}
+
+export async function getOrganizationWithdrawals(req, res) {
+  const result = await ticketingService.getOrganizationWithdrawals(req.organizationId, req.auth.userId, req.query);
+
+  if (result.error) {
+    return sendServiceError(res, result);
+  }
+
+  return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
+}
+
+export async function getPlatformWithdrawals(req, res) {
+  const result = await ticketingService.getPlatformWithdrawals(req.query);
+
+  if (result.error) {
+    return sendServiceError(res, result);
+  }
+
+  return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
+}
+
 export async function approveWithdrawal(req, res) {
   const result = await ticketingService.reviewWithdrawal(req.params.withdrawalId, req.auth.userId, "approve", req.body);
 

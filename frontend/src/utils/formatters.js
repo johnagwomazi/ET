@@ -21,6 +21,22 @@ export function formatCurrency(value) {
   return currencyFormatter.format(Number(value));
 }
 
+export function formatMoney(value, currency = "NGN") {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(0);
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(Number(value));
+}
+
 export function formatDate(value) {
   if (!value) {
     return "N/A";

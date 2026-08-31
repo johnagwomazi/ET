@@ -23,6 +23,10 @@ export const listQuerySchema = z
   })
   .strict();
 
+export const withdrawalListQuerySchema = listQuerySchema.extend({
+  status: z.enum(Object.values(WITHDRAWAL_STATUS)).optional(),
+});
+
 const ticketTypeWriteShape = {
     name: z.string().trim().min(1, "Ticket name is required").max(80),
     description: z.string().trim().max(500).optional(),

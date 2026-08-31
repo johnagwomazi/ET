@@ -2,6 +2,7 @@ import { classNames } from "../../utils/classNames";
 import {
   DEFAULT_STATUS_META,
   ORGANIZATION_STATUS_META,
+  PAYMENT_STATUS_META,
   USER_STATUS_META,
 } from "../../constants/dashboard.constants";
 import { EVENT_STATUS_META } from "../../constants/event.constants";
@@ -15,7 +16,7 @@ const toneClasses = {
 };
 
 function getStatusMeta(status) {
-  return EVENT_STATUS_META[status] || ORGANIZATION_STATUS_META[status] || USER_STATUS_META[status] || DEFAULT_STATUS_META;
+  return EVENT_STATUS_META[status] || ORGANIZATION_STATUS_META[status] || USER_STATUS_META[status] || PAYMENT_STATUS_META[status] || DEFAULT_STATUS_META;
 }
 
 function StatusBadge({ status, label, className }) {
