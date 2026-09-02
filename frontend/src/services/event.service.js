@@ -10,6 +10,18 @@ function buildManagerEventPath(path = "", query = {}) {
   return `/manager/events${path}${buildQueryString(query)}`;
 }
 
+function buildEventRequestBody(payload, bannerFile) {
+  if (!bannerFile) {
+    return payload;
+  }
+
+  const formData = new FormData();
+  formData.append("payload", JSON.stringify(payload));
+  formData.append("banner", bannerFile);
+
+  return formData;
+}
+
 export async function getOrganizationEvents(query = {}) {
   const response = await get(buildOrganizationEventPath("", query));
 
@@ -136,14 +148,17 @@ export async function getManagerEventAttendanceExcel(eventId, query = {}) {
   });
 }
 
-export async function createEvent(payload) {
-  const response = await post(buildOrganizationEventPath(), payload);
+export async function createEvent(payload, bannerFile = null) {
+  const response = await post(buildOrganizationEventPath(), buildEventRequestBody(payload, bannerFile));
 
   return unwrapResponse(response);
 }
 
-export async function updateEvent(eventId, payload) {
-  const response = await patch(buildOrganizationEventPath(`/${eventId}`), payload);
+export async function updateEvent(eventId, payload, bannerFile = null) {
+  const response = await patch(
+    buildOrganizationEventPath(`/${eventId}`),
+    buildEventRequestBody(payload, bannerFile)
+  );
 
   return unwrapResponse(response);
 }

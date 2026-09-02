@@ -25,6 +25,10 @@ import * as eventManagerController from "../controllers/eventManager.controller.
 import * as eventAttendanceController from "../controllers/eventAttendance.controller.js";
 import * as ticketingController from "../controllers/ticketing.controller.js";
 import {
+  parseMultipartEventPayload,
+  uploadEventBanner,
+} from "../middleware/eventBannerUpload.middleware.js";
+import {
   ticketTypeCreateSchema,
   ticketTypeParamSchema,
   ticketTypeUpdateSchema,
@@ -42,6 +46,8 @@ eventRouter.get(
 
 eventRouter.post(
   "/",
+  uploadEventBanner,
+  parseMultipartEventPayload,
   validate(eventCreateSchema),
   eventController.createOrganizationEvent
 );
@@ -140,6 +146,8 @@ eventRouter.delete(
 eventRouter.patch(
   "/:eventId",
   validate(eventIdParamSchema, "params"),
+  uploadEventBanner,
+  parseMultipartEventPayload,
   validate(eventUpdateSchema),
   eventController.updateOrganizationEvent
 );

@@ -1,11 +1,35 @@
 import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
 import * as eventService from "../services/event.service.js";
+import * as eventBannerService from "../services/eventBanner.service.js";
 import { errorResponse, successResponse } from "../utils/apiResponse.js";
 
 function sendServiceError(res, errorResult) {
   return res.status(errorResult.statusCode || HTTP_STATUS.BAD_REQUEST).json(
     errorResponse(errorResult.error || "Something went wrong")
   );
+}
+
+function getRequestBaseUrl(req) {
+  return `${req.protocol}://${req.get("host")}`;
+}
+
+async function removeBannerQuietly(publicId) {
+  if (!publicId) {
+    return;
+  }
+
+  try {
+    await eventBannerService.removeEventBanner(publicId);
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+function sendControllerError(res, error) {
+  const statusCode = error?.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR;
+  const message = error?.statusCode ? error.message : "Something went wrong";
+
+  return res.status(statusCode).json(errorResponse(message));
 }
 
 export async function getOrganizationEvents(req, res) {
@@ -47,45 +71,85 @@ export async function getOrganizationEventById(req, res) {
 }
 
 export async function createOrganizationEvent(req, res) {
+  let uploadedBanner = null;
+
   try {
+    uploadedBanner = req.file
+      ? await eventBannerService.storeEventBanner(req.file, { baseUrl: getRequestBaseUrl(req) })
+      : null;
+    const payload = uploadedBanner
+      ? { ...req.body, banner: uploadedBanner }
+      : req.body;
     const result = await eventService.createOrganizationEvent(
       req.organizationId,
       req.auth.userId,
-      req.body
+      payload
     );
 
     if (result.error) {
+      await removeBannerQuietly(uploadedBanner?.publicId);
       return sendServiceError(res, result);
     }
 
     return res.status(HTTP_STATUS.CREATED).json(successResponse("Event created successfully", result));
   } catch (error) {
+    await removeBannerQuietly(uploadedBanner?.publicId);
     console.log(error);
     console.log("error in event controller");
 
-    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
+    return sendControllerError(res, error);
   }
 }
 
 export async function updateOrganizationEvent(req, res) {
+  let uploadedBanner = null;
+
   try {
+    let previousBannerPublicId = null;
+
+    if (req.file) {
+      const currentResult = await eventService.getOrganizationEventById(
+        req.organizationId,
+        req.auth.userId,
+        req.params.eventId
+      );
+
+      if (currentResult.error) {
+        return sendServiceError(res, currentResult);
+      }
+
+      previousBannerPublicId = currentResult.event?.banner?.publicId || null;
+      uploadedBanner = await eventBannerService.storeEventBanner(req.file, {
+        baseUrl: getRequestBaseUrl(req),
+      });
+    }
+
+    const payload = uploadedBanner
+      ? { ...req.body, banner: uploadedBanner }
+      : req.body;
     const result = await eventService.updateOrganizationEvent(
       req.organizationId,
       req.auth.userId,
       req.params.eventId,
-      req.body
+      payload
     );
 
     if (result.error) {
+      await removeBannerQuietly(uploadedBanner?.publicId);
       return sendServiceError(res, result);
+    }
+
+    if (previousBannerPublicId && previousBannerPublicId !== uploadedBanner?.publicId) {
+      await removeBannerQuietly(previousBannerPublicId);
     }
 
     return res.status(HTTP_STATUS.OK).json(successResponse("Event updated successfully", result));
   } catch (error) {
+    await removeBannerQuietly(uploadedBanner?.publicId);
     console.log(error);
     console.log("error in event controller");
 
-    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
+    return sendControllerError(res, error);
   }
 }
 
@@ -100,6 +164,8 @@ export async function deleteOrganizationEvent(req, res) {
     if (result.error) {
       return sendServiceError(res, result);
     }
+
+    await removeBannerQuietly(result.event?.banner?.publicId);
 
     return res.status(HTTP_STATUS.OK).json(successResponse("Event deleted successfully", result));
   } catch (error) {

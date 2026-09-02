@@ -372,7 +372,7 @@ function EventsPage({ scope = "organization" }) {
             ? []
             : [
                 {
-                  label: "Create draft",
+                  label: "Create event",
                   variant: "primary",
                   as: Link,
                   to: ROUTE_PATHS.ORGANIZATION_EVENT_CREATE,

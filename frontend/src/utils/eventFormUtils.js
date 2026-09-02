@@ -3,7 +3,30 @@ import { z } from "zod";
 const optionalDescriptionSchema = z.string().trim().max(5000, "Description must be 5000 characters or less").optional().or(z.literal(""));
 const optionalCategorySchema = z.string().trim().max(80, "Category must be 80 characters or less").optional().or(z.literal(""));
 const optionalTextSchema = z.string().trim().max(255, "Value must be 255 characters or less").optional().or(z.literal(""));
-const optionalUrlSchema = z.string().trim().url("Please provide a valid URL").optional().or(z.literal(""));
+const MAX_BANNER_SIZE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_BANNER_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+const optionalBannerFileSchema = z.any().optional().superRefine((value, context) => {
+  const file = value?.[0] || null;
+
+  if (!file) {
+    return;
+  }
+
+  if (!ALLOWED_BANNER_TYPES.has(file.type)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Banner must be a JPG, PNG, or WebP image",
+    });
+  }
+
+  if (file.size > MAX_BANNER_SIZE_BYTES) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Banner image must be 5 MB or smaller",
+    });
+  }
+});
 
 function isValidDate(value) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -135,25 +158,13 @@ function buildVenue(values = {}) {
   return venue;
 }
 
-function buildBanner(values = {}) {
-  const bannerUrl = normalizeOptionalValue(values.bannerUrl);
-
-  if (!bannerUrl) {
-    return undefined;
-  }
-
-  return {
-    url: bannerUrl,
-  };
-}
-
 function createBaseSchema({ includeSchedule = true } = {}) {
   return z
     .object({
       eventName: z.string().trim().min(1, "Event name is required").max(120, "Event name must be 120 characters or less"),
       description: optionalDescriptionSchema,
       category: optionalCategorySchema,
-      bannerUrl: optionalUrlSchema,
+      bannerFile: optionalBannerFileSchema,
       venueName: optionalTextSchema,
       venueLine1: optionalTextSchema,
       venueLine2: optionalTextSchema,
@@ -228,7 +239,7 @@ export function buildEventFormValues(event = null) {
     eventName: event?.eventName || "",
     description: event?.description || "",
     category: event?.category || "",
-    bannerUrl: event?.banner?.url || "",
+    bannerFile: null,
     venueName: event?.venue?.name || "",
     venueLine1: event?.venue?.address?.line1 || "",
     venueLine2: event?.venue?.address?.line2 || "",
@@ -252,12 +263,7 @@ export function buildEventPayload(values = {}, mode = "create") {
     capacity: Number(values.capacity),
   };
 
-  const banner = buildBanner(values);
   const venue = buildVenue(values);
-
-  if (banner) {
-    payload.banner = banner;
-  }
 
   if (Object.keys(venue).length > 0) {
     payload.venue = venue;
@@ -283,10 +289,8 @@ export function getEventFormDefaultValues(event = null) {
   return buildEventFormValues(event);
 }
 
-export function getEventPreviewUrl(values = {}, fallbackUrl = "") {
-  const nextUrl = normalizeOptionalValue(values.bannerUrl);
-
-  return nextUrl || fallbackUrl || "";
+export function getEventBannerFile(values = {}) {
+  return values.bannerFile?.[0] || null;
 }
 
 export function getEventScheduleLabel(event = null) {

@@ -1,4 +1,6 @@
 import dns from 'node:dns';
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 dns.setServers(['8.8.8.8', '1.1.1.1']);
 
@@ -18,6 +20,8 @@ import notFoundMiddleware from "./middleware/notFound.middleware.js";
 import errorHandlerMiddleware from "./middleware/errorHandler.middleware.js";
 
 const app = express();
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+const uploadsDirectory = path.resolve(currentDirectory, "../uploads");
 
 app.set("trust proxy", appConfig.trustProxy);
 
@@ -25,6 +29,15 @@ app.use(helmet(helmetOptions));
 app.use(cors(corsOptions));
 app.use(compression());
 app.use(cookieParser());
+app.use(
+  "/uploads",
+  express.static(uploadsDirectory, {
+    dotfiles: "deny",
+    setHeaders(res) {
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    },
+  })
+);
 app.use(`${appConfig.apiPrefix}/payments/paystack/webhook`, express.raw({ type: "application/json" }));
 app.use(express.json({ limit: appConfig.requestBodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: appConfig.requestBodyLimit }));

@@ -16,8 +16,8 @@ import {
   buildEventPayload,
   createEventFormSchema,
   editEventFormSchema,
+  getEventBannerFile,
   getEventFormDefaultValues,
-  getEventPreviewUrl,
 } from "../../utils/eventFormUtils";
 import { formatDateTime } from "../../utils/formatters";
 
@@ -26,7 +26,8 @@ const fieldErrorToFieldMap = {
   "Event name must be 120 characters or less": "eventName",
   "Description must be 5000 characters or less": "description",
   "Category must be 80 characters or less": "category",
-  "Please provide a valid URL": "bannerUrl",
+  "Banner must be a JPG, PNG, or WebP image": "bannerFile",
+  "Banner image must be 5 MB or smaller": "bannerFile",
   "An event with this slug already exists in this organization": "eventName",
   "Capacity cannot be negative": "capacity",
   "Capacity must be a whole number": "capacity",
@@ -57,7 +58,7 @@ function EventBannerPreview({ url, title }) {
             </div>
             <p className="text-sm font-medium text-slate-200">Banner preview</p>
             <p className="text-sm leading-6 text-slate-400">
-              Paste a hosted image URL to preview the banner here. The backend currently stores banner metadata as a URL.
+              Choose a banner image from your device to preview it here.
             </p>
           </div>
         </div>
@@ -92,8 +93,21 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
     reset(defaultValues);
   }, [defaultValues, reset]);
 
-  const bannerUrl = watch("bannerUrl");
-  const previewUrl = getEventPreviewUrl({ bannerUrl }, initialEvent?.banner?.url || "");
+  const bannerFiles = watch("bannerFile");
+  const bannerFile = getEventBannerFile({ bannerFile: bannerFiles });
+  const [previewUrl, setPreviewUrl] = useState(initialEvent?.banner?.url || "");
+
+  useEffect(() => {
+    if (!bannerFile) {
+      setPreviewUrl(initialEvent?.banner?.url || "");
+      return undefined;
+    }
+
+    const objectUrl = URL.createObjectURL(bannerFile);
+    setPreviewUrl(objectUrl);
+
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [bannerFile, initialEvent?.banner?.url]);
 
   function navigateBack() {
     if (typeof onCancel === "function") {
@@ -127,9 +141,10 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
 
     try {
       const payload = buildEventPayload(values, mode);
+      const selectedBanner = getEventBannerFile(values);
       const response = isEditMode
-        ? await eventService.updateEvent(initialEvent?._id || initialEvent?.id, payload)
-        : await eventService.createEvent(payload);
+        ? await eventService.updateEvent(initialEvent?._id || initialEvent?.id, payload, selectedBanner)
+        : await eventService.createEvent(payload, selectedBanner);
       const event = response?.event || null;
       const eventId = event?._id || event?.id || initialEvent?._id || initialEvent?.id;
 
@@ -229,11 +244,13 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
 
               <div className="space-y-4">
                 <Input
-                  label="Banner URL"
-                  error={errors.bannerUrl?.message}
-                  helperText="Paste a hosted image URL. The backend currently stores banner metadata as a URL."
-                  placeholder="https://example.com/banner.jpg"
-                  {...register("bannerUrl")}
+                  label="Banner image"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  error={errors.bannerFile?.message}
+                  helperText="JPG, PNG, or WebP. Maximum file size: 5 MB."
+                  className="h-auto min-h-11 py-2 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-100 hover:file:bg-slate-600"
+                  {...register("bannerFile")}
                 />
 
                 <EventBannerPreview url={previewUrl} title={initialEvent?.eventName || "Event banner"} />
