@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Ticket from "../models/ticket.model.js";
+import { escapeRegex } from "../utils/query.util.js";
 
 function applySession(query, options = {}) {
   return options.session ? query.session(options.session) : query;
@@ -144,6 +145,17 @@ export async function findTicketByTokenHash(tokenHash, options = {}) {
   );
 }
 
+export async function findTicketIdsByEventAndReference(eventId, reference, options = {}) {
+  const expression = new RegExp(escapeRegex(reference), "i");
+  const query = Ticket.find({ event: eventId, reference: expression })
+    .select("_id")
+    .limit(options.limit || 50)
+    .lean();
+
+  const tickets = await applySession(query, options);
+  return tickets.map((ticket) => ticket._id);
+}
+
 export async function markTicketUsed(ticketId, actorUserId, options = {}) {
   return applySession(
     Ticket.findOneAndUpdate(
@@ -154,7 +166,7 @@ export async function markTicketUsed(ticketId, actorUserId, options = {}) {
       },
       {
         status: "USED",
-        checkedInAt: new Date(),
+        checkedInAt: options.checkedInAt || new Date(),
         checkedInBy: actorUserId,
       },
       {
@@ -165,6 +177,29 @@ export async function markTicketUsed(ticketId, actorUserId, options = {}) {
       .populate("event")
       .populate("ticketType")
       .populate("order"),
+    options
+  );
+}
+
+export async function revertTicketCheckIn(ticketId, actorUserId, checkedInAt, options = {}) {
+  return applySession(
+    Ticket.findOneAndUpdate(
+      {
+        _id: ticketId,
+        status: "USED",
+        checkedInBy: actorUserId,
+        checkedInAt,
+      },
+      {
+        status: "VALID",
+        checkedInAt: null,
+        checkedInBy: null,
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
+    ),
     options
   );
 }

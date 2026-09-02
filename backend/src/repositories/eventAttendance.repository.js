@@ -8,9 +8,22 @@ function applySession(query, options = {}) {
   return query;
 }
 
-function buildAttendanceQuery(filter = {}) {
-  return EventAttendance.find(filter)
+function populateAttendanceQuery(query) {
+  return query
     .populate("checkedInBy")
+    .populate({
+      path: "ticket",
+      select: "reference status checkedInAt checkedInBy ticketType order",
+      populate: [
+        { path: "ticketType", select: "name" },
+        { path: "order", select: "reference" },
+      ],
+    })
+    .populate("order", "reference");
+}
+
+function buildAttendanceQuery(filter = {}) {
+  return populateAttendanceQuery(EventAttendance.find(filter))
     .sort({ checkedInAt: -1, _id: -1 });
 }
 
@@ -25,6 +38,13 @@ export async function findAttendanceByEventAndEmail(eventId, attendeeEmail, opti
       event: eventId,
       attendeeEmail,
     }).populate("checkedInBy"),
+    options
+  );
+}
+
+export async function findAttendanceByTicket(ticketId, options = {}) {
+  return applySession(
+    populateAttendanceQuery(EventAttendance.findOne({ ticket: ticketId })),
     options
   );
 }

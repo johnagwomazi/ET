@@ -2,6 +2,7 @@ import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
 import * as eventAttendanceService from "../services/eventAttendance.service.js";
 import * as eventAttendanceReportService from "../services/eventAttendanceReport.service.js";
 import { errorResponse, successResponse } from "../utils/apiResponse.js";
+import logger from "../lib/logger.js";
 
 function sendServiceError(res, errorResult) {
   return res.status(errorResult.statusCode || HTTP_STATUS.BAD_REQUEST).json(
@@ -24,8 +25,7 @@ export async function recordEventAttendance(req, res) {
 
     return res.status(HTTP_STATUS.CREATED).json(successResponse("Attendance recorded successfully", result));
   } catch (error) {
-    console.log(error);
-    console.log("error in event attendance controller");
+    logger.error(error);
 
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
   }
@@ -46,8 +46,7 @@ export async function getEventAttendance(req, res) {
 
     return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
   } catch (error) {
-    console.log(error);
-    console.log("error in event attendance controller");
+    logger.error(error);
 
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
   }
@@ -67,9 +66,27 @@ export async function getEventAttendanceCount(req, res) {
 
     return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
   } catch (error) {
-    console.log(error);
-    console.log("error in event attendance controller");
+    logger.error(error);
 
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
+  }
+}
+
+export async function getRecentEventAttendance(req, res) {
+  try {
+    const result = await eventAttendanceService.getRecentEventAttendance(
+      req.organizationId,
+      req.auth.userId,
+      req.params.eventId,
+      req.query
+    );
+
+    if (result.error) {
+      return sendServiceError(res, result);
+    }
+
+    return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
+  } catch (error) {
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
   }
 }
@@ -95,8 +112,7 @@ export async function exportAttendancePdf(req, res) {
 
     return sendFileResponse(res, result);
   } catch (error) {
-    console.log(error);
-    console.log("error in event attendance controller");
+    logger.error(error);
 
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
   }
@@ -117,8 +133,7 @@ export async function exportAttendanceExcel(req, res) {
 
     return sendFileResponse(res, result);
   } catch (error) {
-    console.log(error);
-    console.log("error in event attendance controller");
+    logger.error(error);
 
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
   }

@@ -6,6 +6,7 @@ import { USER_ROLES } from "../src/constants/roles.constants.js";
 import {
   getEventAttendance,
   getEventAttendanceCount,
+  getRecentEventAttendance,
   recordEventAttendance,
 } from "../src/services/eventAttendance.service.js";
 import {
@@ -17,6 +18,8 @@ import {
   attendanceEventIdParamSchema,
   attendanceListQuerySchema,
 } from "../src/validators/attendance.validator.js";
+import { buildAttendanceReportRows } from "../src/utils/attendanceExport.util.js";
+import EventAttendance from "../src/models/eventAttendance.model.js";
 
 function createDocument(data) {
   return {
@@ -42,6 +45,7 @@ function buildDependencies(overrides = {}) {
     countEventAttendance: [],
     findEventAttendance: [],
     createEventAttendance: [],
+    findTicketIdsByEventAndReference: [],
   };
 
   const attendanceStore = buildAttendanceStore(overrides.existingAttendances || []);
@@ -164,8 +168,13 @@ function buildDependencies(overrides = {}) {
           }
 
           return filter.$or.some((condition) => {
-            const [field, regex] = Object.entries(condition)[0];
-            return regex.test(String(item[field] || ""));
+            const [field, matcher] = Object.entries(condition)[0];
+
+            if (matcher instanceof RegExp) {
+              return matcher.test(String(item[field] || ""));
+            }
+
+            return matcher?.$in?.some((value) => String(value) === String(item[field])) || false;
           });
         }).length;
       },
@@ -181,8 +190,13 @@ function buildDependencies(overrides = {}) {
           }
 
           return filter.$or.some((condition) => {
-            const [field, regex] = Object.entries(condition)[0];
-            return regex.test(String(item[field] || ""));
+            const [field, matcher] = Object.entries(condition)[0];
+
+            if (matcher instanceof RegExp) {
+              return matcher.test(String(item[field] || ""));
+            }
+
+            return matcher?.$in?.some((value) => String(value) === String(item[field])) || false;
           });
         });
 
@@ -225,6 +239,12 @@ function buildDependencies(overrides = {}) {
         return created;
       },
     },
+    ticketRepository: {
+      findTicketIdsByEventAndReference: async (eventId, reference) => {
+        calls.findTicketIdsByEventAndReference.push({ eventId, reference });
+        return overrides.ticketSearchIds || [];
+      },
+    },
   };
 
   return { dependencies, calls, attendanceStore };
@@ -250,6 +270,18 @@ test("attendance validators accept valid payloads and reject bad ids", () => {
   assert.equal(queryResult.success, true);
   assert.equal(queryResult.data.page, 2);
   assert.equal(queryResult.data.limit, 25);
+});
+
+test("attendance indexes protect ticket check-ins while preserving legacy records", () => {
+  const indexes = EventAttendance.schema.indexes();
+  const ticketIndex = indexes.find(([, options]) => options.name === "unique_ticket_attendance");
+  const manualIndex = indexes.find(([, options]) => options.name === "unique_manual_attendance_email_per_event");
+
+  assert.deepEqual(ticketIndex[0], { ticket: 1 });
+  assert.equal(ticketIndex[1].unique, true);
+  assert.deepEqual(ticketIndex[1].partialFilterExpression, { ticket: { $type: "objectId" } });
+  assert.deepEqual(manualIndex[0], { event: 1, attendeeEmail: 1 });
+  assert.deepEqual(manualIndex[1].partialFilterExpression, { ticket: { $type: "null" } });
 });
 
 test("recording attendance works for an organization admin", async () => {
@@ -655,6 +687,49 @@ test("attendance count endpoint returns the total attendee count", async () => {
   assert.equal(result.totalAttendees, 2);
 });
 
+test("recent attendance is bounded, newest first, and ticket references are searchable", async () => {
+  const { dependencies } = buildDependencies({
+    ticketSearchIds: ["ticket_2"],
+    existingAttendances: [
+      {
+        _id: "attendance_1",
+        event: "event_1",
+        attendeeName: "Older Guest",
+        attendeePhone: "08012345000",
+        attendeeEmail: "older@example.com",
+        ticket: "ticket_1",
+        checkedInAt: new Date("2026-08-10T10:00:00.000Z"),
+        checkedInBy: createDocument({ _id: "user_1", role: USER_ROLES.ADMIN, organization: "org_1" }),
+      },
+      {
+        _id: "attendance_2",
+        event: "event_1",
+        attendeeName: "Newer Guest",
+        attendeePhone: "08012345001",
+        attendeeEmail: "newer@example.com",
+        ticket: "ticket_2",
+        checkedInAt: new Date("2026-08-10T10:05:00.000Z"),
+        checkedInBy: createDocument({ _id: "user_1", role: USER_ROLES.ADMIN, organization: "org_1" }),
+      },
+    ],
+  });
+
+  const recent = await getRecentEventAttendance("org_1", "user_1", "event_1", { limit: 1 }, dependencies);
+  const searched = await getEventAttendance(
+    "org_1",
+    "user_1",
+    "event_1",
+    { search: "tkt_newer" },
+    dependencies
+  );
+
+  assert.equal(recent.recentCheckIns.length, 1);
+  assert.equal(recent.recentCheckIns[0].name, "Newer Guest");
+  assert.equal(recent.totalAttendees, 2);
+  assert.equal(searched.attendance.length, 1);
+  assert.equal(searched.attendance[0].ticket, "ticket_2");
+});
+
 test("attendance reports can be exported as pdf and excel", async () => {
   const { dependencies } = buildDependencies({
     authUser: {
@@ -678,6 +753,14 @@ test("attendance reports can be exported as pdf and excel", async () => {
           role: USER_ROLES.ADMIN,
           organization: "org_1",
         }),
+        ticket: createDocument({
+          _id: "ticket_1",
+          reference: "tkt_export_1",
+          status: "USED",
+          ticketType: createDocument({ _id: "type_1", name: "VIP" }),
+          order: createDocument({ _id: "order_1", reference: "ord_export_1" }),
+        }),
+        order: createDocument({ _id: "order_1", reference: "ord_export_1" }),
       },
     ],
   });
@@ -697,6 +780,23 @@ test("attendance reports can be exported as pdf and excel", async () => {
   );
   assert.equal(excelResult.filename, "annual-event-summit-attendance.xlsx");
   assert.equal(excelResult.buffer.slice(0, 2).toString("latin1"), "PK");
+
+  const [row] = buildAttendanceReportRows([{
+    attendeeName: "Export One",
+    attendeePhone: "08012345000",
+    attendeeEmail: "export1@example.com",
+    checkedInAt: new Date("2026-08-10T10:00:00.000Z"),
+    checkedInBy: { firstName: "Ada", lastName: "Admin" },
+    ticket: {
+      reference: "tkt_export_1",
+      status: "USED",
+      ticketType: { name: "VIP" },
+      order: { reference: "ord_export_1" },
+    },
+  }]);
+  assert.equal(row.ticketReference, "tkt_export_1");
+  assert.equal(row.ticketType, "VIP");
+  assert.equal(row.orderReference, "ord_export_1");
 });
 
 test("attendance exports enforce authorization and organization isolation", async () => {

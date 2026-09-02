@@ -8,6 +8,7 @@ import * as eventAttendanceRepository from "../repositories/eventAttendance.repo
 import * as eventManagerAssignmentRepository from "../repositories/eventManagerAssignment.repository.js";
 import * as eventRepository from "../repositories/event.repository.js";
 import * as organizationRepository from "../repositories/organization.repository.js";
+import * as ticketRepository from "../repositories/ticket.repository.js";
 import { buildPaginationMeta, buildPaginationOptions, escapeRegex } from "../utils/query.util.js";
 import { hasOrganizationPermission } from "../utils/organizationPermission.util.js";
 import { mapEventAttendanceResponse } from "../utils/eventAttendanceResponse.util.js";
@@ -18,6 +19,7 @@ const defaultDependencies = {
   eventManagerAssignmentRepository,
   eventRepository,
   organizationRepository,
+  ticketRepository,
   mongoose,
 };
 
@@ -182,7 +184,7 @@ async function resolveAttendanceAccess({
   };
 }
 
-function buildAttendanceFilter(eventId, query = {}) {
+async function buildAttendanceFilter(eventId, query = {}, dependencies = defaultDependencies) {
   const filter = {
     event: eventId,
   };
@@ -195,6 +197,18 @@ function buildAttendanceFilter(eventId, query = {}) {
       { attendeePhone: searchExpression },
       { attendeeEmail: searchExpression },
     ];
+
+    if (dependencies.ticketRepository?.findTicketIdsByEventAndReference) {
+      const ticketIds = await dependencies.ticketRepository.findTicketIdsByEventAndReference(
+        eventId,
+        query.search,
+        { limit: 50 }
+      );
+
+      if (ticketIds.length > 0) {
+        filter.$or.push({ ticket: { $in: ticketIds } });
+      }
+    }
   }
 
   return filter;
@@ -265,6 +279,7 @@ export async function recordEventAttendance(
       const attendance = await dependencies.eventAttendanceRepository.createEventAttendance(
         {
           event: eventId,
+          organization: organizationId,
           attendeeName: normalizedName,
           attendeePhone: normalizedPhone,
           attendeeEmail: normalizedEmail,
@@ -330,7 +345,7 @@ export async function getEventAttendance(organizationId, actorUserId, eventId, q
     sortBy: "checkedInAt",
     sortOrder: -1,
   });
-  const filter = buildAttendanceFilter(eventId, query);
+  const filter = await buildAttendanceFilter(eventId, query, dependencies);
 
   const [attendanceRecords, totalItems] = await Promise.all([
     dependencies.eventAttendanceRepository.findEventAttendance(filter, pagination),
@@ -341,6 +356,31 @@ export async function getEventAttendance(organizationId, actorUserId, eventId, q
     attendance: attendanceRecords.map(mapEventAttendanceResponse),
     totalAttendees: totalItems,
     pagination: buildPaginationMeta(totalItems, pagination),
+  };
+}
+
+export async function getRecentEventAttendance(
+  organizationId,
+  actorUserId,
+  eventId,
+  query = {},
+  dependencies = defaultDependencies
+) {
+  const result = await getEventAttendance(
+    organizationId,
+    actorUserId,
+    eventId,
+    { page: 1, limit: query.limit || 20 },
+    dependencies
+  );
+
+  if (result.error) {
+    return result;
+  }
+
+  return {
+    recentCheckIns: result.attendance,
+    totalAttendees: result.totalAttendees,
   };
 }
 

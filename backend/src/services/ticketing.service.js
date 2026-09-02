@@ -12,6 +12,7 @@ import {
   REFUND_STATUS,
   TICKET_STATUS,
   TICKET_TYPE_STATUS,
+  TICKET_VALIDATION_OUTCOME,
   WITHDRAWAL_STATUS,
 } from "../constants/ticketing.constants.js";
 import * as authRepository from "../repositories/auth.repository.js";
@@ -594,113 +595,370 @@ export async function getCustomerHistory(customerId, query = {}, dependencies = 
   };
 }
 
-async function resolveTicketForValidation(payload, dependencies) {
+async function resolveTicketForValidation(payload, dependencies, options = {}) {
   if (payload.token) {
-    return dependencies.ticketRepository.findTicketByTokenHash(hashValue(payload.token));
+    return dependencies.ticketRepository.findTicketByTokenHash(hashValue(payload.token), options);
   }
 
-  return dependencies.ticketRepository.findTicketByReference(payload.reference);
+  return dependencies.ticketRepository.findTicketByReference(payload.reference, options);
 }
 
-async function getManagerTicketContext(organizationId, actorUserId, eventId, dependencies) {
-  const actorUser = await dependencies.authRepository.findAuthUserById(actorUserId);
+function buildTicketValidationResult(outcome, reason, ticket = null, statusCode = HTTP_STATUS.CONFLICT) {
+  const result = {
+    valid: outcome === TICKET_VALIDATION_OUTCOME.VALID,
+    outcome,
+    reason,
+    statusCode,
+  };
 
-  if (!actorUser || actorUser.role !== USER_ROLES.MANAGER) {
-    return { error: "You do not have access to this resource", statusCode: HTTP_STATUS.FORBIDDEN };
+  if (ticket) {
+    result.ticket = mapTicketResponse(ticket);
+  }
+
+  return result;
+}
+
+function isOrderPaidForCheckIn(order, eventId, organizationId) {
+  if (!order || typeof order !== "object") {
+    return false;
+  }
+
+  const acceptedOrderStatuses = [ORDER_STATUS.PAID, ORDER_STATUS.PARTIALLY_REFUNDED];
+  const acceptedPaymentStatuses = [PAYMENT_STATUS.PAID, PAYMENT_STATUS.PARTIALLY_REFUNDED];
+
+  return acceptedOrderStatuses.includes(order.orderStatus)
+    && acceptedPaymentStatuses.includes(order.paymentStatus)
+    && getDocumentId(order.event) === getDocumentId(eventId)
+    && getDocumentId(order.organization) === getDocumentId(organizationId);
+}
+
+function isEventCheckInEligible(event) {
+  return event?.status === EVENT_STATUS.PUBLISHED;
+}
+
+async function getEventTicketOperatorContext(organizationId, actorUserId, eventId, dependencies, options = {}) {
+  const [actorUser, event] = await Promise.all([
+    dependencies.authRepository.findAuthUserById(actorUserId),
+    dependencies.eventRepository.findEventByIdAndOrganization(eventId, organizationId, options),
+  ]);
+
+  if (!actorUser) {
+    return {
+      error: "Not authorized",
+      outcome: TICKET_VALIDATION_OUTCOME.UNAUTHORIZED,
+      statusCode: HTTP_STATUS.UNAUTHORIZED,
+    };
+  }
+
+  if (![USER_ROLES.ADMIN, USER_ROLES.MANAGER].includes(actorUser.role)) {
+    return {
+      error: "You do not have access to this resource",
+      outcome: TICKET_VALIDATION_OUTCOME.UNAUTHORIZED,
+      statusCode: HTTP_STATUS.FORBIDDEN,
+    };
   }
 
   if (getDocumentId(actorUser.organization) !== getDocumentId(organizationId)) {
-    return { error: "You cannot access another organization", statusCode: HTTP_STATUS.FORBIDDEN };
+    return {
+      error: "You cannot access another organization",
+      outcome: TICKET_VALIDATION_OUTCOME.ORGANIZATION_MISMATCH,
+      statusCode: HTTP_STATUS.FORBIDDEN,
+    };
   }
 
-  const assignment = await dependencies.eventManagerAssignmentRepository.findActiveEventManagerAssignment(eventId, actorUserId);
-
-  if (!assignment) {
-    return { error: "You do not have access to this resource", statusCode: HTTP_STATUS.FORBIDDEN };
+  if (!event) {
+    return { error: "Event not found", statusCode: HTTP_STATUS.NOT_FOUND };
   }
 
-  return { actorUser };
+  if (actorUser.role === USER_ROLES.ADMIN) {
+    if (!hasOrganizationPermission(actorUser, ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE, event.organization)) {
+      return {
+        error: "You do not have access to this resource",
+        outcome: TICKET_VALIDATION_OUTCOME.UNAUTHORIZED,
+        statusCode: HTTP_STATUS.FORBIDDEN,
+      };
+    }
+
+    return { actorUser, event, assignment: null };
+  }
+
+  const assignment = await dependencies.eventManagerAssignmentRepository.findActiveEventManagerAssignment(
+    eventId,
+    actorUserId,
+    options
+  );
+
+  if (!assignment || getDocumentId(assignment.event?.organization) !== getDocumentId(organizationId)) {
+    return {
+      error: "Manager is not assigned to this event",
+      outcome: TICKET_VALIDATION_OUTCOME.MANAGER_NOT_ASSIGNED,
+      statusCode: HTTP_STATUS.FORBIDDEN,
+    };
+  }
+
+  return { actorUser, event, assignment };
 }
 
-export async function validateEventTicket(organizationId, actorUserId, eventId, payload, dependencies = defaultDependencies) {
-  const context = await getManagerTicketContext(organizationId, actorUserId, eventId, dependencies);
+async function getEventTicketValidation(organizationId, actorUserId, eventId, payload, dependencies, options = {}) {
+  const context = await getEventTicketOperatorContext(
+    organizationId,
+    actorUserId,
+    eventId,
+    dependencies,
+    options
+  );
 
   if (context.error) {
     return context;
   }
 
-  const ticket = await resolveTicketForValidation(payload, dependencies);
+  if (!isEventCheckInEligible(context.event)) {
+    return buildTicketValidationResult(
+      TICKET_VALIDATION_OUTCOME.EVENT_NOT_CHECKIN_ELIGIBLE,
+      "Event is not eligible for check-in",
+      null,
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+
+  const ticket = await resolveTicketForValidation(payload, dependencies, options);
 
   if (!ticket) {
-    return { valid: false, reason: "Ticket not found" };
+    return buildTicketValidationResult(
+      TICKET_VALIDATION_OUTCOME.INVALID_TICKET,
+      "Ticket not found",
+      null,
+      HTTP_STATUS.NOT_FOUND
+    );
   }
 
   if (getDocumentId(ticket.event) !== getDocumentId(eventId)) {
-    return { valid: false, reason: "Ticket belongs to a different event", ticket: mapTicketResponse(ticket) };
+    return buildTicketValidationResult(
+      TICKET_VALIDATION_OUTCOME.WRONG_EVENT,
+      "Ticket belongs to a different event"
+    );
   }
 
-  if ([TICKET_STATUS.CANCELED, TICKET_STATUS.REFUNDED].includes(ticket.status)) {
-    return { valid: false, reason: "Ticket is not eligible for check-in", ticket: mapTicketResponse(ticket) };
+  if (getDocumentId(ticket.organization) !== getDocumentId(organizationId)) {
+    return buildTicketValidationResult(
+      TICKET_VALIDATION_OUTCOME.ORGANIZATION_MISMATCH,
+      "Ticket does not belong to this organization"
+    );
+  }
+
+  if (ticket.status === TICKET_STATUS.CANCELED) {
+    return buildTicketValidationResult(
+      TICKET_VALIDATION_OUTCOME.CANCELED_TICKET,
+      "Ticket has been canceled",
+      ticket
+    );
+  }
+
+  if (ticket.status === TICKET_STATUS.REFUNDED) {
+    return buildTicketValidationResult(
+      TICKET_VALIDATION_OUTCOME.REFUNDED_TICKET,
+      "Ticket has been refunded",
+      ticket
+    );
   }
 
   if (ticket.status === TICKET_STATUS.USED || ticket.checkedInAt) {
-    return { valid: false, reason: "Ticket is already checked in", ticket: mapTicketResponse(ticket) };
+    return buildTicketValidationResult(
+      TICKET_VALIDATION_OUTCOME.ALREADY_CHECKED_IN,
+      "Ticket is already checked in",
+      ticket
+    );
   }
 
-  return { valid: true, ticket: mapTicketResponse(ticket) };
+  if (!isOrderPaidForCheckIn(ticket.order, eventId, organizationId)) {
+    return buildTicketValidationResult(
+      TICKET_VALIDATION_OUTCOME.ORDER_NOT_PAID,
+      "Ticket does not belong to a paid order",
+      ticket
+    );
+  }
+
+  if (!ticket.ticketType || ticket.ticketType.status !== TICKET_TYPE_STATUS.ACTIVE) {
+    return buildTicketValidationResult(
+      TICKET_VALIDATION_OUTCOME.INACTIVE_TICKET,
+      "Ticket type is inactive",
+      ticket
+    );
+  }
+
+  const existingAttendance = await dependencies.eventAttendanceRepository.findAttendanceByTicket(
+    ticket._id,
+    options
+  );
+
+  if (existingAttendance) {
+    return {
+      ...buildTicketValidationResult(
+        TICKET_VALIDATION_OUTCOME.ALREADY_CHECKED_IN,
+        "Ticket is already checked in",
+        ticket
+      ),
+      attendance: mapEventAttendanceResponse(existingAttendance),
+    };
+  }
+
+  return {
+    ...buildTicketValidationResult(
+      TICKET_VALIDATION_OUTCOME.VALID,
+      "Ticket is valid for check-in",
+      ticket,
+      HTTP_STATUS.OK
+    ),
+    ticketDocument: ticket,
+    event: context.event,
+  };
+}
+
+function toPublicTicketValidation(validation) {
+  const { ticketDocument, event, ...result } = validation;
+  return result;
+}
+
+export async function validateEventTicket(organizationId, actorUserId, eventId, payload, dependencies = defaultDependencies) {
+  const validation = await getEventTicketValidation(
+    organizationId,
+    actorUserId,
+    eventId,
+    payload,
+    dependencies
+  );
+
+  return toPublicTicketValidation(validation);
 }
 
 export async function checkInEventTicket(organizationId, actorUserId, eventId, payload, dependencies = defaultDependencies) {
-  const validation = await validateEventTicket(organizationId, actorUserId, eventId, payload, dependencies);
+  try {
+    return await runInTransaction(dependencies, async (session) => {
+      const options = { session };
+      const validation = await getEventTicketValidation(
+        organizationId,
+        actorUserId,
+        eventId,
+        payload,
+        dependencies,
+        options
+      );
 
-  if (validation.error || !validation.valid) {
-    return validation;
-  }
+      if (validation.error || !validation.valid) {
+        return toPublicTicketValidation(validation);
+      }
 
-  return runInTransaction(dependencies, async (session) => {
-    const ticket = await resolveTicketForValidation(payload, dependencies);
-    const attendee = ticket.attendee || {};
-    const existingAttendance = await dependencies.eventAttendanceRepository.findAttendanceByEventAndEmail(
-      eventId,
-      normalizeEmail(attendee.email),
-      { session }
-    );
+      const ticket = validation.ticketDocument;
+      const currentAttendanceCount = await dependencies.eventAttendanceRepository.countAttendanceByEvent(
+        eventId,
+        options
+      );
 
-    if (existingAttendance) {
+      if (currentAttendanceCount >= Number(validation.event.capacity)) {
+        return {
+          error: "Event capacity has been reached",
+          outcome: TICKET_VALIDATION_OUTCOME.EVENT_NOT_CHECKIN_ELIGIBLE,
+          statusCode: HTTP_STATUS.CONFLICT,
+        };
+      }
+
+      const usedTicket = await dependencies.ticketRepository.markTicketUsed(ticket._id, actorUserId, options);
+
+      if (!usedTicket) {
+        const existingAttendance = await dependencies.eventAttendanceRepository.findAttendanceByTicket(
+          ticket._id,
+          options
+        );
+
+        return {
+          ...buildTicketValidationResult(
+            TICKET_VALIDATION_OUTCOME.ALREADY_CHECKED_IN,
+            "Ticket is already checked in",
+            ticket
+          ),
+          attendance: mapEventAttendanceResponse(existingAttendance),
+        };
+      }
+
+      const attendee = usedTicket.attendee || ticket.attendee || {};
+      let attendance;
+
+      try {
+        attendance = await dependencies.eventAttendanceRepository.createEventAttendance(
+          {
+            event: eventId,
+            organization: organizationId,
+            customer: getDocumentId(usedTicket.purchaser),
+            attendeeName: attendee.name,
+            attendeePhone: attendee.phone,
+            attendeeEmail: normalizeEmail(attendee.email),
+            checkedInBy: actorUserId,
+            checkedInAt: usedTicket.checkedInAt || new Date(),
+            ticket: usedTicket._id,
+            order: getDocumentId(usedTicket.order),
+          },
+          options
+        );
+      } catch (error) {
+        if (!session && error?.code === 11000) {
+          const existingAttendance = await dependencies.eventAttendanceRepository.findAttendanceByTicket(
+            usedTicket._id
+          );
+
+          if (existingAttendance) {
+            return {
+              ...buildTicketValidationResult(
+                TICKET_VALIDATION_OUTCOME.ALREADY_CHECKED_IN,
+                "Ticket is already checked in",
+                usedTicket
+              ),
+              attendance: mapEventAttendanceResponse(existingAttendance),
+            };
+          }
+        }
+
+        if (!session && dependencies.ticketRepository.revertTicketCheckIn) {
+          await dependencies.ticketRepository.revertTicketCheckIn(
+            usedTicket._id,
+            actorUserId,
+            usedTicket.checkedInAt
+          );
+        }
+
+        throw error;
+      }
+
       return {
-        valid: false,
-        reason: "Attendee is already checked in",
-        ticket: mapTicketResponse(ticket),
-        attendance: mapEventAttendanceResponse(existingAttendance),
+        checkedIn: true,
+        valid: true,
+        outcome: TICKET_VALIDATION_OUTCOME.VALID,
+        ticket: mapTicketResponse(usedTicket),
+        attendance: mapEventAttendanceResponse(attendance),
+        totalAttendees: currentAttendanceCount + 1,
+      };
+    });
+  } catch (error) {
+    const ticket = await resolveTicketForValidation(payload, dependencies).catch(() => null);
+    const attendance = ticket
+      ? await dependencies.eventAttendanceRepository.findAttendanceByTicket(ticket._id).catch(() => null)
+      : null;
+
+    if (attendance || ticket?.status === TICKET_STATUS.USED || ticket?.checkedInAt) {
+      return {
+        ...buildTicketValidationResult(
+          TICKET_VALIDATION_OUTCOME.ALREADY_CHECKED_IN,
+          "Ticket is already checked in",
+          ticket
+        ),
+        attendance: mapEventAttendanceResponse(attendance),
       };
     }
 
-    const usedTicket = await dependencies.ticketRepository.markTicketUsed(ticket._id, actorUserId, { session });
-
-    if (!usedTicket) {
-      return { valid: false, reason: "Ticket is already checked in" };
-    }
-
-    const attendance = await dependencies.eventAttendanceRepository.createEventAttendance(
-      {
-        event: eventId,
-        attendeeName: attendee.name,
-        attendeePhone: attendee.phone,
-        attendeeEmail: normalizeEmail(attendee.email),
-        checkedInBy: actorUserId,
-        checkedInAt: usedTicket.checkedInAt || new Date(),
-        ticket: usedTicket._id,
-        order: getDocumentId(usedTicket.order),
-      },
-      { session }
-    );
-
     return {
-      checkedIn: true,
-      ticket: mapTicketResponse(usedTicket),
-      attendance: mapEventAttendanceResponse(attendance),
+      error: "Check-in could not be completed",
+      statusCode: HTTP_STATUS.INTERNAL_SERVER_ERROR,
     };
-  });
+  }
 }
 
 export async function createOrderRefund(organizationId, actorUserId, orderReference, payload, dependencies = defaultDependencies) {

@@ -11,6 +11,7 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 
 import appConfig from "./config/app.config.js";
+import envConfig from "./config/env.config.js";
 import corsOptions from "./config/cors.config.js";
 import { helmetOptions } from "./config/security.config.js";
 import createRateLimiter from "./config/rateLimit.config.js";
@@ -22,6 +23,14 @@ import errorHandlerMiddleware from "./middleware/errorHandler.middleware.js";
 const app = express();
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDirectory = path.resolve(currentDirectory, "../uploads");
+const escapedApiPrefix = appConfig.apiPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const eventOperationsPattern = new RegExp(
+  `^${escapedApiPrefix}/(?:manager/events/[^/]+|organizations/me/events/[^/]+)/(?:tickets|attendance)(?:/|$)`
+);
+
+function isEventOperationsRequest(req) {
+  return eventOperationsPattern.test(req.path);
+}
 
 app.set("trust proxy", appConfig.trustProxy);
 
@@ -42,7 +51,16 @@ app.use(`${appConfig.apiPrefix}/payments/paystack/webhook`, express.raw({ type: 
 app.use(express.json({ limit: appConfig.requestBodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: appConfig.requestBodyLimit }));
 app.use(createRequestLogger());
-app.use(createRateLimiter());
+app.use(createRateLimiter({ skip: isEventOperationsRequest }));
+app.use(
+  [
+    `${appConfig.apiPrefix}/manager/events/:eventId/tickets`,
+    `${appConfig.apiPrefix}/manager/events/:eventId/attendance`,
+    `${appConfig.apiPrefix}/organizations/me/events/:eventId/tickets`,
+    `${appConfig.apiPrefix}/organizations/me/events/:eventId/attendance`,
+  ],
+  createRateLimiter({ max: envConfig.eventOperationsRateLimitMax })
+);
 
 app.get("/", function rootHandler(req, res) {
   return res.json({

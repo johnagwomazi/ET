@@ -97,12 +97,12 @@ export const paymentVerifySchema = z
 
 export const ticketValidationSchema = z
   .object({
-    reference: z.string().trim().max(120).optional(),
-    token: z.string().trim().max(500).optional(),
+    reference: z.string().trim().min(3, "Invalid ticket reference").max(120).optional(),
+    token: z.string().trim().min(16, "Invalid ticket token").max(500).optional(),
   })
   .strict()
-  .refine((data) => Boolean(data.reference || data.token), {
-    message: "Ticket reference or token is required",
+  .refine((data) => Number(Boolean(data.reference)) + Number(Boolean(data.token)) === 1, {
+    message: "Provide either a ticket reference or token",
   });
 
 export const refundCreateSchema = z

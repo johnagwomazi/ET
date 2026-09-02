@@ -11,9 +11,15 @@ export function successResponse(message, data = null) {
   return response;
 }
 
-export function errorResponse(message) {
-  return {
+export function errorResponse(message, data = null) {
+  const response = {
     success: false,
     message,
   };
+
+  if (data !== null && data !== undefined) {
+    response.data = data;
+  }
+
+  return response;
 }

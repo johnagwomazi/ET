@@ -12,6 +12,7 @@ import {
   ORDER_STATUS,
   PAYMENT_STATUS,
   TICKET_STATUS,
+  TICKET_VALIDATION_OUTCOME,
 } from "../src/constants/ticketing.constants.js";
 import { EVENT_STATUS } from "../src/constants/eventStatus.constants.js";
 import { USER_ROLES } from "../src/constants/roles.constants.js";
@@ -42,6 +43,7 @@ function createDependencies(overrides = {}) {
     organization,
     startAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     endAt: new Date(Date.now() + 26 * 60 * 60 * 1000),
+    capacity: 100,
   };
   const ticketType = {
     _id: ids.ticketType,
@@ -97,6 +99,20 @@ function createDependencies(overrides = {}) {
     },
   };
   let tickets = [];
+
+  function hydrateTicket(ticket) {
+    if (!ticket) {
+      return null;
+    }
+
+    return {
+      ...ticket,
+      event,
+      organization: ids.organization,
+      ticketType,
+      order,
+    };
+  }
 
   const dependencies = {
     mongoose: {
@@ -226,10 +242,10 @@ function createDependencies(overrides = {}) {
         return tickets;
       },
       async findTicketByReference(reference) {
-        return tickets.find((ticket) => ticket.reference === reference) || null;
+        return hydrateTicket(tickets.find((ticket) => ticket.reference === reference));
       },
       async findTicketByTokenHash(tokenHash) {
-        return tickets.find((ticket) => ticket.tokenHash === tokenHash) || null;
+        return hydrateTicket(tickets.find((ticket) => ticket.tokenHash === tokenHash));
       },
       async markTicketUsed(ticketId, actorUserId) {
         const ticket = tickets.find((item) => String(item._id) === String(ticketId));
@@ -240,6 +256,16 @@ function createDependencies(overrides = {}) {
         ticket.status = TICKET_STATUS.USED;
         ticket.checkedInAt = new Date();
         ticket.checkedInBy = actorUserId;
+        return hydrateTicket(ticket);
+      },
+      async revertTicketCheckIn(ticketId, actorUserId, checkedInAt) {
+        const ticket = tickets.find((item) => String(item._id) === String(ticketId));
+        if (ticket?.checkedInBy === actorUserId && ticket?.checkedInAt === checkedInAt) {
+          ticket.status = TICKET_STATUS.VALID;
+          ticket.checkedInAt = null;
+          ticket.checkedInBy = null;
+        }
+
         return ticket;
       },
       async markTicketsByOrder() {
@@ -248,13 +274,16 @@ function createDependencies(overrides = {}) {
     },
     eventManagerAssignmentRepository: {
       async findActiveEventManagerAssignment() {
-        return { event: ids.event, user: ids.manager };
+        return { event, user: ids.manager };
       },
     },
     eventAttendanceRepository: {
       records: [],
       async findAttendanceByEventAndEmail(eventId, email) {
         return this.records.find((record) => record.event === eventId && record.attendeeEmail === email) || null;
+      },
+      async findAttendanceByTicket(ticketId) {
+        return this.records.find((record) => String(record.ticket) === String(ticketId)) || null;
       },
       async createEventAttendance(data) {
         const attendance = { _id: `att_${this.records.length}`, ...data };
@@ -388,6 +417,8 @@ test("ticketing validators enforce ticket, checkout, refund, withdrawal, and val
   );
   assert.equal(ticketValidationSchema.safeParse({}).success, false);
   assert.equal(ticketValidationSchema.safeParse({ reference: "tkt_123" }).success, true);
+  assert.equal(ticketValidationSchema.safeParse({ token: "short" }).success, false);
+  assert.equal(ticketValidationSchema.safeParse({ reference: "tkt_123", token: "a".repeat(32) }).success, false);
   assert.equal(refundCreateSchema.safeParse({ reason: "Event canceled" }).success, true);
   assert.equal(withdrawalCreateSchema.safeParse({ amount: 1000 }).success, true);
 });
@@ -466,6 +497,216 @@ test("manager ticket check-in validates event scope and records attendance once"
   assert.equal(duplicate.valid, false);
   assert.match(duplicate.reason, /already/i);
   assert.equal(dependencies.eventAttendanceRepository.records.length, 1);
+});
+
+test("Phase 5 ticket validation returns stable outcomes without exposing QR secrets", async () => {
+  const { dependencies, state } = createDependencies();
+  await ticketingService.verifyPayment("pay_test", dependencies);
+  const ticket = state.tickets[0];
+
+  const validReference = await ticketingService.validateEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    { reference: ticket.reference },
+    dependencies
+  );
+  const validToken = await ticketingService.validateEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    { token: ticket.qrToken },
+    dependencies
+  );
+  const missing = await ticketingService.validateEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    { reference: "tkt_missing" },
+    dependencies
+  );
+  const wrongEvent = await ticketingService.validateEventTicket(
+    ids.organization,
+    ids.manager,
+    "64b64b64b64b64b64b64b699",
+    { reference: ticket.reference },
+    dependencies
+  );
+
+  assert.equal(validReference.outcome, TICKET_VALIDATION_OUTCOME.VALID);
+  assert.equal(validToken.outcome, TICKET_VALIDATION_OUTCOME.VALID);
+  assert.equal(validReference.ticket.qrToken, undefined);
+  assert.equal(validReference.ticket.qrCodeDataUrl, undefined);
+  assert.equal(missing.outcome, TICKET_VALIDATION_OUTCOME.INVALID_TICKET);
+  assert.equal(wrongEvent.outcome, TICKET_VALIDATION_OUTCOME.WRONG_EVENT);
+  assert.equal(wrongEvent.ticket, undefined);
+});
+
+test("Phase 5 ticket validation rejects invalid ticket, order, type, and event states", async () => {
+  const cases = [
+    {
+      expected: TICKET_VALIDATION_OUTCOME.CANCELED_TICKET,
+      mutate(state) { state.tickets[0].status = TICKET_STATUS.CANCELED; },
+    },
+    {
+      expected: TICKET_VALIDATION_OUTCOME.REFUNDED_TICKET,
+      mutate(state) { state.tickets[0].status = TICKET_STATUS.REFUNDED; },
+    },
+    {
+      expected: TICKET_VALIDATION_OUTCOME.ALREADY_CHECKED_IN,
+      mutate(state) {
+        state.tickets[0].status = TICKET_STATUS.USED;
+        state.tickets[0].checkedInAt = new Date();
+      },
+    },
+    {
+      expected: TICKET_VALIDATION_OUTCOME.INACTIVE_TICKET,
+      mutate(state) { state.ticketType.status = "INACTIVE"; },
+    },
+    {
+      expected: TICKET_VALIDATION_OUTCOME.ORDER_NOT_PAID,
+      mutate(state) {
+        state.order.orderStatus = ORDER_STATUS.PENDING;
+        state.order.paymentStatus = PAYMENT_STATUS.PENDING;
+      },
+    },
+    {
+      expected: TICKET_VALIDATION_OUTCOME.EVENT_NOT_CHECKIN_ELIGIBLE,
+      mutate(state) { state.event.status = EVENT_STATUS.CANCELED; },
+    },
+  ];
+
+  for (const validationCase of cases) {
+    const { dependencies, state } = createDependencies();
+    await ticketingService.verifyPayment("pay_test", dependencies);
+    validationCase.mutate(state);
+    const result = await ticketingService.validateEventTicket(
+      ids.organization,
+      ids.manager,
+      ids.event,
+      { reference: state.tickets[0].reference },
+      dependencies
+    );
+
+    assert.equal(result.valid, false);
+    assert.equal(result.outcome, validationCase.expected);
+  }
+});
+
+test("Phase 5 check-in enforces manager assignment, organization scope, and admin access", async () => {
+  const unassigned = createDependencies();
+  await ticketingService.verifyPayment("pay_test", unassigned.dependencies);
+  unassigned.dependencies.eventManagerAssignmentRepository.findActiveEventManagerAssignment = async () => null;
+  const unassignedResult = await ticketingService.validateEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    { reference: unassigned.state.tickets[0].reference },
+    unassigned.dependencies
+  );
+
+  const crossOrganization = await ticketingService.validateEventTicket(
+    "64b64b64b64b64b64b64b698",
+    ids.manager,
+    ids.event,
+    { reference: unassigned.state.tickets[0].reference },
+    unassigned.dependencies
+  );
+  const unauthorized = await ticketingService.validateEventTicket(
+    ids.organization,
+    ids.customer,
+    ids.event,
+    { reference: unassigned.state.tickets[0].reference },
+    unassigned.dependencies
+  );
+  const adminResult = await ticketingService.validateEventTicket(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    { reference: unassigned.state.tickets[0].reference },
+    unassigned.dependencies
+  );
+
+  assert.equal(unassignedResult.outcome, TICKET_VALIDATION_OUTCOME.MANAGER_NOT_ASSIGNED);
+  assert.equal(crossOrganization.outcome, TICKET_VALIDATION_OUTCOME.ORGANIZATION_MISMATCH);
+  assert.equal(unauthorized.outcome, TICKET_VALIDATION_OUTCOME.UNAUTHORIZED);
+  assert.equal(adminResult.outcome, TICKET_VALIDATION_OUTCOME.VALID);
+});
+
+test("concurrent scans produce exactly one check-in and one attendance record", async () => {
+  const { dependencies, state } = createDependencies();
+  await ticketingService.verifyPayment("pay_test", dependencies);
+  const payload = { reference: state.tickets[0].reference };
+
+  const results = await Promise.all([
+    ticketingService.checkInEventTicket(ids.organization, ids.manager, ids.event, payload, dependencies),
+    ticketingService.checkInEventTicket(ids.organization, ids.manager, ids.event, payload, dependencies),
+  ]);
+
+  assert.equal(results.filter((result) => result.checkedIn).length, 1);
+  assert.equal(
+    results.filter((result) => result.outcome === TICKET_VALIDATION_OUTCOME.ALREADY_CHECKED_IN).length,
+    1
+  );
+  assert.equal(dependencies.eventAttendanceRepository.records.length, 1);
+  assert.equal(state.tickets[0].status, TICKET_STATUS.USED);
+  assert.equal(dependencies.eventAttendanceRepository.records[0].ticket, state.tickets[0]._id);
+  assert.equal(dependencies.eventAttendanceRepository.records[0].order, ids.order);
+  assert.equal(dependencies.eventAttendanceRepository.records[0].organization, ids.organization);
+  assert.equal(dependencies.eventAttendanceRepository.records[0].customer, ids.customer);
+  assert.equal(dependencies.eventAttendanceRepository.records[0].checkedInBy, ids.manager);
+  assert.ok(dependencies.eventAttendanceRepository.records[0].checkedInAt);
+});
+
+test("multiple tickets with the same attendee email check in independently", async () => {
+  const { dependencies, state } = createDependencies();
+  await ticketingService.verifyPayment("pay_test", dependencies);
+  state.tickets[0].attendee.email = "shared@example.com";
+  state.tickets[1].attendee.email = "shared@example.com";
+
+  const first = await ticketingService.checkInEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    { reference: state.tickets[0].reference },
+    dependencies
+  );
+  const second = await ticketingService.checkInEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    { reference: state.tickets[1].reference },
+    dependencies
+  );
+
+  assert.equal(first.checkedIn, true);
+  assert.equal(second.checkedIn, true);
+  assert.equal(dependencies.eventAttendanceRepository.records.length, 2);
+  assert.notEqual(
+    dependencies.eventAttendanceRepository.records[0].ticket,
+    dependencies.eventAttendanceRepository.records[1].ticket
+  );
+});
+
+test("failed attendance persistence rolls back a standalone ticket update", async () => {
+  const { dependencies, state } = createDependencies();
+  await ticketingService.verifyPayment("pay_test", dependencies);
+  dependencies.eventAttendanceRepository.createEventAttendance = async () => {
+    throw new Error("attendance write failed");
+  };
+
+  const result = await ticketingService.checkInEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    { reference: state.tickets[0].reference },
+    dependencies
+  );
+
+  assert.equal(result.statusCode, 500);
+  assert.equal(state.tickets[0].status, TICKET_STATUS.VALID);
+  assert.equal(state.tickets[0].checkedInAt, null);
+  assert.equal(dependencies.eventAttendanceRepository.records.length, 0);
 });
 
 test("customer history only marks actual checked-in tickets as attended", async () => {

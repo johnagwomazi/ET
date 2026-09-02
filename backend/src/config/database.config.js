@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import envConfig from "./env.config.js";
 import logger from "../lib/logger.js";
+import EventAttendance from "../models/eventAttendance.model.js";
 
 let isConnected = false;
 
@@ -17,6 +18,7 @@ export async function connectDatabase() {
   }
 
   await mongoose.connect(envConfig.mongoUri);
+  await EventAttendance.syncIndexes();
   isConnected = true;
 
   logger.info("MongoDB connection established");

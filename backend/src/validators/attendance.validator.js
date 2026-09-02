@@ -23,3 +23,9 @@ export const attendanceListQuerySchema = z
     search: z.string().trim().max(120, "Search query must be 120 characters or less").optional(),
   })
   .strict();
+
+export const attendanceRecentQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(50).optional(),
+  })
+  .strict();

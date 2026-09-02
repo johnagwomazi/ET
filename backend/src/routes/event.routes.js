@@ -7,6 +7,7 @@ import {
   attendanceCreateSchema,
   attendanceEventIdParamSchema,
   attendanceListQuerySchema,
+  attendanceRecentQuerySchema,
 } from "../validators/attendance.validator.js";
 import {
   eventCancelSchema,
@@ -32,6 +33,7 @@ import {
   ticketTypeCreateSchema,
   ticketTypeParamSchema,
   ticketTypeUpdateSchema,
+  ticketValidationSchema,
 } from "../validators/ticketing.validator.js";
 
 const eventRouter = express.Router({ mergeParams: true });
@@ -112,14 +114,37 @@ eventRouter.get(
 );
 
 eventRouter.get(
+  "/:eventId/attendance/recent",
+  validate(attendanceEventIdParamSchema, "params"),
+  validate(attendanceRecentQuerySchema, "query"),
+  eventAttendanceController.getRecentEventAttendance
+);
+
+eventRouter.post(
+  "/:eventId/tickets/validate",
+  validate(eventIdParamSchema, "params"),
+  validate(ticketValidationSchema),
+  ticketingController.validateEventTicket
+);
+
+eventRouter.post(
+  "/:eventId/tickets/check-in",
+  validate(eventIdParamSchema, "params"),
+  validate(ticketValidationSchema),
+  ticketingController.checkInEventTicket
+);
+
+eventRouter.get(
   "/:eventId/attendance/export/pdf",
   validate(attendanceEventIdParamSchema, "params"),
+  validate(attendanceListQuerySchema, "query"),
   eventAttendanceController.exportAttendancePdf
 );
 
 eventRouter.get(
   "/:eventId/attendance/export/excel",
   validate(attendanceEventIdParamSchema, "params"),
+  validate(attendanceListQuerySchema, "query"),
   eventAttendanceController.exportAttendanceExcel
 );
 

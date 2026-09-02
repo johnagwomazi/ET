@@ -4,7 +4,10 @@ import { errorResponse, successResponse } from "../utils/apiResponse.js";
 
 function sendServiceError(res, errorResult) {
   return res.status(errorResult.statusCode || HTTP_STATUS.BAD_REQUEST).json(
-    errorResponse(errorResult.error || "Something went wrong")
+    errorResponse(
+      errorResult.error || "Something went wrong",
+      errorResult.outcome ? { outcome: errorResult.outcome } : null
+    )
   );
 }
 
@@ -140,6 +143,16 @@ export async function checkInEventTicket(req, res) {
 
   if (result.error) {
     return sendServiceError(res, result);
+  }
+
+  if (!result.checkedIn) {
+    return res.status(result.statusCode || HTTP_STATUS.CONFLICT).json(
+      errorResponse(result.reason || "Ticket check-in rejected", {
+        outcome: result.outcome,
+        ticket: result.ticket || null,
+        attendance: result.attendance || null,
+      })
+    );
   }
 
   return res.status(HTTP_STATUS.OK).json(successResponse("Ticket checked in successfully", result));

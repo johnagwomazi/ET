@@ -63,6 +63,13 @@ export function buildAttendanceReportSummary(event, totalAttendees) {
 export function buildAttendanceReportRows(attendanceRecords = []) {
   return attendanceRecords.map((attendance, index) => {
     const checkedInBy = attendance.checkedInBy || {};
+    const ticket = attendance.ticket && typeof attendance.ticket === "object" ? attendance.ticket : {};
+    const ticketType = ticket.ticketType && typeof ticket.ticketType === "object" ? ticket.ticketType : {};
+    const order = attendance.order && typeof attendance.order === "object"
+      ? attendance.order
+      : ticket.order && typeof ticket.order === "object"
+        ? ticket.order
+        : {};
 
     return {
       no: index + 1,
@@ -73,8 +80,10 @@ export function buildAttendanceReportRows(attendanceRecords = []) {
       checkedInBy: [checkedInBy.firstName, checkedInBy.lastName].filter(Boolean).join(" ").trim()
         || checkedInBy.email
         || "",
-      ticket: attendance.ticket || null,
-      order: attendance.order || null,
+      ticketReference: ticket.reference || "",
+      ticketType: ticketType.name || "",
+      ticketStatus: ticket.status || "",
+      orderReference: order.reference || "",
     };
   });
 }
@@ -136,12 +145,12 @@ function buildPdfContentLines(event, rows, totalAttendees) {
     `Status: ${summary.status}`,
     `Total Attendees: ${summary.totalAttendees}`,
     "",
-    "No.  Attendee Name  Phone  Email  Check-in Time  Checked In By",
+    "No.  Attendee Name  Phone  Email  Check-in Time  Checked In By  Ticket Type  Ticket Reference  Ticket Status  Order Reference",
     "",
   ];
 
   for (const row of rows) {
-    const rowText = `${row.no}. ${row.name} | ${row.phone} | ${row.email} | ${row.checkedInAt} | ${row.checkedInBy}`;
+    const rowText = `${row.no}. ${row.name} | ${row.phone} | ${row.email} | ${row.checkedInAt} | ${row.checkedInBy} | ${row.ticketType} | ${row.ticketReference} | ${row.ticketStatus} | ${row.orderReference}`;
     lines.push(...wrapText(rowText, 88));
   }
 
@@ -269,7 +278,18 @@ function buildSheetXml(event, rows, totalAttendees) {
   addRow([`Status: ${summary.status}`]);
   addRow([`Total Attendees: ${summary.totalAttendees}`]);
   addRow([""]);
-  addRow(["No.", "Attendee Name", "Phone Number", "Email", "Check-in Time", "Checked In By"]);
+  addRow([
+    "No.",
+    "Attendee Name",
+    "Phone Number",
+    "Email",
+    "Check-in Time",
+    "Checked In By",
+    "Ticket Type",
+    "Ticket Reference",
+    "Ticket Status",
+    "Order Reference",
+  ]);
 
   rows.forEach((row) => {
     addRow([
@@ -279,6 +299,10 @@ function buildSheetXml(event, rows, totalAttendees) {
       row.email,
       row.checkedInAt,
       row.checkedInBy,
+      row.ticketType,
+      row.ticketReference,
+      row.ticketStatus,
+      row.orderReference,
     ]);
   });
 

@@ -85,6 +85,7 @@ const ticketSchema = new mongoose.Schema(
 
 ticketSchema.index({ purchaser: 1, createdAt: -1 });
 ticketSchema.index({ event: 1, status: 1 });
+ticketSchema.index({ event: 1, reference: 1 });
 ticketSchema.index({ order: 1 });
 
 const Ticket = mongoose.models.Ticket || mongoose.model("Ticket", ticketSchema);

@@ -11,6 +11,7 @@ import {
   attendanceCreateSchema,
   attendanceEventIdParamSchema,
   attendanceListQuerySchema,
+  attendanceRecentQuerySchema,
 } from "../validators/attendance.validator.js";
 import { eventIdParamSchema, eventManagerListQuerySchema } from "../validators/event.validator.js";
 import { ticketValidationSchema } from "../validators/ticketing.validator.js";
@@ -54,14 +55,23 @@ managerRouter.get(
 );
 
 managerRouter.get(
+  "/events/:eventId/attendance/recent",
+  validate(attendanceEventIdParamSchema, "params"),
+  validate(attendanceRecentQuerySchema, "query"),
+  eventAttendanceController.getRecentEventAttendance
+);
+
+managerRouter.get(
   "/events/:eventId/attendance/export/pdf",
   validate(attendanceEventIdParamSchema, "params"),
+  validate(attendanceListQuerySchema, "query"),
   eventAttendanceController.exportAttendancePdf
 );
 
 managerRouter.get(
   "/events/:eventId/attendance/export/excel",
   validate(attendanceEventIdParamSchema, "params"),
+  validate(attendanceListQuerySchema, "query"),
   eventAttendanceController.exportAttendanceExcel
 );
 

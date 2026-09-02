@@ -7,6 +7,16 @@ const eventAttendanceSchema = new mongoose.Schema(
       ref: "Event",
       required: true,
     },
+    organization: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      default: null,
+    },
+    customer: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     attendeeName: {
       type: String,
       required: true,
@@ -49,6 +59,7 @@ const eventAttendanceSchema = new mongoose.Schema(
   },
   {
     collection: "event_attendance",
+    autoIndex: false,
     versionKey: false,
     timestamps: true,
   }
@@ -61,6 +72,23 @@ eventAttendanceSchema.index(
   },
   {
     unique: true,
+    name: "unique_manual_attendance_email_per_event",
+    partialFilterExpression: {
+      ticket: { $type: "null" },
+    },
+  }
+);
+
+eventAttendanceSchema.index(
+  {
+    ticket: 1,
+  },
+  {
+    unique: true,
+    name: "unique_ticket_attendance",
+    partialFilterExpression: {
+      ticket: { $type: "objectId" },
+    },
   }
 );
 
@@ -72,6 +100,12 @@ eventAttendanceSchema.index({
 eventAttendanceSchema.index({
   event: 1,
   attendeeName: 1,
+});
+
+eventAttendanceSchema.index({
+  organization: 1,
+  event: 1,
+  checkedInAt: -1,
 });
 
 const EventAttendance =

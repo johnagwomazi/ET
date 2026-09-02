@@ -33,6 +33,7 @@ const envConfig = {
   cookieSameSite: process.env.COOKIE_SAME_SITE || "lax",
   rateLimitWindowMs: toNumber(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
   rateLimitMax: toNumber(process.env.RATE_LIMIT_MAX, 100),
+  eventOperationsRateLimitMax: toNumber(process.env.EVENT_OPERATIONS_RATE_LIMIT_MAX, 600),
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
     apiKey: process.env.CLOUDINARY_API_KEY || "",

@@ -3,10 +3,11 @@ import envConfig from "./env.config.js";
 import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
 import { errorResponse } from "../utils/apiResponse.js";
 
-export default function createRateLimiter() {
+export default function createRateLimiter(options = {}) {
   return rateLimit({
-    windowMs: envConfig.rateLimitWindowMs,
-    max: envConfig.rateLimitMax,
+    windowMs: options.windowMs || envConfig.rateLimitWindowMs,
+    max: options.max || envConfig.rateLimitMax,
+    skip: options.skip,
     standardHeaders: true,
     legacyHeaders: false,
     handler(req, res) {

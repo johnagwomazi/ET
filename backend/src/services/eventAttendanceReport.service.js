@@ -8,6 +8,7 @@ import * as eventAttendanceRepository from "../repositories/eventAttendance.repo
 import * as eventManagerAssignmentRepository from "../repositories/eventManagerAssignment.repository.js";
 import * as eventRepository from "../repositories/event.repository.js";
 import * as organizationRepository from "../repositories/organization.repository.js";
+import * as ticketRepository from "../repositories/ticket.repository.js";
 import { buildAttendanceExcelBuffer, buildAttendancePdfBuffer, sanitizeAttendanceFilename } from "../utils/attendanceExport.util.js";
 import { buildAttendanceReportRows, buildAttendanceReportSummary } from "../utils/attendanceExport.util.js";
 import { hasOrganizationPermission } from "../utils/organizationPermission.util.js";
@@ -19,6 +20,7 @@ const defaultDependencies = {
   eventManagerAssignmentRepository,
   eventRepository,
   organizationRepository,
+  ticketRepository,
   mongoose,
 };
 
@@ -126,7 +128,7 @@ async function resolveReportAccess({
   };
 }
 
-function buildAttendanceFilter(eventId, query = {}) {
+async function buildAttendanceFilter(eventId, query = {}, dependencies = defaultDependencies) {
   const filter = {
     event: eventId,
   };
@@ -139,6 +141,18 @@ function buildAttendanceFilter(eventId, query = {}) {
       { attendeePhone: searchExpression },
       { attendeeEmail: searchExpression },
     ];
+
+    if (dependencies.ticketRepository?.findTicketIdsByEventAndReference) {
+      const ticketIds = await dependencies.ticketRepository.findTicketIdsByEventAndReference(
+        eventId,
+        query.search,
+        { limit: 50 }
+      );
+
+      if (ticketIds.length > 0) {
+        filter.$or.push({ ticket: { $in: ticketIds } });
+      }
+    }
   }
 
   return filter;
@@ -163,7 +177,7 @@ async function getAttendanceReport(organizationId, actorUserId, eventId, query =
     return accessContext;
   }
 
-  const filter = buildAttendanceFilter(eventId, query);
+  const filter = await buildAttendanceFilter(eventId, query, dependencies);
   const [attendanceRecords, totalAttendees] = await Promise.all([
     dependencies.eventAttendanceRepository.findEventAttendance(filter, {
       sortBy: "checkedInAt",
