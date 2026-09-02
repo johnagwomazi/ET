@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import AuthCard from "../components/layout/AuthCard";
 import AuthHeader from "../components/layout/AuthHeader";
@@ -13,9 +13,10 @@ import PasswordInput from "../components/ui/PasswordInput";
 import { ROUTE_PATHS } from "../routes/routePaths";
 import { loginSchema } from "../utils/authSchemas";
 import { useSessionStore } from "../store/useSessionStore";
-import { getPostLoginRouteForRole } from "../utils/auth";
+import { getPostLoginRouteForUser } from "../utils/auth";
 
 function LoginPage() {
+  const location = useLocation();
   const navigate = useNavigate();
   const login = useSessionStore((state) => state.login);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -38,7 +39,7 @@ function LoginPage() {
     try {
       const user = await login(values);
       toast.success("Login successful");
-      navigate(getPostLoginRouteForRole(user.role));
+      navigate(getPostLoginRouteForUser(user, location.state?.from));
     } catch (error) {
       toast.error(error.message || "Something went wrong");
     } finally {

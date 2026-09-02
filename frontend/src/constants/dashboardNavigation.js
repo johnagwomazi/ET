@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   ChartColumn,
   CalendarDays,
+  CreditCard,
   UserCog,
 } from "lucide-react";
 import { ROUTE_PATHS } from "../routes/routePaths";

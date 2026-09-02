@@ -1,10 +1,11 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useSessionStore } from "../../store/useSessionStore";
 import LoadingState from "../../components/common/LoadingState";
 import { ROUTE_PATHS } from "../routePaths";
 import { useOrganizationPermissions } from "../../hooks/useOrganizationPermissions";
 
 function PermissionRoute({ permission, permissions = [], children }) {
+  const location = useLocation();
   const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
   const isInitializing = useSessionStore((state) => state.isInitializing);
   const { isInitialized, isLoading, hasPermission, hasAnyPermission } = useOrganizationPermissions();
@@ -14,7 +15,13 @@ function PermissionRoute({ permission, permissions = [], children }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to={ROUTE_PATHS.LOGIN} replace />;
+    return (
+      <Navigate
+        to={ROUTE_PATHS.LOGIN}
+        replace
+        state={{ from: `${location.pathname}${location.search}${location.hash}` }}
+      />
+    );
   }
 
   const allowed = permission

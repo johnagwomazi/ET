@@ -30,7 +30,6 @@ const roleOptions = [
   { value: USER_ROLES.ADMIN, label: "Admin" },
   { value: USER_ROLES.MANAGER, label: "Manager" },
   { value: USER_ROLES.CUSTOMER, label: "Customer" },
-  { value: USER_ROLES.GUEST, label: "Guest" },
 ];
 
 const statusOptions = [

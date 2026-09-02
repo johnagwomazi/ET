@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import * as eventRepository from "../repositories/event.repository.js";
 import { buildPaginationMeta, buildPaginationOptions, escapeRegex } from "../utils/query.util.js";
 import {
@@ -82,10 +83,10 @@ function getUpcomingWeekendRange(date) {
 
 function buildDateRange(query = {}) {
   if (query.dateFrom || query.dateTo) {
-    return {
+    return mongoose.trusted({
       ...(query.dateFrom ? { $gte: query.dateFrom } : {}),
       ...(query.dateTo ? { $lte: query.dateTo } : {}),
-    };
+    });
   }
 
   if (!query.dateFilter) {
@@ -95,41 +96,41 @@ function buildDateRange(query = {}) {
   const now = new Date();
 
   if (query.dateFilter === "today") {
-    return {
+    return mongoose.trusted({
       $gte: getUtcStartOfDay(now),
       $lte: getUtcEndOfDay(now),
-    };
+    });
   }
 
   if (query.dateFilter === "tomorrow") {
     const tomorrow = addUtcDays(now, 1);
-    return {
+    return mongoose.trusted({
       $gte: getUtcStartOfDay(tomorrow),
       $lte: getUtcEndOfDay(tomorrow),
-    };
+    });
   }
 
   if (query.dateFilter === "thisWeek") {
-    return {
+    return mongoose.trusted({
       $gte: getWeekStart(now),
       $lte: getWeekEnd(now),
-    };
+    });
   }
 
   if (query.dateFilter === "thisWeekend") {
     const weekendRange = getUpcomingWeekendRange(now);
 
-    return {
+    return mongoose.trusted({
       $gte: weekendRange.start,
       $lte: weekendRange.end,
-    };
+    });
   }
 
   if (query.dateFilter === "thisMonth") {
-    return {
+    return mongoose.trusted({
       $gte: getMonthStart(now),
       $lte: getMonthEnd(now),
-    };
+    });
   }
 
   return null;
@@ -167,9 +168,9 @@ function buildLocationFilter(query = {}) {
 
 function buildVisibilityFilter(query = {}) {
   const filter = {
-    status: {
+    status: mongoose.trusted({
       $in: PUBLIC_DISCOVERY_STATUSES,
-    },
+    }),
   };
 
   if (query.featured === true) {
@@ -196,9 +197,9 @@ function buildSearchFilter(search) {
   }
 
   return {
-    $text: {
+    $text: mongoose.trusted({
       $search: normalizedSearch,
-    },
+    }),
   };
 }
 
@@ -222,9 +223,9 @@ function mapPublicEvents(events = []) {
 
 async function loadSpotlightEvents(dependencies = defaultDependencies) {
   const spotlightVisibilityFilter = {
-    status: {
+    status: mongoose.trusted({
       $in: PUBLIC_DISCOVERY_STATUSES,
-    },
+    }),
   };
 
   const [featuredEvents, trendingEvents] = await Promise.all([

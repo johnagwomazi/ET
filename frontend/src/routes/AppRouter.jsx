@@ -38,6 +38,7 @@ import WithdrawalsPage from "../pages/super-admin/WithdrawalsPage";
 import ForbiddenPage from "../pages/ForbiddenPage";
 import PublicEventDetailsPage from "../pages/events/PublicEventDetailsPage";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants";
+import { USER_ROLES } from "../constants/roles.constants";
 import NotFoundPage from "../pages/NotFoundPage";
 import { Navigate } from "react-router-dom";
 
@@ -52,6 +53,29 @@ const router = createBrowserRouter([
       {
         path: ROUTE_PATHS.PUBLIC_EVENT_DETAILS,
         element: <PublicEventDetailsPage />,
+      },
+    ],
+  },
+  {
+    element: <ProtectedRoute />,
+    children: [
+      {
+        element: <RoleRoute allowedRoles={[USER_ROLES.CUSTOMER]} />,
+        children: [
+          {
+            element: <PublicLayout />,
+            children: [
+              {
+                path: ROUTE_PATHS.CHECKOUT,
+                element: <CheckoutPage />,
+              },
+              {
+                path: ROUTE_PATHS.PAYMENT_CONFIRMATION,
+                element: <PaymentConfirmationPage />,
+              },
+            ],
+          },
+        ],
       },
     ],
   },
@@ -110,7 +134,7 @@ const router = createBrowserRouter([
           {
             path: ROUTE_PATHS.CUSTOMER_DASHBOARD,
             element: (
-              <RoleRoute allowedRoles={["CUSTOMER"]}>
+              <RoleRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
                 <RoleDashboardPage
                   title="Customer Dashboard"
                   description="Your booking and ticket management area will live here."
@@ -121,7 +145,7 @@ const router = createBrowserRouter([
           {
             path: ROUTE_PATHS.CUSTOMER_ORDERS,
             element: (
-              <RoleRoute allowedRoles={["CUSTOMER"]}>
+              <RoleRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
                 <CustomerOrdersPage />
               </RoleRoute>
             ),
@@ -129,31 +153,15 @@ const router = createBrowserRouter([
           {
             path: ROUTE_PATHS.CUSTOMER_TICKETS,
             element: (
-              <RoleRoute allowedRoles={["CUSTOMER"]}>
+              <RoleRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
                 <CustomerTicketsPage />
-              </RoleRoute>
-            ),
-          },
-          {
-            path: ROUTE_PATHS.CHECKOUT,
-            element: (
-              <RoleRoute allowedRoles={["CUSTOMER"]}>
-                <CheckoutPage />
-              </RoleRoute>
-            ),
-          },
-          {
-            path: ROUTE_PATHS.PAYMENT_CONFIRMATION,
-            element: (
-              <RoleRoute allowedRoles={["CUSTOMER"]}>
-                <PaymentConfirmationPage />
               </RoleRoute>
             ),
           },
           {
             path: ROUTE_PATHS.MANAGER_DASHBOARD,
             element: (
-              <RoleRoute allowedRoles={["MANAGER"]}>
+              <RoleRoute allowedRoles={[USER_ROLES.MANAGER]}>
                 <RoleDashboardPage
                   title="Manager Dashboard"
                   description="Manager tools and permissions will be added later."
@@ -164,7 +172,7 @@ const router = createBrowserRouter([
           {
             path: ROUTE_PATHS.MANAGER_EVENTS,
             element: (
-              <RoleRoute allowedRoles={["MANAGER"]}>
+              <RoleRoute allowedRoles={[USER_ROLES.MANAGER]}>
                 <EventsPage scope="manager" />
               </RoleRoute>
             ),
@@ -172,54 +180,15 @@ const router = createBrowserRouter([
           {
             path: ROUTE_PATHS.MANAGER_EVENT_DETAILS,
             element: (
-              <RoleRoute allowedRoles={["MANAGER"]}>
+              <RoleRoute allowedRoles={[USER_ROLES.MANAGER]}>
                 <EventDetailsPage scope="manager" />
-              </RoleRoute>
-            ),
-          },
-          {
-            path: ROUTE_PATHS.SUPER_ADMIN_DASHBOARD,
-            element: (
-              <RoleRoute allowedRoles={["SUPER_ADMIN"]}>
-                <SuperAdminDashboardPage />
-              </RoleRoute>
-            ),
-          },
-          {
-            path: ROUTE_PATHS.SUPER_ADMIN_ORGANIZATIONS,
-            element: (
-              <RoleRoute allowedRoles={["SUPER_ADMIN"]}>
-                <OrganizationsPage />
-              </RoleRoute>
-            ),
-          },
-          {
-            path: ROUTE_PATHS.SUPER_ADMIN_USERS,
-            element: (
-              <RoleRoute allowedRoles={["SUPER_ADMIN"]}>
-                <UsersPage />
-              </RoleRoute>
-            ),
-          },
-          {
-            path: ROUTE_PATHS.SUPER_ADMIN_ROLES_PERMISSIONS,
-            element: (
-              <RoleRoute allowedRoles={["SUPER_ADMIN"]}>
-                <SuperAdminRolesPermissionsPage />
-              </RoleRoute>
-            ),
-          },
-          {
-            path: ROUTE_PATHS.SUPER_ADMIN_WITHDRAWALS,
-            element: (
-              <RoleRoute allowedRoles={["SUPER_ADMIN"]}>
-                <WithdrawalsPage />
               </RoleRoute>
             ),
           },
         ],
       },
       {
+        path: ROUTE_PATHS.ORGANIZATION_ROOT,
         element: <OrganizationRoute />,
         children: [
           {
@@ -292,6 +261,46 @@ const router = createBrowserRouter([
                     <OrganizationMembersPage />
                   </PermissionRoute>
                 ),
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    element: <ProtectedRoute loginPath={ROUTE_PATHS.ADMIN_LOGIN} />,
+    children: [
+      {
+        element: (
+          <RoleRoute
+            allowedRoles={[USER_ROLES.SUPER_ADMIN]}
+            loginPath={ROUTE_PATHS.ADMIN_LOGIN}
+          />
+        ),
+        children: [
+          {
+            element: <DashboardLayout />,
+            children: [
+              {
+                path: ROUTE_PATHS.SUPER_ADMIN_DASHBOARD,
+                element: <SuperAdminDashboardPage />,
+              },
+              {
+                path: ROUTE_PATHS.SUPER_ADMIN_ORGANIZATIONS,
+                element: <OrganizationsPage />,
+              },
+              {
+                path: ROUTE_PATHS.SUPER_ADMIN_USERS,
+                element: <UsersPage />,
+              },
+              {
+                path: ROUTE_PATHS.SUPER_ADMIN_ROLES_PERMISSIONS,
+                element: <SuperAdminRolesPermissionsPage />,
+              },
+              {
+                path: ROUTE_PATHS.SUPER_ADMIN_WITHDRAWALS,
+                element: <WithdrawalsPage />,
               },
             ],
           },

@@ -243,7 +243,7 @@ export async function registerOrganizer(payload) {
   };
 }
 
-export async function loginUser(payload) {
+async function authenticateUser(payload, options = {}) {
   const email = normalizeEmail(payload.email);
   const user = await authRepository.findAuthUserByEmail(email);
   const accountMessage = ensureUserCanAuthenticate(user);
@@ -259,6 +259,12 @@ export async function loginUser(payload) {
   if (!isPasswordValid) {
     return {
       error: "Invalid credentials",
+    };
+  }
+
+  if (options.allowedRoles && !options.allowedRoles.includes(user.role)) {
+    return {
+      error: options.roleError || "Invalid credentials",
     };
   }
 
@@ -278,20 +284,17 @@ export async function loginUser(payload) {
   };
 }
 
+export async function loginUser(payload) {
+  return authenticateUser(payload, {
+    allowedRoles: [USER_ROLES.CUSTOMER, USER_ROLES.ADMIN, USER_ROLES.MANAGER],
+    roleError: "Use the Super Admin login page",
+  });
+}
+
 export async function loginSuperAdmin(payload) {
-  const result = await loginUser(payload);
-
-  if (result.error) {
-    return result;
-  }
-
-  if (result.user.role !== USER_ROLES.SUPER_ADMIN) {
-    return {
-      error: "Invalid credentials",
-    };
-  }
-
-  return result;
+  return authenticateUser(payload, {
+    allowedRoles: [USER_ROLES.SUPER_ADMIN],
+  });
 }
 
 export async function getCurrentUser(userId) {

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import mongoose from "mongoose";
 
 import { EVENT_STATUS } from "../src/constants/eventStatus.constants.js";
 import { getPublicEventById, discoverPublicEvents } from "../src/services/eventDiscovery.service.js";
@@ -79,6 +80,10 @@ test("public discovery still returns featured and trending event collections", a
   assert.equal(result.trendingEvents.length, 1);
   assert.equal(calls.findPublicEvents.length >= 2, true);
   assert.equal(calls.countPublicEvents.length, 1);
+
+  const sanitizedFilter = calls.findPublicEvents[0].filter;
+  mongoose.sanitizeFilter(sanitizedFilter);
+  assert.deepEqual(sanitizedFilter.status.$in, [EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED]);
 });
 
 test("public event details returns a published event with public fields only", async () => {

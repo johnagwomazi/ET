@@ -14,6 +14,7 @@ export const ROUTE_PATHS = {
   CUSTOMER_DASHBOARD: "/customer/dashboard",
   CUSTOMER_ORDERS: "/customer/orders",
   CUSTOMER_TICKETS: "/customer/tickets",
+  ORGANIZATION_ROOT: "/organization",
   ORGANIZATION_DASHBOARD: "/organization/dashboard",
   ORGANIZATION_EVENTS: "/organization/events",
   ORGANIZATION_EVENT_DETAILS: "/organization/events/:eventId",

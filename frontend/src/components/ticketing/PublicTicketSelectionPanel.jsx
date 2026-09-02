@@ -62,12 +62,6 @@ function PublicTicketSelectionPanel({ event }) {
   }
 
   function continueToCheckout() {
-    if (!isAuthenticated || currentUser?.role !== "CUSTOMER") {
-      toast.error("Log in as a customer to buy tickets");
-      navigate(ROUTE_PATHS.LOGIN);
-      return;
-    }
-
     if (selectedItems.length === 0) {
       toast.error("Select at least one ticket");
       return;
@@ -85,6 +79,18 @@ function PublicTicketSelectionPanel({ event }) {
         currency: item.currency,
       })),
     });
+
+    if (!isAuthenticated) {
+      toast.error("Log in as a customer to buy tickets");
+      navigate(ROUTE_PATHS.LOGIN, { state: { from: ROUTE_PATHS.CHECKOUT } });
+      return;
+    }
+
+    if (currentUser?.role !== "CUSTOMER") {
+      toast.error("Only customer accounts can buy tickets");
+      return;
+    }
+
     navigate(ROUTE_PATHS.CHECKOUT);
   }
 

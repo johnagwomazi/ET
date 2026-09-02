@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useSessionStore } from "../../store/useSessionStore";
 import { useOrganizationContextStore } from "../../store/useOrganizationContextStore";
 import LoadingState from "../../components/common/LoadingState";
@@ -20,6 +20,7 @@ function getOrganizationAccessMessage(lifecycleStatus) {
 }
 
 function OrganizationRoute() {
+  const location = useLocation();
   const currentUser = useSessionStore((state) => state.currentUser);
   const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
   const isInitializing = useSessionStore((state) => state.isInitializing);
@@ -28,15 +29,25 @@ function OrganizationRoute() {
   const isOrgInitialized = useOrganizationContextStore((state) => state.isInitialized);
   const isOrgLoading = useOrganizationContextStore((state) => state.isLoading);
 
+  if (isInitializing) {
+    return <LoadingState label="Loading organization context..." />;
+  }
+
   if (!isAuthenticated || !currentUser) {
-    return <Navigate to={ROUTE_PATHS.LOGIN} replace />;
+    return (
+      <Navigate
+        to={ROUTE_PATHS.LOGIN}
+        replace
+        state={{ from: `${location.pathname}${location.search}${location.hash}` }}
+      />
+    );
   }
 
   if (currentUser.role === USER_ROLES.SUPER_ADMIN) {
     return <Navigate to={getDashboardRouteForRole(currentUser.role)} replace />;
   }
 
-  if (isInitializing || (!isOrgInitialized && Boolean(currentUser.organization)) || isOrgLoading) {
+  if ((!isOrgInitialized && Boolean(currentUser.organization)) || isOrgLoading) {
     return <LoadingState label="Loading organization context..." />;
   }
 

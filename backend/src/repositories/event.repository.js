@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Event from "../models/event.model.js";
 import { PUBLIC_DISCOVERY_STATUSES } from "../utils/eventDiscovery.util.js";
 
@@ -80,7 +81,7 @@ export async function findEventByOrganizationAndSlug(organizationId, slug, event
   };
 
   if (eventId) {
-    filter._id = { $ne: eventId };
+    filter._id = mongoose.trusted({ $ne: eventId });
   }
 
   return Event.findOne(filter);
@@ -155,9 +156,9 @@ export async function findPublicEventById(eventId, options = {}) {
   return applySession(
     Event.findOne({
       _id: eventId,
-      status: {
+      status: mongoose.trusted({
         $in: PUBLIC_DISCOVERY_STATUSES,
-      },
+      }),
     })
       .select(PUBLIC_EVENT_SELECT)
       .populate(PUBLIC_EVENT_POPULATE),

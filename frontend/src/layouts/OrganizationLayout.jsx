@@ -91,7 +91,7 @@ function OrganizationLayout() {
       logout()
         .then(() => {
           toast.success("Logged out successfully");
-          navigate(ROUTE_PATHS.LOGIN);
+          navigate(ROUTE_PATHS.HOME);
         })
         .catch((error) => {
           toast.error(error.message || "Unable to log out");

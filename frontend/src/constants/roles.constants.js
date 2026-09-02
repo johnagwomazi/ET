@@ -3,7 +3,6 @@ export const USER_ROLES = {
   ADMIN: "ADMIN",
   MANAGER: "MANAGER",
   CUSTOMER: "CUSTOMER",
-  GUEST: "GUEST",
 };
 
 export const DASHBOARD_ROUTES = {

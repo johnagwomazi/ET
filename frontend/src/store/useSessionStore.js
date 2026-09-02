@@ -84,6 +84,7 @@ export const useSessionStore = create((set, get) => ({
       const { currentUser: latestCurrentUser, isAuthenticated } = get();
 
       if (!latestCurrentUser && !isAuthenticated) {
+        clearStoredAccessToken();
         set({
           ...initialState,
           isInitializing: false,
@@ -106,12 +107,12 @@ export const useSessionStore = create((set, get) => ({
 
     try {
       const response = await authService.login(credentials);
-      const currentUserResponse = await authService.getCurrentUser().catch(() => null);
-      const user = currentUserResponse?.user || response?.user || null;
-      const organizationPermissions =
-        currentUserResponse?.organizationPermissions || response?.organizationPermissions || user?.organizationPermissions || [];
-
       setStoredAccessToken(response?.accessToken || null);
+
+      const currentUserResponse = await authService.getCurrentUser();
+      const user = currentUserResponse?.user || null;
+      const organizationPermissions =
+        currentUserResponse?.organizationPermissions || user?.organizationPermissions || [];
 
       set({
         currentUser: normalizeSessionUser(user, organizationPermissions),
@@ -122,6 +123,7 @@ export const useSessionStore = create((set, get) => ({
 
       return user;
     } catch (error) {
+      clearStoredAccessToken();
       set({ isLoading: false, isInitializing: false });
       throw new Error(getAuthErrorMessage(error));
     }
@@ -132,12 +134,12 @@ export const useSessionStore = create((set, get) => ({
 
     try {
       const response = await authService.adminLogin(credentials);
-      const currentUserResponse = await authService.getCurrentUser().catch(() => null);
-      const user = currentUserResponse?.user || response?.user || null;
-      const organizationPermissions =
-        currentUserResponse?.organizationPermissions || response?.organizationPermissions || user?.organizationPermissions || [];
-
       setStoredAccessToken(response?.accessToken || null);
+
+      const currentUserResponse = await authService.getCurrentUser();
+      const user = currentUserResponse?.user || null;
+      const organizationPermissions =
+        currentUserResponse?.organizationPermissions || user?.organizationPermissions || [];
 
       set({
         currentUser: normalizeSessionUser(user, organizationPermissions),
@@ -148,6 +150,7 @@ export const useSessionStore = create((set, get) => ({
 
       return user;
     } catch (error) {
+      clearStoredAccessToken();
       set({ isLoading: false, isInitializing: false });
       throw new Error(getAuthErrorMessage(error));
     }
