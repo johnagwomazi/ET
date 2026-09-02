@@ -40,6 +40,8 @@ function createDependencies(overrides = {}) {
     eventName: "Launch Night",
     status: EVENT_STATUS.PUBLISHED,
     organization,
+    startAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    endAt: new Date(Date.now() + 26 * 60 * 60 * 1000),
   };
   const ticketType = {
     _id: ids.ticketType,
@@ -127,6 +129,9 @@ function createDependencies(overrides = {}) {
       async findEventByIdAndOrganization() {
         return event;
       },
+      async findEvents() {
+        return [event];
+      },
     },
     ticketTypeRepository: {
       async createTicketType(data) {
@@ -200,6 +205,21 @@ function createDependencies(overrides = {}) {
       },
       async countTickets() {
         return tickets.length;
+      },
+      async findCustomerHistoryTickets(customerId, options = {}) {
+        const historyTickets = tickets.filter((ticket) => {
+          const historyStatus = ticket.checkedInAt
+            ? "ATTENDED"
+            : ticket.status === TICKET_STATUS.REFUNDED
+              ? "REFUNDED"
+              : ticket.status === TICKET_STATUS.CANCELED
+                ? "CANCELED"
+                : null;
+
+          return historyStatus && (!options.historyStatus || options.historyStatus === historyStatus);
+        });
+
+        return { tickets: historyTickets, totalItems: historyTickets.length };
       },
       async createTickets(rows) {
         tickets = rows.map((row, index) => ({ _id: `${ids.ticket}${index}`, ...row }));
@@ -446,6 +466,26 @@ test("manager ticket check-in validates event scope and records attendance once"
   assert.equal(duplicate.valid, false);
   assert.match(duplicate.reason, /already/i);
   assert.equal(dependencies.eventAttendanceRepository.records.length, 1);
+});
+
+test("customer history only marks actual checked-in tickets as attended", async () => {
+  const { dependencies, state } = createDependencies();
+  await ticketingService.verifyPayment("pay_test", dependencies);
+
+  await ticketingService.checkInEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    { reference: state.tickets[0].reference },
+    dependencies
+  );
+
+  const result = await ticketingService.getCustomerHistory(ids.customer, {}, dependencies);
+
+  assert.equal(result.history.length, 1);
+  assert.equal(result.history[0].historyStatus, "ATTENDED");
+  assert.ok(result.history[0].checkedInAt);
+  assert.equal(result.pagination.totalItems, 1);
 });
 
 test("refunds preserve orders and reject excessive amounts", async () => {

@@ -14,6 +14,66 @@ export function getDocumentId(document) {
   return document.toString();
 }
 
+function mapEventSummary(eventDocument) {
+  if (!eventDocument || typeof eventDocument !== "object" || !eventDocument.eventName) {
+    return null;
+  }
+
+  const event = typeof eventDocument.toObject === "function"
+    ? eventDocument.toObject()
+    : eventDocument;
+
+  return {
+    id: getDocumentId(event),
+    eventName: event.eventName,
+    slug: event.slug || "",
+    banner: event.banner || {},
+    venue: event.venue || {},
+    startAt: event.startAt || null,
+    endAt: event.endAt || null,
+    status: event.status || null,
+  };
+}
+
+function mapTicketTypeSummary(ticketTypeDocument) {
+  if (!ticketTypeDocument || typeof ticketTypeDocument !== "object" || !ticketTypeDocument.name) {
+    return null;
+  }
+
+  const ticketType = typeof ticketTypeDocument.toObject === "function"
+    ? ticketTypeDocument.toObject()
+    : ticketTypeDocument;
+
+  return {
+    id: getDocumentId(ticketType),
+    name: ticketType.name,
+    description: ticketType.description || "",
+    price: Number(ticketType.price || 0),
+    currency: ticketType.currency || "NGN",
+  };
+}
+
+function mapOrderSummary(orderDocument) {
+  if (!orderDocument || typeof orderDocument !== "object" || !orderDocument.reference) {
+    return null;
+  }
+
+  const order = typeof orderDocument.toObject === "function"
+    ? orderDocument.toObject()
+    : orderDocument;
+
+  return {
+    id: getDocumentId(order),
+    reference: order.reference,
+    total: Number(order.total || 0),
+    currency: order.currency || "NGN",
+    paymentStatus: order.paymentStatus || null,
+    orderStatus: order.orderStatus || null,
+    paidAt: order.paidAt || null,
+    createdAt: order.createdAt || null,
+  };
+}
+
 export function mapTicketTypeResponse(ticketTypeDocument) {
   if (!ticketTypeDocument) {
     return null;
@@ -57,6 +117,7 @@ export function mapOrderResponse(orderDocument) {
     customer: getDocumentId(order.customer),
     organization: getDocumentId(order.organization),
     event: getDocumentId(order.event),
+    eventDetails: mapEventSummary(order.event),
     items: (order.items || []).map((item) => ({
       ticketType: getDocumentId(item.ticketType),
       name: item.name,
@@ -91,8 +152,11 @@ export function mapTicketResponse(ticketDocument, options = {}) {
     reference: ticket.reference,
     order: getDocumentId(ticket.order),
     event: getDocumentId(ticket.event),
+    eventDetails: mapEventSummary(ticket.event),
     organization: getDocumentId(ticket.organization),
     ticketType: getDocumentId(ticket.ticketType),
+    ticketTypeDetails: mapTicketTypeSummary(ticket.ticketType),
+    orderDetails: mapOrderSummary(ticket.order),
     purchaser: getDocumentId(ticket.purchaser),
     attendee: ticket.attendee || {},
     status: ticket.status,

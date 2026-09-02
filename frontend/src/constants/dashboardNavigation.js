@@ -8,9 +8,9 @@ import {
   Ticket,
   Users,
   FileText,
-  ShieldCheck,
   ChartColumn,
   CalendarDays,
+  Clock3,
   CreditCard,
   UserCog,
 } from "lucide-react";
@@ -152,9 +152,9 @@ export const MANAGER_NAVIGATION = {
 export const CUSTOMER_NAVIGATION = {
   main: [
     {
-      label: "Dashboard",
-      icon: LayoutDashboard,
-      to: ROUTE_PATHS.CUSTOMER_DASHBOARD,
+      label: "My Profile",
+      icon: CircleUserRound,
+      to: ROUTE_PATHS.CUSTOMER_PROFILE,
       exact: true,
     },
     {
@@ -163,19 +163,13 @@ export const CUSTOMER_NAVIGATION = {
       to: ROUTE_PATHS.CUSTOMER_TICKETS,
     },
     {
-      label: "Bookings",
-      icon: ShieldCheck,
-      to: ROUTE_PATHS.CUSTOMER_ORDERS,
+      label: "History",
+      icon: Clock3,
+      to: ROUTE_PATHS.CUSTOMER_HISTORY,
     },
   ],
-  overflow: [
-    {
-      label: "Settings",
-      icon: Settings2,
-      comingSoon: true,
-    },
-  ],
-  footer: sharedFooterItems,
+  overflow: [],
+  footer: [sharedFooterItems[1]],
 };
 
 const ORGANIZATION_NAVIGATION = {

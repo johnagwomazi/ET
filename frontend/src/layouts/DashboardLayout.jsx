@@ -47,10 +47,6 @@ function getPageTitleFromNavigation(navigation, pathname) {
     return "Events";
   }
 
-  if (pathname.startsWith(ROUTE_PATHS.CUSTOMER_DASHBOARD)) {
-    return "Customer Dashboard";
-  }
-
   return "Dashboard";
 }
 

@@ -65,7 +65,7 @@ function PaymentConfirmationPage() {
         </div>
         <div className="flex flex-wrap gap-3">
           <Button as={Link} to={ROUTE_PATHS.CUSTOMER_TICKETS}>View tickets</Button>
-          <Button as={Link} to={ROUTE_PATHS.CUSTOMER_ORDERS} variant="secondary">Order history</Button>
+          <Button as={Link} to={ROUTE_PATHS.CUSTOMER_HISTORY} variant="secondary">History</Button>
         </div>
       </div>
     </AuthCard>

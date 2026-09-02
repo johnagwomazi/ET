@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Search, Sparkles } from "lucide-react";
-import GuestNavbar from "../components/layout/GuestNavbar";
-import CustomerFooter from "../components/layout/CustomerFooter";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import PageContainer from "../components/ui/PageContainer";
@@ -16,7 +14,7 @@ import { Skeleton } from "../components/common/Skeleton";
 import PublicEventCard, { PublicEventCardSkeleton } from "../components/events/PublicEventCard";
 import { formatDate } from "../utils/formatters";
 import { discoverPublicEvents } from "../services/publicEvent.service";
-import heroImage from "../assets/hero-discovery.svg";
+import heroImage from "../assets/images/01.jpg";
 
 const DEFAULT_LIMIT = 12;
 const SORT_OPTIONS = [
@@ -204,9 +202,6 @@ function HomePage() {
   }
 
   return (
-    <div className="min-h-screen app-shell">
-      <GuestNavbar />
-
       <main className="space-y-10 pb-10">
         <PageContainer className="pt-6 sm:pt-8">
           <motion.section
@@ -217,7 +212,7 @@ function HomePage() {
             className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-900/85"
           >
             <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${heroImage})` }} />
-            <div className="absolute inset-0 bg-[#171918]/68" />
+            <div className="absolute inset-0 bg-black/50" />
 
             <div className="relative px-6 py-10 sm:px-8 sm:py-12 lg:px-10 lg:py-14">
               <div className="max-w-2xl space-y-6">
@@ -379,9 +374,7 @@ function HomePage() {
           </PageContainer>
         </div>
 
-        <CustomerFooter />
       </main>
-    </div>
   );
 }
 

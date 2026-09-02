@@ -55,6 +55,13 @@ export const DEFAULT_STATUS_META = {
   tone: "neutral",
 };
 
+export const CUSTOMER_HISTORY_STATUS_META = {
+  ATTENDED: { label: "Attended", tone: "success" },
+  COMPLETED: { label: "Completed", tone: "neutral" },
+  CANCELED: { label: "Canceled", tone: "danger" },
+  REFUNDED: { label: "Refunded", tone: "warning" },
+};
+
 export const DEFAULT_TABLE_PAGE_SIZE = 10;
 
 export const DASHBOARD_STAT_KEYS = {

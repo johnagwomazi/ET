@@ -28,8 +28,9 @@ import EventEditorPage from "../pages/events/EventEditorPage";
 import OrganizationProfilePage from "../pages/organization/OrganizationProfilePage";
 import OrganizationSettingsPage from "../pages/organization/OrganizationSettingsPage";
 import OrganizationMembersPage from "../pages/organization/OrganizationMembersPage";
-import CustomerOrdersPage from "../pages/customer/CustomerOrdersPage";
 import CustomerTicketsPage from "../pages/customer/CustomerTicketsPage";
+import CustomerProfilePage from "../pages/customer/CustomerProfilePage";
+import CustomerHistoryPage from "../pages/customer/CustomerHistoryPage";
 import SuperAdminRolesPermissionsPage from "../pages/super-admin/SuperAdminRolesPermissionsPage";
 import SuperAdminDashboardPage from "../pages/super-admin/SuperAdminDashboardPage";
 import OrganizationsPage from "../pages/super-admin/OrganizationsPage";
@@ -72,6 +73,26 @@ const router = createBrowserRouter([
               {
                 path: ROUTE_PATHS.PAYMENT_CONFIRMATION,
                 element: <PaymentConfirmationPage />,
+              },
+              {
+                path: ROUTE_PATHS.CUSTOMER_PROFILE,
+                element: <CustomerProfilePage />,
+              },
+              {
+                path: ROUTE_PATHS.CUSTOMER_TICKETS,
+                element: <CustomerTicketsPage />,
+              },
+              {
+                path: ROUTE_PATHS.CUSTOMER_HISTORY,
+                element: <CustomerHistoryPage />,
+              },
+              {
+                path: ROUTE_PATHS.CUSTOMER_DASHBOARD,
+                element: <Navigate to={ROUTE_PATHS.CUSTOMER_PROFILE} replace />,
+              },
+              {
+                path: ROUTE_PATHS.CUSTOMER_ORDERS,
+                element: <Navigate to={ROUTE_PATHS.CUSTOMER_HISTORY} replace />,
               },
             ],
           },
@@ -131,33 +152,6 @@ const router = createBrowserRouter([
       {
         element: <DashboardLayout />,
         children: [
-          {
-            path: ROUTE_PATHS.CUSTOMER_DASHBOARD,
-            element: (
-              <RoleRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
-                <RoleDashboardPage
-                  title="Customer Dashboard"
-                  description="Your booking and ticket management area will live here."
-                />
-              </RoleRoute>
-            ),
-          },
-          {
-            path: ROUTE_PATHS.CUSTOMER_ORDERS,
-            element: (
-              <RoleRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
-                <CustomerOrdersPage />
-              </RoleRoute>
-            ),
-          },
-          {
-            path: ROUTE_PATHS.CUSTOMER_TICKETS,
-            element: (
-              <RoleRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
-                <CustomerTicketsPage />
-              </RoleRoute>
-            ),
-          },
           {
             path: ROUTE_PATHS.MANAGER_DASHBOARD,
             element: (

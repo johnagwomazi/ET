@@ -23,6 +23,10 @@ export const listQuerySchema = z
   })
   .strict();
 
+export const customerHistoryQuerySchema = listQuerySchema.extend({
+  status: z.enum(["ATTENDED", "CANCELED", "REFUNDED", "COMPLETED"]).optional(),
+});
+
 export const withdrawalListQuerySchema = listQuerySchema.extend({
   status: z.enum(Object.values(WITHDRAWAL_STATUS)).optional(),
 });

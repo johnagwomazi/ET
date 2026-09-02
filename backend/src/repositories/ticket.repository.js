@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Ticket from "../models/ticket.model.js";
 
 function applySession(query, options = {}) {
@@ -11,6 +12,7 @@ export async function createTickets(ticketDataList, options = {}) {
 export async function findTickets(filter = {}, options = {}) {
   return applySession(
     Ticket.find(filter)
+      .select("+qrCodeDataUrl")
       .populate("event")
       .populate("ticketType")
       .populate("order")
@@ -24,6 +26,100 @@ export async function findTickets(filter = {}, options = {}) {
 
 export async function countTickets(filter = {}, options = {}) {
   return applySession(Ticket.countDocuments(filter), options);
+}
+
+function buildCustomerHistoryMatch(historyStatus) {
+  if (historyStatus === "ATTENDED") {
+    return { checkedInAt: { $ne: null } };
+  }
+
+  if (historyStatus === "REFUNDED") {
+    return { checkedInAt: null, status: "REFUNDED" };
+  }
+
+  if (historyStatus === "CANCELED") {
+    return {
+      checkedInAt: null,
+      $or: [
+        { status: "CANCELED" },
+        { "eventDocument.status": "CANCELED" },
+      ],
+    };
+  }
+
+  if (historyStatus === "COMPLETED") {
+    return {
+      checkedInAt: null,
+      status: { $nin: ["CANCELED", "REFUNDED"] },
+      "eventDocument.status": "COMPLETED",
+    };
+  }
+
+  return {
+    $or: [
+      { checkedInAt: { $ne: null } },
+      { status: { $in: ["CANCELED", "REFUNDED"] } },
+      { "eventDocument.status": { $in: ["CANCELED", "COMPLETED"] } },
+    ],
+  };
+}
+
+export async function findCustomerHistoryTickets(customerId, options = {}) {
+  const purchaser = mongoose.isValidObjectId(customerId)
+    ? new mongoose.Types.ObjectId(customerId)
+    : customerId;
+  const skip = options.skip || 0;
+  const limit = options.limit || 20;
+  const [result] = await Ticket.aggregate([
+    { $match: { purchaser } },
+    {
+      $lookup: {
+        from: "events",
+        localField: "event",
+        foreignField: "_id",
+        as: "eventDocument",
+      },
+    },
+    { $unwind: "$eventDocument" },
+    { $match: buildCustomerHistoryMatch(options.historyStatus) },
+    {
+      $lookup: {
+        from: "tickettypes",
+        localField: "ticketType",
+        foreignField: "_id",
+        as: "ticketTypeDocument",
+      },
+    },
+    { $unwind: { path: "$ticketTypeDocument", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "orders",
+        localField: "order",
+        foreignField: "_id",
+        as: "orderDocument",
+      },
+    },
+    { $unwind: { path: "$orderDocument", preserveNullAndEmptyArrays: true } },
+    { $sort: { "eventDocument.startAt": -1, createdAt: -1 } },
+    {
+      $facet: {
+        records: [{ $skip: skip }, { $limit: limit }],
+        metadata: [{ $count: "totalItems" }],
+      },
+    },
+  ]);
+
+  const tickets = (result?.records || []).map((record) => ({
+    ...record,
+    event: record.eventDocument,
+    ticketType: record.ticketTypeDocument || record.ticketType,
+    order: record.orderDocument || record.order,
+  }));
+
+  return {
+    tickets,
+    totalItems: result?.metadata?.[0]?.totalItems || 0,
+  };
 }
 
 export async function findTicketByReference(reference, options = {}) {

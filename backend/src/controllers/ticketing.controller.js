@@ -109,6 +109,12 @@ export async function getCustomerTickets(req, res) {
   return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
 }
 
+export async function getCustomerHistory(req, res) {
+  const result = await ticketingService.getCustomerHistory(req.auth.userId, req.query);
+
+  return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
+}
+
 export async function validateEventTicket(req, res) {
   const result = await ticketingService.validateEventTicket(
     req.organizationId,

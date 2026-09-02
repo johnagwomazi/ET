@@ -27,6 +27,11 @@ export async function getCustomerTickets(query = {}) {
   return unwrapResponse(response);
 }
 
+export async function getCustomerHistory(query = {}) {
+  const response = await get(`/ticketing/history${buildQueryString(query)}`);
+  return unwrapResponse(response);
+}
+
 export async function getOrganizationEventTicketTypes(eventId, query = {}) {
   const response = await get(`/organizations/me/events/${eventId}/ticket-types${buildQueryString(query)}`);
   return unwrapResponse(response);

@@ -562,6 +562,38 @@ export async function getCustomerTickets(customerId, query = {}, dependencies = 
   };
 }
 
+function getCustomerHistoryStatus(ticket) {
+  if (ticket.checkedInAt) {
+    return "ATTENDED";
+  }
+
+  if (ticket.status === TICKET_STATUS.REFUNDED) {
+    return "REFUNDED";
+  }
+
+  if (ticket.status === TICKET_STATUS.CANCELED || ticket.event?.status === EVENT_STATUS.CANCELED) {
+    return "CANCELED";
+  }
+
+  return "COMPLETED";
+}
+
+export async function getCustomerHistory(customerId, query = {}, dependencies = defaultDependencies) {
+  const pagination = buildPaginationOptions(query, { page: 1, limit: 20, sortBy: "createdAt", sortOrder: -1 });
+  const result = await dependencies.ticketRepository.findCustomerHistoryTickets(customerId, {
+    ...pagination,
+    historyStatus: query.status,
+  });
+
+  return {
+    history: result.tickets.map((ticket) => ({
+      ...mapTicketResponse(ticket, { includeQr: false }),
+      historyStatus: getCustomerHistoryStatus(ticket),
+    })),
+    pagination: buildPaginationMeta(result.totalItems, pagination),
+  };
+}
+
 async function resolveTicketForValidation(payload, dependencies) {
   if (payload.token) {
     return dependencies.ticketRepository.findTicketByTokenHash(hashValue(payload.token));

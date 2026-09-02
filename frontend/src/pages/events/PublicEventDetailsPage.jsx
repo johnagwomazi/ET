@@ -11,8 +11,6 @@ import {
   Building2,
   Info,
 } from "lucide-react";
-import GuestNavbar from "../../components/layout/GuestNavbar";
-import CustomerFooter from "../../components/layout/CustomerFooter";
 import BackButton from "../../components/layout/BackButton";
 import Avatar from "../../components/dashboard/Avatar";
 import Button from "../../components/ui/Button";
@@ -264,7 +262,6 @@ function PublicEventDetailsPage() {
   if (isLoading && !event) {
     return (
       <div className="min-h-screen app-shell">
-        <GuestNavbar />
         <main className="pb-10">
           <PageContainer className="py-6 sm:py-8">
             <BackButton to={ROUTE_PATHS.HOME} label="Back to discovery" />
@@ -273,7 +270,6 @@ function PublicEventDetailsPage() {
             <PublicEventDetailsSkeleton />
           </PageContainer>
         </main>
-        <CustomerFooter />
       </div>
     );
   }
@@ -281,11 +277,9 @@ function PublicEventDetailsPage() {
   if (error && !event) {
     return (
       <div className="min-h-screen app-shell">
-        <GuestNavbar />
         <main className="pb-10">
           <PublicEventDetailsError title="Unable to load event" message={error} onRetry={() => setReloadToken((current) => current + 1)} />
         </main>
-        <CustomerFooter />
       </div>
     );
   }
@@ -293,7 +287,6 @@ function PublicEventDetailsPage() {
   if (!event) {
     return (
       <div className="min-h-screen app-shell">
-        <GuestNavbar />
         <main className="pb-10">
           <PublicEventDetailsError
             title="Event not found"
@@ -301,15 +294,12 @@ function PublicEventDetailsPage() {
             onRetry={() => setReloadToken((current) => current + 1)}
           />
         </main>
-        <CustomerFooter />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen app-shell">
-      <GuestNavbar />
-
       <main className="pb-10">
         <PageContainer className="py-6 sm:py-8">
           <BackButton to={ROUTE_PATHS.HOME} label="Back to discovery" />
@@ -484,8 +474,6 @@ function PublicEventDetailsPage() {
           </div>
         </PageContainer>
       </main>
-
-      <CustomerFooter />
     </div>
   );
 }
