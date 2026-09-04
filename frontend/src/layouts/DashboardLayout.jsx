@@ -13,6 +13,10 @@ import DashboardBottomSheet from "../components/layout/DashboardBottomSheet";
 import { classNames } from "../utils/classNames";
 
 function getPageTitleFromNavigation(navigation, pathname) {
+  if (pathname === ROUTE_PATHS.MANAGER_NOTIFICATIONS || pathname === ROUTE_PATHS.SUPER_ADMIN_NOTIFICATIONS) {
+    return "Notifications";
+  }
+
   if (pathname.startsWith(ROUTE_PATHS.MANAGER_EVENTS) && pathname !== ROUTE_PATHS.MANAGER_EVENTS) {
     return "Event Details";
   }
@@ -118,11 +122,7 @@ function DashboardLayout() {
       />
 
       <div className="min-h-screen lg:pl-72 md:pl-20">
-        <DashboardTopBar
-          title={pageTitle}
-          user={currentUser}
-          onNotificationClick={() => toast("Notifications will be wired in a later phase")}
-        />
+        <DashboardTopBar title={pageTitle} user={currentUser} />
 
         <main className={classNames("px-4 pb-28 pt-6 sm:px-6 lg:px-8")}>
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">

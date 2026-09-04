@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import * as authService from "../services/auth.service";
 import { clearStoredAccessToken, setStoredAccessToken } from "../utils/authToken";
+import { useNotificationStore } from "./useNotificationStore";
 
 let initializeSessionPromise = null;
 let refreshCurrentUserPromise = null;
@@ -44,6 +45,7 @@ export const useSessionStore = create((set, get) => ({
   },
 
   clearSession() {
+    useNotificationStore.getState().reset();
     set({
       ...initialState,
       isInitializing: false,
@@ -85,6 +87,7 @@ export const useSessionStore = create((set, get) => ({
 
       if (!latestCurrentUser && !isAuthenticated) {
         clearStoredAccessToken();
+        useNotificationStore.getState().reset();
         set({
           ...initialState,
           isInitializing: false,
@@ -165,6 +168,7 @@ export const useSessionStore = create((set, get) => ({
       console.log(error);
     } finally {
       clearStoredAccessToken();
+      useNotificationStore.getState().reset();
       set({
         ...initialState,
         isInitializing: false,
@@ -200,6 +204,7 @@ export const useSessionStore = create((set, get) => ({
       const { currentUser: latestCurrentUser, isAuthenticated } = get();
 
       if (!latestCurrentUser && !isAuthenticated) {
+        useNotificationStore.getState().reset();
         set({
           ...initialState,
           isInitializing: false,

@@ -16,6 +16,7 @@ import BrandLogo from "./BrandLogo";
 import Button from "../ui/Button";
 import PageContainer from "../ui/PageContainer";
 import Avatar from "../dashboard/Avatar";
+import NotificationBell from "../notifications/NotificationBell";
 import { ROUTE_PATHS } from "../../routes/routePaths";
 import { USER_ROLES } from "../../constants/roles.constants";
 import { useSessionStore } from "../../store/useSessionStore";
@@ -112,6 +113,8 @@ function GuestNavbar() {
                 </Button>
               ) : null}
 
+              <NotificationBell />
+
               <div className="relative" ref={accountMenuRef}>
                 <button
                   type="button"
@@ -192,6 +195,7 @@ function GuestNavbar() {
               Login
             </Button>
           ) : null}
+          {!isInitializing && hasSession ? <NotificationBell /> : null}
           {!isInitializing && hasSession && isCustomer ? (
             <button
               type="button"

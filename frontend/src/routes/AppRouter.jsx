@@ -39,6 +39,7 @@ import WithdrawalsPage from "../pages/super-admin/WithdrawalsPage";
 import OrganizationAnalyticsPage from "../pages/analytics/OrganizationAnalyticsPage";
 import EventAnalyticsPage from "../pages/analytics/EventAnalyticsPage";
 import PlatformAnalyticsPage from "../pages/analytics/PlatformAnalyticsPage";
+import NotificationHistoryPage from "../pages/notifications/NotificationHistoryPage";
 import ForbiddenPage from "../pages/ForbiddenPage";
 import PublicEventDetailsPage from "../pages/events/PublicEventDetailsPage";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants";
@@ -88,6 +89,10 @@ const router = createBrowserRouter([
               {
                 path: ROUTE_PATHS.CUSTOMER_HISTORY,
                 element: <CustomerHistoryPage />,
+              },
+              {
+                path: ROUTE_PATHS.CUSTOMER_NOTIFICATIONS,
+                element: <NotificationHistoryPage />,
               },
               {
                 path: ROUTE_PATHS.CUSTOMER_DASHBOARD,
@@ -176,6 +181,14 @@ const router = createBrowserRouter([
             element: (
               <RoleRoute allowedRoles={[USER_ROLES.MANAGER]}>
                 <EventDetailsPage scope="manager" />
+              </RoleRoute>
+            ),
+          },
+          {
+            path: ROUTE_PATHS.MANAGER_NOTIFICATIONS,
+            element: (
+              <RoleRoute allowedRoles={[USER_ROLES.MANAGER]}>
+                <NotificationHistoryPage />
               </RoleRoute>
             ),
           },
@@ -286,6 +299,14 @@ const router = createBrowserRouter([
                   </PermissionRoute>
                 ),
               },
+              {
+                path: ROUTE_PATHS.ORGANIZATION_NOTIFICATIONS,
+                element: (
+                  <RoleRoute allowedRoles={[USER_ROLES.ADMIN]}>
+                    <NotificationHistoryPage />
+                  </RoleRoute>
+                ),
+              },
             ],
           },
         ],
@@ -329,6 +350,10 @@ const router = createBrowserRouter([
               {
                 path: ROUTE_PATHS.SUPER_ADMIN_ANALYTICS,
                 element: <PlatformAnalyticsPage />,
+              },
+              {
+                path: ROUTE_PATHS.SUPER_ADMIN_NOTIFICATIONS,
+                element: <NotificationHistoryPage />,
               },
             ],
           },
