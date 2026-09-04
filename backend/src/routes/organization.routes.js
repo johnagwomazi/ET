@@ -1,10 +1,11 @@
 import express from "express";
 import * as organizationController from "../controllers/organization.controller.js";
 import * as ticketingController from "../controllers/ticketing.controller.js";
+import * as analyticsController from "../controllers/analytics.controller.js";
 import eventRoutes from "./event.routes.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
-import { requireOrganizationContext } from "../middleware/organization.middleware.js";
+import { requireOrganizationContext, requireOrganizationRole } from "../middleware/organization.middleware.js";
 import { requireOrganizationPermission } from "../middleware/organizationPermission.middleware.js";
 import {
   organizationProfileUpdateSchema,
@@ -21,6 +22,13 @@ import {
   withdrawalListQuerySchema,
 } from "../validators/ticketing.validator.js";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants.js";
+import { USER_ROLES } from "../constants/roles.constants.js";
+import {
+  analyticsEventPerformanceQuerySchema,
+  analyticsOverviewQuerySchema,
+  analyticsSalesQuerySchema,
+  analyticsTicketTypePerformanceQuerySchema,
+} from "../validators/analytics.validator.js";
 
 const organizationRouter = express.Router();
 
@@ -64,6 +72,38 @@ organizationRouter.get(
   "/me/dashboard",
   requireOrganizationPermission(ORGANIZATION_PERMISSIONS.DASHBOARD_VIEW),
   organizationController.getMyOrganizationDashboard
+);
+
+organizationRouter.get(
+  "/me/analytics/overview",
+  requireOrganizationRole(USER_ROLES.ADMIN),
+  requireOrganizationPermission(ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE),
+  validate(analyticsOverviewQuerySchema, "query"),
+  analyticsController.getOrganizationOverview
+);
+
+organizationRouter.get(
+  "/me/analytics/sales",
+  requireOrganizationRole(USER_ROLES.ADMIN),
+  requireOrganizationPermission(ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE),
+  validate(analyticsSalesQuerySchema, "query"),
+  analyticsController.getOrganizationSales
+);
+
+organizationRouter.get(
+  "/me/analytics/events",
+  requireOrganizationRole(USER_ROLES.ADMIN),
+  requireOrganizationPermission(ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE),
+  validate(analyticsEventPerformanceQuerySchema, "query"),
+  analyticsController.getOrganizationEventPerformance
+);
+
+organizationRouter.get(
+  "/me/analytics/ticket-types",
+  requireOrganizationRole(USER_ROLES.ADMIN),
+  requireOrganizationPermission(ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE),
+  validate(analyticsTicketTypePerformanceQuerySchema, "query"),
+  analyticsController.getOrganizationTicketTypePerformance
 );
 
 organizationRouter.post(

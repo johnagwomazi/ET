@@ -144,6 +144,8 @@ const orderSchema = new mongoose.Schema(
 
 orderSchema.index({ customer: 1, createdAt: -1 });
 orderSchema.index({ organization: 1, event: 1, createdAt: -1 });
+orderSchema.index({ paymentStatus: 1, paidAt: -1, createdAt: -1 });
+orderSchema.index({ organization: 1, event: 1, paymentStatus: 1, paidAt: -1 });
 orderSchema.index(
   { customer: 1, idempotencyKey: 1 },
   {

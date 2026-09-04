@@ -25,6 +25,7 @@ import {
 import * as eventManagerController from "../controllers/eventManager.controller.js";
 import * as eventAttendanceController from "../controllers/eventAttendance.controller.js";
 import * as ticketingController from "../controllers/ticketing.controller.js";
+import * as analyticsController from "../controllers/analytics.controller.js";
 import {
   parseMultipartEventPayload,
   uploadEventBanner,
@@ -35,6 +36,7 @@ import {
   ticketTypeUpdateSchema,
   ticketValidationSchema,
 } from "../validators/ticketing.validator.js";
+import { analyticsOverviewQuerySchema } from "../validators/analytics.validator.js";
 
 const eventRouter = express.Router({ mergeParams: true });
 
@@ -78,6 +80,13 @@ eventRouter.get(
   "/:eventId/financial-summary",
   validate(eventIdParamSchema, "params"),
   ticketingController.getEventFinancialSummary
+);
+
+eventRouter.get(
+  "/:eventId/analytics",
+  validate(eventIdParamSchema, "params"),
+  validate(analyticsOverviewQuerySchema, "query"),
+  analyticsController.getEventAnalytics
 );
 
 eventRouter.get(

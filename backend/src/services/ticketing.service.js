@@ -27,6 +27,7 @@ import * as ticketTypeRepository from "../repositories/ticketType.repository.js"
 import * as withdrawalRepository from "../repositories/withdrawal.repository.js";
 import * as paystackService from "./paystack.service.js";
 import * as notificationService from "./notification.service.js";
+import * as analyticsService from "./analytics.service.js";
 import { buildPaginationMeta, buildPaginationOptions, escapeRegex } from "../utils/query.util.js";
 import { hasOrganizationPermission } from "../utils/organizationPermission.util.js";
 import {
@@ -1037,33 +1038,27 @@ export async function createOrderRefund(organizationId, actorUserId, orderRefere
 }
 
 export async function getEventFinancialSummary(organizationId, actorUserId, eventId, dependencies = defaultDependencies) {
-  const context = await getAdminEventContext(organizationId, actorUserId, eventId, dependencies);
+  const analyticsDependencies = dependencies.analyticsRepository
+    ? dependencies
+    : undefined;
+  const result = await analyticsService.getEventAnalytics(
+    organizationId,
+    actorUserId,
+    eventId,
+    { preset: "all", timezoneOffsetMinutes: 0 },
+    analyticsDependencies
+  );
 
-  if (context.error) {
-    return context;
-  }
-
-  const [ticketTypes, attendanceCount, financial] = await Promise.all([
-    dependencies.ticketTypeRepository.findTicketTypes({ event: eventId, organization: organizationId }, { limit: 100 }),
-    dependencies.eventAttendanceRepository.countAttendanceByEvent(eventId),
-    dependencies.orderRepository.getOrganizationFinancialAggregation(organizationId, eventId),
-  ]);
-
-  const totalInventory = ticketTypes.reduce((total, ticketType) => total + Number(ticketType.quantity || 0), 0);
-  const ticketsSold = ticketTypes.reduce((total, ticketType) => total + Number(ticketType.soldQuantity || 0), 0);
+  if (result.error) return result;
 
   return {
     summary: {
-      totalInventory,
-      ticketsSold,
-      ticketsRemaining: Math.max(0, totalInventory - ticketsSold),
-      attendance: attendanceCount,
-      noShows: Math.max(0, ticketsSold - attendanceCount),
-      grossSales: Number(financial.grossSales || 0),
-      refundedAmount: Number(financial.refundedAmount || 0),
-      netRevenue: Math.max(0, Number(financial.grossSales || 0) - Number(financial.refundedAmount || 0)),
-      paidOrders: Number(financial.paidOrders || 0),
-      ticketTypes: ticketTypes.map(mapTicketTypeResponse),
+      ...result.summary,
+      totalInventory: result.summary.sellableInventory,
+      refundedAmount: result.summary.refunds,
+      paidOrders: result.summary.successfulOrders,
+      noShows: Math.max(0, result.summary.ticketsSold - result.summary.ticketLinkedAttendance),
+      ticketTypes: result.ticketTypes,
     },
   };
 }

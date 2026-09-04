@@ -20,6 +20,8 @@ const refundSchema = new mongoose.Schema(
 
 refundSchema.index({ order: 1, status: 1 });
 refundSchema.index({ organization: 1, createdAt: -1 });
+refundSchema.index({ status: 1, processedAt: -1, createdAt: -1 });
+refundSchema.index({ organization: 1, event: 1, status: 1, processedAt: -1 });
 
 const Refund = mongoose.models.Refund || mongoose.model("Refund", refundSchema);
 

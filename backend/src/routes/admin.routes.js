@@ -3,6 +3,7 @@ import * as adminController from "../controllers/admin.controller.js";
 import * as organizationController from "../controllers/organization.controller.js";
 import * as userController from "../controllers/user.controller.js";
 import * as ticketingController from "../controllers/ticketing.controller.js";
+import * as analyticsController from "../controllers/analytics.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { authorizeRoles } from "../middleware/role.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -25,6 +26,12 @@ import {
   withdrawalListQuerySchema,
   withdrawalRejectSchema,
 } from "../validators/ticketing.validator.js";
+import {
+  analyticsEventPerformanceQuerySchema,
+  analyticsOrganizationPerformanceQuerySchema,
+  analyticsOverviewQuerySchema,
+  analyticsSalesQuerySchema,
+} from "../validators/analytics.validator.js";
 
 const adminRouter = express.Router();
 
@@ -34,6 +41,27 @@ adminRouter.use(protectRoute);
 adminRouter.use(authorizeRoles(USER_ROLES.SUPER_ADMIN));
 
 adminRouter.get("/dashboard/overview", adminController.getDashboardOverview);
+
+adminRouter.get(
+  "/analytics/overview",
+  validate(analyticsOverviewQuerySchema, "query"),
+  analyticsController.getPlatformOverview
+);
+adminRouter.get(
+  "/analytics/sales",
+  validate(analyticsSalesQuerySchema, "query"),
+  analyticsController.getPlatformSales
+);
+adminRouter.get(
+  "/analytics/events",
+  validate(analyticsEventPerformanceQuerySchema, "query"),
+  analyticsController.getPlatformEventPerformance
+);
+adminRouter.get(
+  "/analytics/organizations",
+  validate(analyticsOrganizationPerformanceQuerySchema, "query"),
+  analyticsController.getPlatformOrganizationPerformance
+);
 
 adminRouter.get("/organizations", validate(organizationListQuerySchema, "query"), organizationController.getOrganizations);
 adminRouter.get(
