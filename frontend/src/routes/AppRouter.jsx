@@ -27,6 +27,7 @@ import EventEditorPage from "../pages/events/EventEditorPage";
 import OrganizationProfilePage from "../pages/organization/OrganizationProfilePage";
 import OrganizationSettingsPage from "../pages/organization/OrganizationSettingsPage";
 import OrganizationMembersPage from "../pages/organization/OrganizationMembersPage";
+import OrganizationFinancePage from "../pages/organization/OrganizationFinancePage";
 import CustomerTicketsPage from "../pages/customer/CustomerTicketsPage";
 import CustomerProfilePage from "../pages/customer/CustomerProfilePage";
 import CustomerHistoryPage from "../pages/customer/CustomerHistoryPage";
@@ -247,6 +248,16 @@ const router = createBrowserRouter([
                   <RoleRoute allowedRoles={[USER_ROLES.ADMIN]}>
                     <PermissionRoute permission={ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE}>
                       <OrganizationAnalyticsPage />
+                    </PermissionRoute>
+                  </RoleRoute>
+                ),
+              },
+              {
+                path: ROUTE_PATHS.ORGANIZATION_FINANCE,
+                element: (
+                  <RoleRoute allowedRoles={[USER_ROLES.ADMIN]}>
+                    <PermissionRoute permission={ORGANIZATION_PERMISSIONS.SETTINGS_VIEW}>
+                      <OrganizationFinancePage />
                     </PermissionRoute>
                   </RoleRoute>
                 ),

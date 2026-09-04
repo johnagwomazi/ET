@@ -15,15 +15,16 @@ const toneClasses = {
   warning: "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20",
   danger: "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/20",
   neutral: "bg-slate-500/15 text-slate-300 ring-1 ring-slate-500/20",
+  info: "bg-app-500/15 text-app-200 ring-1 ring-app-500/25",
 };
 
 function getStatusMeta(status) {
   return CUSTOMER_HISTORY_STATUS_META[status] || EVENT_STATUS_META[status] || TICKET_STATUS_META[status] || ORGANIZATION_STATUS_META[status] || USER_STATUS_META[status] || PAYMENT_STATUS_META[status] || DEFAULT_STATUS_META;
 }
 
-function StatusBadge({ status, label, className }) {
+function StatusBadge({ status, label, tone, className }) {
   const statusMeta = getStatusMeta(status);
-  const toneClass = toneClasses[statusMeta.tone] || toneClasses.neutral;
+  const toneClass = toneClasses[tone || statusMeta.tone] || toneClasses.neutral;
 
   return (
     <span

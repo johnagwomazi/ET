@@ -72,7 +72,10 @@ function OrganizationLayout() {
   const currentUser = useSessionStore((state) => state.currentUser);
   const logout = useSessionStore((state) => state.logout);
   const { permissions } = useOrganizationPermissions();
-  const navigation = useMemo(() => getOrganizationNavigation(permissions), [permissions]);
+  const navigation = useMemo(
+    () => getOrganizationNavigation(permissions, currentUser?.role),
+    [currentUser?.role, permissions]
+  );
 
   const [moreSheetOpen, setMoreSheetOpen] = useState(false);
 

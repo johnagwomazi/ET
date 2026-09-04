@@ -10,8 +10,8 @@ function buildMyOrganizationPath(path = "", query = {}) {
   return `/organizations/me${path}${buildQueryString(query)}`;
 }
 
-export async function getOrganizations(query = {}) {
-  const response = await get(buildOrganizationPath("", query));
+export async function getOrganizations(query = {}, options = {}) {
+  const response = await get(buildOrganizationPath("", query), options);
 
   return unwrapResponse(response);
 }

@@ -11,6 +11,7 @@ import {
   CalendarDays,
   Clock3,
   CreditCard,
+  Landmark,
   UserCog,
 } from "lucide-react";
 import { ROUTE_PATHS } from "../routes/routePaths";
@@ -100,6 +101,13 @@ export const ADMIN_NAVIGATION = {
       icon: ChartColumn,
       to: ROUTE_PATHS.ORGANIZATION_ANALYTICS,
       permission: ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE,
+    },
+    {
+      label: "Finance",
+      icon: Landmark,
+      to: ROUTE_PATHS.ORGANIZATION_FINANCE,
+      permission: ORGANIZATION_PERMISSIONS.SETTINGS_VIEW,
+      roles: [USER_ROLES.ADMIN],
     },
     {
       label: "Organization",
@@ -196,6 +204,13 @@ const ORGANIZATION_NAVIGATION = {
       permission: ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE,
     },
     {
+      label: "Finance",
+      icon: Landmark,
+      to: ROUTE_PATHS.ORGANIZATION_FINANCE,
+      permission: ORGANIZATION_PERMISSIONS.SETTINGS_VIEW,
+      roles: [USER_ROLES.ADMIN],
+    },
+    {
       label: "Members",
       icon: Users,
       to: ROUTE_PATHS.ORGANIZATION_MEMBERS,
@@ -205,8 +220,11 @@ const ORGANIZATION_NAVIGATION = {
   footer: sharedFooterItems,
 };
 
-function filterNavigationItems(items = [], permissions = []) {
+function filterNavigationItems(items = [], permissions = [], role) {
   return items.filter((item) => {
+    if (item.roles && !item.roles.includes(role)) {
+      return false;
+    }
     if (!item.permission) {
       return true;
     }
@@ -229,10 +247,10 @@ export function getNavigationForRole(role) {
   }
 }
 
-export function getOrganizationNavigation(permissions = []) {
+export function getOrganizationNavigation(permissions = [], role) {
   return {
-    main: filterNavigationItems(ORGANIZATION_NAVIGATION.main, permissions),
-    overflow: filterNavigationItems(ORGANIZATION_NAVIGATION.overflow, permissions),
+    main: filterNavigationItems(ORGANIZATION_NAVIGATION.main, permissions, role),
+    overflow: filterNavigationItems(ORGANIZATION_NAVIGATION.overflow, permissions, role),
     footer: ORGANIZATION_NAVIGATION.footer,
   };
 }

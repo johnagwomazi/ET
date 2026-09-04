@@ -29,6 +29,7 @@ function SectionHeader({ eyebrow, title, description, actions, className }) {
                 replace={action.replace}
                 state={action.state}
                 aria-label={action.ariaLabel}
+                disabled={action.disabled}
               >
                 {Icon ? <Icon className="h-4 w-4" aria-hidden="true" /> : null}
                 {action.label}

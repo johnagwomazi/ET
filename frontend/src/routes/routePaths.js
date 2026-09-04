@@ -26,6 +26,7 @@ export const ROUTE_PATHS = {
   ORGANIZATION_SETTINGS: "/organization/settings",
   ORGANIZATION_MEMBERS: "/organization/members",
   ORGANIZATION_ANALYTICS: "/organization/analytics",
+  ORGANIZATION_FINANCE: "/organization/finance",
   ORGANIZATION_EVENT_ANALYTICS: "/organization/events/:eventId/analytics",
   MANAGER_DASHBOARD: "/manager/dashboard",
   MANAGER_EVENTS: "/manager/events",
