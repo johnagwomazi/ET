@@ -2,6 +2,7 @@ import express from "express";
 import * as organizationController from "../controllers/organization.controller.js";
 import * as ticketingController from "../controllers/ticketing.controller.js";
 import * as analyticsController from "../controllers/analytics.controller.js";
+import * as financeController from "../controllers/finance.controller.js";
 import eventRoutes from "./event.routes.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -18,11 +19,16 @@ import {
 import {
   orderReferenceParamSchema,
   refundCreateSchema,
-  withdrawalCreateSchema,
-  withdrawalListQuerySchema,
 } from "../validators/ticketing.validator.js";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants.js";
 import { USER_ROLES } from "../constants/roles.constants.js";
+import createRateLimiter from "../config/rateLimit.config.js";
+import envConfig from "../config/env.config.js";
+import {
+  organizationWithdrawalListQuerySchema,
+  payoutDetailsUpdateSchema,
+  withdrawalCreateSchema as financeWithdrawalCreateSchema,
+} from "../validators/finance.validator.js";
 import {
   analyticsEventPerformanceQuerySchema,
   analyticsOverviewQuerySchema,
@@ -31,6 +37,7 @@ import {
 } from "../validators/analytics.validator.js";
 
 const organizationRouter = express.Router();
+const financeMutationLimiter = createRateLimiter({ max: envConfig.financeMutationRateLimitMax });
 
 organizationRouter.use(protectRoute);
 organizationRouter.use(requireOrganizationContext);
@@ -116,22 +123,42 @@ organizationRouter.post(
 
 organizationRouter.post(
   "/me/withdrawals",
+  financeMutationLimiter,
+  requireOrganizationRole(USER_ROLES.ADMIN),
   requireOrganizationPermission(ORGANIZATION_PERMISSIONS.SETTINGS_UPDATE),
-  validate(withdrawalCreateSchema),
-  ticketingController.requestWithdrawal
+  validate(financeWithdrawalCreateSchema),
+  financeController.requestWithdrawal
 );
 
 organizationRouter.get(
   "/me/withdrawals",
+  requireOrganizationRole(USER_ROLES.ADMIN),
   requireOrganizationPermission(ORGANIZATION_PERMISSIONS.SETTINGS_VIEW),
-  validate(withdrawalListQuerySchema, "query"),
-  ticketingController.getOrganizationWithdrawals
+  validate(organizationWithdrawalListQuerySchema, "query"),
+  financeController.getOrganizationWithdrawals
 );
 
 organizationRouter.get(
   "/me/withdrawals/balance",
+  requireOrganizationRole(USER_ROLES.ADMIN),
   requireOrganizationPermission(ORGANIZATION_PERMISSIONS.SETTINGS_VIEW),
-  ticketingController.getOrganizationWithdrawalBalance
+  financeController.getOrganizationFinanceSummary
+);
+
+organizationRouter.get(
+  "/me/finance/summary",
+  requireOrganizationRole(USER_ROLES.ADMIN),
+  requireOrganizationPermission(ORGANIZATION_PERMISSIONS.SETTINGS_VIEW),
+  financeController.getOrganizationFinanceSummary
+);
+
+organizationRouter.put(
+  "/me/finance/payout-details",
+  financeMutationLimiter,
+  requireOrganizationRole(USER_ROLES.ADMIN),
+  requireOrganizationPermission(ORGANIZATION_PERMISSIONS.SETTINGS_UPDATE),
+  validate(payoutDetailsUpdateSchema),
+  financeController.updateOrganizationPayoutDetails
 );
 
 organizationRouter.get(

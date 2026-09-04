@@ -2,8 +2,8 @@ import express from "express";
 import * as adminController from "../controllers/admin.controller.js";
 import * as organizationController from "../controllers/organization.controller.js";
 import * as userController from "../controllers/user.controller.js";
-import * as ticketingController from "../controllers/ticketing.controller.js";
 import * as analyticsController from "../controllers/analytics.controller.js";
+import * as financeController from "../controllers/finance.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { authorizeRoles } from "../middleware/role.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
@@ -21,11 +21,13 @@ import {
   userListQuerySchema,
 } from "../validators/admin.validator.js";
 import {
+  platformWithdrawalListQuerySchema,
   withdrawalApproveSchema,
   withdrawalIdParamSchema,
-  withdrawalListQuerySchema,
   withdrawalRejectSchema,
-} from "../validators/ticketing.validator.js";
+} from "../validators/finance.validator.js";
+import createRateLimiter from "../config/rateLimit.config.js";
+import envConfig from "../config/env.config.js";
 import {
   analyticsEventPerformanceQuerySchema,
   analyticsOrganizationPerformanceQuerySchema,
@@ -34,6 +36,7 @@ import {
 } from "../validators/analytics.validator.js";
 
 const adminRouter = express.Router();
+const financeMutationLimiter = createRateLimiter({ max: envConfig.financeMutationRateLimitMax });
 
 adminRouter.post("/login", validate(adminLoginSchema), adminController.login);
 
@@ -116,22 +119,37 @@ adminRouter.delete("/users/:userId", validate(userIdParamSchema, "params"), user
 
 adminRouter.get(
   "/withdrawals",
-  validate(withdrawalListQuerySchema, "query"),
-  ticketingController.getPlatformWithdrawals
+  validate(platformWithdrawalListQuerySchema, "query"),
+  financeController.getPlatformWithdrawals
+);
+
+adminRouter.get(
+  "/withdrawals/:withdrawalId",
+  validate(withdrawalIdParamSchema, "params"),
+  financeController.getPlatformWithdrawalDetails
 );
 
 adminRouter.patch(
   "/withdrawals/:withdrawalId/approve",
+  financeMutationLimiter,
   validate(withdrawalIdParamSchema, "params"),
   validate(withdrawalApproveSchema),
-  ticketingController.approveWithdrawal
+  financeController.approveWithdrawal
 );
 
 adminRouter.patch(
   "/withdrawals/:withdrawalId/reject",
+  financeMutationLimiter,
   validate(withdrawalIdParamSchema, "params"),
   validate(withdrawalRejectSchema),
-  ticketingController.rejectWithdrawal
+  financeController.rejectWithdrawal
+);
+
+adminRouter.post(
+  "/withdrawals/:withdrawalId/reconcile",
+  financeMutationLimiter,
+  validate(withdrawalIdParamSchema, "params"),
+  financeController.reconcileWithdrawal
 );
 
 export default adminRouter;

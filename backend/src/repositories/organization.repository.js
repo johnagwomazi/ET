@@ -35,6 +35,43 @@ export async function findOrganizationDetailsById(organizationId) {
   return Organization.findOne({ _id: organizationId, isDeleted: false }).populate("primaryAdmin");
 }
 
+export async function findOrganizationWithPayoutDetailsById(organizationId) {
+  return Organization.findOne({ _id: organizationId, isDeleted: false })
+    .select("+payoutDetails.recipientCode +financeLock")
+    .populate("primaryAdmin");
+}
+
+export async function updateOrganizationPayoutDetails(organizationId, payoutDetails) {
+  return Organization.findOneAndUpdate(
+    { _id: organizationId, isDeleted: false },
+    { $set: { payoutDetails } },
+    { new: true, runValidators: true }
+  ).select("+payoutDetails.recipientCode");
+}
+
+export async function acquireOrganizationFinanceLock(organizationId, token, expiresAt, now = new Date()) {
+  return Organization.findOneAndUpdate(
+    {
+      _id: organizationId,
+      isDeleted: false,
+      $or: [
+        { "financeLock.expiresAt": { $exists: false } },
+        { "financeLock.expiresAt": null },
+        { "financeLock.expiresAt": { $lte: now } },
+      ],
+    },
+    { $set: { financeLock: { token, expiresAt } } },
+    { new: true }
+  ).select("+payoutDetails.recipientCode +financeLock");
+}
+
+export async function releaseOrganizationFinanceLock(organizationId, token) {
+  return Organization.updateOne(
+    { _id: organizationId, "financeLock.token": token },
+    { $set: { financeLock: { token: "", expiresAt: null } } }
+  );
+}
+
 export async function updateOrganizationStatusById(organizationId, updateData) {
   return Organization.findOneAndUpdate({ _id: organizationId, isDeleted: false }, updateData, {
     new: true,

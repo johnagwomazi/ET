@@ -25,6 +25,10 @@ function toObjectId(value) {
   return value instanceof mongoose.Types.ObjectId ? value : new mongoose.Types.ObjectId(value);
 }
 
+function applyAggregateSession(aggregation, options = {}) {
+  return options.session ? aggregation.session(options.session) : aggregation;
+}
+
 function dateBounds(range) {
   if (!range?.start || !range?.end) {
     return null;
@@ -130,7 +134,7 @@ function eventScopeMatch(scope) {
   return match;
 }
 
-async function aggregateOrderSummary(scope, range) {
+async function aggregateOrderSummary(scope, range, options = {}) {
   const selectedItems = scope.ticketTypeId
     ? {
         $filter: {
@@ -141,7 +145,7 @@ async function aggregateOrderSummary(scope, range) {
       }
     : "$items";
 
-  const [summary] = await Order.aggregate([
+  const [summary] = await applyAggregateSession(Order.aggregate([
     { $match: buildOrderMatch(scope, range) },
     { $project: { currency: 1, selectedItems } },
     {
@@ -162,16 +166,16 @@ async function aggregateOrderSummary(scope, range) {
         currencies: { $addToSet: "$currency" },
       },
     },
-  ]);
+  ]), options);
 
   return summary || { grossSalesMinor: 0, ticketsSold: 0, successfulOrders: 0, currencies: [] };
 }
 
-async function aggregateRefundSummary(scope, range) {
-  const [summary] = await Refund.aggregate([
+async function aggregateRefundSummary(scope, range, options = {}) {
+  const [summary] = await applyAggregateSession(Refund.aggregate([
     { $match: buildRefundMatch(scope, range) },
     { $group: { _id: null, refundsMinor: { $sum: moneyToMinorExpression("$amount") }, successfulRefunds: { $sum: 1 } } },
-  ]);
+  ]), options);
   return summary || { refundsMinor: 0, successfulRefunds: 0 };
 }
 
@@ -233,6 +237,25 @@ export async function getScopeOverview(scope = {}, range = {}) {
   ]);
 
   return { orders, refunds, attendance, inventory, orderStates, eventCount };
+}
+
+export async function getOrganizationFinancialTotals(organizationId, options = {}) {
+  const scope = { organizationId };
+  const range = { start: null, end: null };
+  const [orders, refunds] = await Promise.all([
+    aggregateOrderSummary(scope, range, options),
+    aggregateRefundSummary(scope, range, options),
+  ]);
+
+  const grossSalesMinor = Math.round(Number(orders.grossSalesMinor || 0));
+  const refundsMinor = Math.round(Number(refunds.refundsMinor || 0));
+
+  return {
+    currency: orders.currencies?.length === 1 ? orders.currencies[0] : "NGN",
+    grossSalesMinor,
+    refundsMinor,
+    netRevenueMinor: grossSalesMinor - refundsMinor,
+  };
 }
 
 function dateTruncExpression(dateExpression, period, timezoneOffsetMinutes) {

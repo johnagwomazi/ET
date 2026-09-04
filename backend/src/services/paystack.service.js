@@ -14,6 +14,10 @@ function isPaystackConfigured() {
   return Boolean(envConfig.paystackSecretKey);
 }
 
+export function isConfigured() {
+  return isPaystackConfigured();
+}
+
 async function paystackRequest(path, options = {}) {
   if (!isPaystackConfigured()) {
     return {
@@ -90,6 +94,29 @@ export async function initiateTransfer({ amount, recipient, reason, reference })
       reference,
     },
   });
+}
+
+export async function resolveAccountNumber({ accountNumber, bankCode }) {
+  const query = new URLSearchParams({ account_number: accountNumber, bank_code: bankCode });
+  return paystackRequest(`/bank/resolve?${query.toString()}`);
+}
+
+export async function createTransferRecipient({ name, accountNumber, bankCode, currency, description }) {
+  return paystackRequest("/transferrecipient", {
+    method: "POST",
+    body: {
+      type: "nuban",
+      name,
+      account_number: accountNumber,
+      bank_code: bankCode,
+      currency,
+      description,
+    },
+  });
+}
+
+export async function verifyTransfer(reference) {
+  return paystackRequest(`/transfer/verify/${encodeURIComponent(reference)}`);
 }
 
 export function verifyWebhookSignature(rawBody, signature) {

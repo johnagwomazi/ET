@@ -48,6 +48,28 @@ const socialLinksSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const payoutDetailsSchema = new mongoose.Schema(
+  {
+    accountName: { type: String, default: "", trim: true },
+    accountNumberLast4: { type: String, default: "", trim: true },
+    bankCode: { type: String, default: "", trim: true },
+    bankName: { type: String, default: "", trim: true },
+    currency: { type: String, default: "NGN", uppercase: true, trim: true },
+    recipientCode: { type: String, default: "", trim: true, select: false },
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    updatedAt: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
+const financeLockSchema = new mongoose.Schema(
+  {
+    token: { type: String, default: "", trim: true },
+    expiresAt: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
 const organizationSchema = new mongoose.Schema(
   {
     organizationName: {
@@ -140,6 +162,15 @@ const organizationSchema = new mongoose.Schema(
     socialLinks: {
       type: socialLinksSchema,
       default: () => ({}),
+    },
+    payoutDetails: {
+      type: payoutDetailsSchema,
+      default: () => ({}),
+    },
+    financeLock: {
+      type: financeLockSchema,
+      default: () => ({}),
+      select: false,
     },
     deletedAt: {
       type: Date,

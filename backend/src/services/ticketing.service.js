@@ -28,6 +28,7 @@ import * as withdrawalRepository from "../repositories/withdrawal.repository.js"
 import * as paystackService from "./paystack.service.js";
 import * as notificationService from "./notification.service.js";
 import * as analyticsService from "./analytics.service.js";
+import * as financeService from "./finance.service.js";
 import { buildPaginationMeta, buildPaginationOptions, escapeRegex } from "../utils/query.util.js";
 import { hasOrganizationPermission } from "../utils/organizationPermission.util.js";
 import {
@@ -525,6 +526,10 @@ export async function handlePaystackWebhook(rawBody, signature, payload, depende
     });
   } catch (error) {
     if (error?.code === 11000) {
+      if (typeof event === "string" && event.startsWith("transfer.")) {
+        const transferHandler = dependencies.financeService || financeService;
+        return transferHandler.handleTransferWebhook(event, payload.data);
+      }
       return { processed: true, duplicate: true };
     }
 
@@ -533,6 +538,11 @@ export async function handlePaystackWebhook(rawBody, signature, payload, depende
 
   if (event === "charge.success") {
     return markOrderPaidFromProvider(reference, payload.data, dependencies);
+  }
+
+  if (typeof event === "string" && event.startsWith("transfer.")) {
+    const transferHandler = dependencies.financeService || financeService;
+    return transferHandler.handleTransferWebhook(event, payload.data);
   }
 
   return { processed: true };
