@@ -7,6 +7,7 @@ import {
   USER_STATUS_META,
 } from "../../constants/dashboard.constants";
 import { EVENT_STATUS_META } from "../../constants/event.constants";
+import { TICKET_STATUS_META } from "../../constants/ticketing.constants";
 import { formatStatusLabel } from "../../utils/formatters";
 
 const toneClasses = {
@@ -17,7 +18,7 @@ const toneClasses = {
 };
 
 function getStatusMeta(status) {
-  return CUSTOMER_HISTORY_STATUS_META[status] || EVENT_STATUS_META[status] || ORGANIZATION_STATUS_META[status] || USER_STATUS_META[status] || PAYMENT_STATUS_META[status] || DEFAULT_STATUS_META;
+  return CUSTOMER_HISTORY_STATUS_META[status] || EVENT_STATUS_META[status] || TICKET_STATUS_META[status] || ORGANIZATION_STATUS_META[status] || USER_STATUS_META[status] || PAYMENT_STATUS_META[status] || DEFAULT_STATUS_META;
 }
 
 function StatusBadge({ status, label, className }) {

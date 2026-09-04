@@ -73,6 +73,7 @@ function EventDetailsPage({ scope = "organization" }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [errorStatus, setErrorStatus] = useState(null);
 
   async function loadEvent({ quiet = false } = {}) {
     if (!eventId) {
@@ -88,6 +89,7 @@ function EventDetailsPage({ scope = "organization" }) {
     }
 
     setError(null);
+    setErrorStatus(null);
 
     try {
       const response = isManager
@@ -98,8 +100,22 @@ function EventDetailsPage({ scope = "organization" }) {
       setEvent(nextEvent);
       return nextEvent;
     } catch (loadError) {
+      const status = loadError?.status || null;
       const message = loadError instanceof Error ? loadError.message : "Unable to load event details";
       setError(message);
+      setErrorStatus(status);
+
+      if (isManager && status === 403) {
+        navigate(ROUTE_PATHS.FORBIDDEN, {
+          replace: true,
+          state: {
+            title: "Event access denied",
+            message: "You are not assigned to this event.",
+            reason: "manager-event-denied",
+          },
+        });
+      }
+
       throw loadError;
     } finally {
       setIsLoading(false);
@@ -140,6 +156,10 @@ function EventDetailsPage({ scope = "organization" }) {
     return <EventDetailSkeleton />;
   }
 
+  if (errorStatus === 404 && !event) {
+    return <EmptyState title="Event not found" message="This assigned event is unavailable or no longer accessible." />;
+  }
+
   if (error && !event) {
     return (
       <ErrorState
@@ -156,11 +176,80 @@ function EventDetailsPage({ scope = "organization" }) {
     return <EmptyState title="Event not found" message="The requested event could not be loaded." />;
   }
 
+  if (isManager) {
+    return (
+      <div className="space-y-6">
+        <SectionHeader
+          eyebrow="Manager workspace"
+          title={event.eventName || "Assigned event"}
+          description="Receive guests, validate tickets, and monitor attendance for this event."
+          actions={[
+            {
+              label: "Back to events",
+              variant: "ghost",
+              onClick: () => navigate(getListRoute(scope)),
+            },
+            {
+              label: isRefreshing ? "Refreshing..." : "Refresh",
+              variant: "secondary",
+              onClick: () => loadEvent({ quiet: true }).catch(() => {}),
+              isLoading: isRefreshing,
+              loadingText: "Refreshing...",
+            },
+          ]}
+        />
+
+        <Card className="border-slate-800/70 bg-slate-950/85 p-4 sm:p-5">
+          <div className="flex items-start gap-4">
+            {event.banner?.url ? (
+              <img
+                src={event.banner.url}
+                alt=""
+                className="h-20 w-20 shrink-0 rounded-lg object-cover sm:h-24 sm:w-24"
+              />
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge status={event.status} />
+                <span className="text-xs text-slate-500">{event.category || "Assigned event"}</span>
+              </div>
+              <div className="mt-3 grid gap-2 text-sm text-slate-300 md:grid-cols-3">
+                <span className="flex min-w-0 items-start gap-2">
+                  <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-app-300" />
+                  <span>{formatDateTime(event.startAt)}</span>
+                </span>
+                <span className="flex min-w-0 items-start gap-2">
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-app-300" />
+                  <span className="truncate">{getVenueLabel(event)}</span>
+                </span>
+                <span className="flex min-w-0 items-start gap-2">
+                  <Users className="mt-0.5 h-4 w-4 shrink-0 text-app-300" />
+                  <span>{formatNumber(event.capacity || 0)} capacity</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {error ? (
+          <div className="flex items-center justify-between gap-3 border border-rose-500/20 bg-rose-500/10 p-4">
+            <p className="text-sm text-rose-100">{error}</p>
+            <Button variant="secondary" size="sm" onClick={() => loadEvent({ quiet: true }).catch(() => {})}>
+              Retry
+            </Button>
+          </div>
+        ) : null}
+
+        <EventAttendancePanel event={event} scope="manager" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <SectionHeader
         eyebrow={isManager ? "Manager workspace" : "Organization management"}
-        title="Event Details"
+        title={isManager ? event.eventName || "Assigned event" : "Event Details"}
         description={
           isManager
             ? "View the assigned event, check attendance, and export reports from the manager workspace."
@@ -254,7 +343,7 @@ function EventDetailsPage({ scope = "organization" }) {
           <div className="space-y-3">
             <h3 className="text-base font-semibold text-white">Event summary</h3>
             <p className="text-sm leading-6 text-slate-400">
-              This view now includes the operational controls that Phase 4 adds on top of the existing event summary.
+              Schedule, status, and capacity for this event.
             </p>
           </div>
 
@@ -267,11 +356,11 @@ function EventDetailsPage({ scope = "organization" }) {
 
         <Card className="border-slate-800/70 bg-slate-950/85">
           <div className="space-y-3">
-            <h3 className="text-base font-semibold text-white">Relations and scope</h3>
+            <h3 className="text-base font-semibold text-white">Event ownership</h3>
             <p className="text-sm leading-6 text-slate-400">
               {isManager
-                ? "The backend already enforces manager-only access to this assigned event."
-                : "The backend already enforces organization-level access for event management."}
+                ? "Assignment details for this event."
+                : "Organization ownership and event authorship."}
             </p>
           </div>
 
@@ -281,7 +370,7 @@ function EventDetailsPage({ scope = "organization" }) {
               value={
                 event.organization?.organizationName ||
                 event.organization?.name ||
-                (isManager ? "Hidden in manager scope" : "Organization not attached")
+                (isManager ? "Assigned organization" : "Organization not attached")
               }
               icon={Building2}
             />
@@ -305,9 +394,11 @@ function EventDetailsPage({ scope = "organization" }) {
 
       {!isManager ? <EventFinancialPanel event={event} canView={canManageOrganizationEvents} /> : null}
 
-      <EventAttendancePanel event={event} scope={isManager ? "manager" : "organization"} />
+      {!isManager ? <EventAttendancePanel event={event} scope="organization" /> : null}
 
-      <EventLifecyclePanel event={event} canManageLifecycle={canManageOrganizationEvents} onEventUpdated={setEvent} />
+      {!isManager ? (
+        <EventLifecyclePanel event={event} canManageLifecycle={canManageOrganizationEvents} onEventUpdated={setEvent} />
+      ) : null}
     </div>
   );
 }

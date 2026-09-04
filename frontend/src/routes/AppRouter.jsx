@@ -20,7 +20,6 @@ import AdminLoginPage from "../pages/AdminLoginPage";
 import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import ResetPasswordPage from "../pages/ResetPasswordPage";
 import VerifyEmailPage from "../pages/VerifyEmailPage";
-import RoleDashboardPage from "../pages/RoleDashboardPage";
 import OrganizationDashboardPage from "../pages/OrganizationDashboardPage";
 import EventsPage from "../pages/events/EventsPage";
 import EventDetailsPage from "../pages/events/EventDetailsPage";
@@ -156,10 +155,7 @@ const router = createBrowserRouter([
             path: ROUTE_PATHS.MANAGER_DASHBOARD,
             element: (
               <RoleRoute allowedRoles={[USER_ROLES.MANAGER]}>
-                <RoleDashboardPage
-                  title="Manager Dashboard"
-                  description="Manager tools and permissions will be added later."
-                />
+                <Navigate to={ROUTE_PATHS.MANAGER_EVENTS} replace />
               </RoleRoute>
             ),
           },

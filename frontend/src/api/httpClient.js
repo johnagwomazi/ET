@@ -67,7 +67,11 @@ export async function request(method, path, options = {}) {
           ? payload.message
           : "Something went wrong";
 
-      throw new Error(message);
+      const requestError = new Error(message);
+      requestError.status = response.status;
+      requestError.data = payload && typeof payload === "object" ? payload.data || null : null;
+      requestError.payload = payload;
+      throw requestError;
     }
 
     const payload = await parseResponse(response, responseType);

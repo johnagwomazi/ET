@@ -106,6 +106,12 @@ export async function getOrganizationEventAttendanceCount(eventId) {
   return unwrapResponse(response);
 }
 
+export async function getOrganizationEventRecentAttendance(eventId, query = {}) {
+  const response = await get(buildOrganizationEventPath(`/${eventId}/attendance/recent`, query));
+
+  return unwrapResponse(response);
+}
+
 export async function getOrganizationEventAttendancePdf(eventId, query = {}) {
   return get(buildOrganizationEventPath(`/${eventId}/attendance/export/pdf`, query), {
     responseType: "blob",
@@ -132,6 +138,12 @@ export async function recordManagerEventAttendance(eventId, payload) {
 
 export async function getManagerEventAttendanceCount(eventId) {
   const response = await get(buildManagerEventPath(`/${eventId}/attendance/count`));
+
+  return unwrapResponse(response);
+}
+
+export async function getManagerEventRecentAttendance(eventId, query = {}) {
+  const response = await get(buildManagerEventPath(`/${eventId}/attendance/recent`, query));
 
   return unwrapResponse(response);
 }
@@ -191,6 +203,18 @@ export async function validateManagerTicket(eventId, payload) {
 
 export async function checkInManagerTicket(eventId, payload) {
   const response = await post(buildManagerEventPath(`/${eventId}/tickets/check-in`), payload);
+
+  return unwrapResponse(response);
+}
+
+export async function validateOrganizationTicket(eventId, payload) {
+  const response = await post(buildOrganizationEventPath(`/${eventId}/tickets/validate`), payload);
+
+  return unwrapResponse(response);
+}
+
+export async function checkInOrganizationTicket(eventId, payload) {
+  const response = await post(buildOrganizationEventPath(`/${eventId}/tickets/check-in`), payload);
 
   return unwrapResponse(response);
 }

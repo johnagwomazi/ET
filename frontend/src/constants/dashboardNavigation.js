@@ -1,5 +1,4 @@
 import {
-  Bell,
   Building2,
   CircleUserRound,
   LayoutDashboard,
@@ -118,34 +117,12 @@ export const ADMIN_NAVIGATION = {
 export const MANAGER_NAVIGATION = {
   main: [
     {
-      label: "Dashboard",
-      icon: LayoutDashboard,
-      to: ROUTE_PATHS.MANAGER_DASHBOARD,
-      exact: true,
-    },
-    {
-      label: "Events",
+      label: "Assigned Events",
       icon: CalendarDays,
       to: ROUTE_PATHS.MANAGER_EVENTS,
     },
-    {
-      label: "Analytics",
-      icon: ChartColumn,
-      comingSoon: true,
-    },
   ],
-  overflow: [
-    {
-      label: "Notifications",
-      icon: Bell,
-      comingSoon: true,
-    },
-    {
-      label: "Settings",
-      icon: Settings2,
-      comingSoon: true,
-    },
-  ],
+  overflow: [],
   footer: sharedFooterItems,
 };
 

@@ -196,7 +196,7 @@ function buildSummaryCards(scope, pagination, events) {
     {
       label: scope === "manager" ? "Assigned events" : "Total events",
       value: formatNumber(pagination.totalItems || 0),
-      helperText: "Records returned by the backend",
+      helperText: scope === "manager" ? "Events assigned to you" : "Events in this organization",
       icon: CalendarDays,
     },
     {
@@ -212,8 +212,8 @@ function buildSummaryCards(scope, pagination, events) {
       icon: Users,
     },
     {
-      label: scope === "manager" ? "Access" : "Filters",
-      value: scope === "manager" ? "Manager scope" : "Org scoped",
+      label: scope === "manager" ? "Assignment" : "Filters",
+      value: scope === "manager" ? "Assigned only" : "Organization",
       helperText: scope === "manager" ? "Only assigned events are shown" : "Search and status filters are enabled",
       icon: Filter,
     },
@@ -357,7 +357,7 @@ function EventsPage({ scope = "organization" }) {
         title="Events"
         description={
           isManager
-            ? "Review the events assigned to you and open a read-only detail view for each one."
+            ? "Open an assigned event to receive guests and monitor attendance."
             : "Search, filter, and review organization events from a single management table."
         }
         actions={[
@@ -424,10 +424,9 @@ function EventsPage({ scope = "organization" }) {
               <CalendarDays className="h-5 w-5" />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-white">Assigned scope</p>
+              <p className="text-sm font-semibold text-white">Event access</p>
               <p className="text-sm leading-6 text-slate-400">
-                This page only shows events assigned to your manager account. Event lifecycle and attendance actions
-                will come later.
+                Open a published event to start reception. Draft and postponed assignments remain available for event context.
               </p>
             </div>
           </div>
