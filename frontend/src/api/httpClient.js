@@ -86,7 +86,9 @@ export async function request(method, path, options = {}) {
 
     return payload;
   } catch (error) {
-    console.log(error);
+    if (error?.name !== "AbortError") {
+      console.log(error);
+    }
     throw error;
   }
 }

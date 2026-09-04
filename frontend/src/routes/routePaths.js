@@ -25,6 +25,8 @@ export const ROUTE_PATHS = {
   ORGANIZATION_PROFILE: "/organization/profile",
   ORGANIZATION_SETTINGS: "/organization/settings",
   ORGANIZATION_MEMBERS: "/organization/members",
+  ORGANIZATION_ANALYTICS: "/organization/analytics",
+  ORGANIZATION_EVENT_ANALYTICS: "/organization/events/:eventId/analytics",
   MANAGER_DASHBOARD: "/manager/dashboard",
   MANAGER_EVENTS: "/manager/events",
   MANAGER_EVENT_DETAILS: "/manager/events/:eventId",
@@ -33,6 +35,7 @@ export const ROUTE_PATHS = {
   SUPER_ADMIN_USERS: "/super-admin/dashboard/users",
   SUPER_ADMIN_ROLES_PERMISSIONS: "/super-admin/dashboard/roles",
   SUPER_ADMIN_WITHDRAWALS: "/super-admin/dashboard/withdrawals",
+  SUPER_ADMIN_ANALYTICS: "/super-admin/dashboard/analytics",
   FORBIDDEN: "/forbidden",
   NOT_FOUND: "*",
 };

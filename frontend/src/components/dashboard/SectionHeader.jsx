@@ -12,24 +12,29 @@ function SectionHeader({ eyebrow, title, description, actions, className }) {
 
       {actions ? (
         <div className="flex flex-wrap items-center gap-2">
-          {actions.map((action) => (
-            <Button
-              key={action.label}
-              as={action.as}
-              variant={action.variant || "secondary"}
-              size={action.size || "sm"}
-              onClick={action.onClick}
-              isLoading={action.isLoading}
-              loadingText={action.loadingText}
-              className={action.className}
-              to={action.to}
-              replace={action.replace}
-              state={action.state}
-              aria-label={action.ariaLabel}
-            >
-              {action.label}
-            </Button>
-          ))}
+          {actions.map((action) => {
+            const Icon = action.icon;
+
+            return (
+              <Button
+                key={action.label}
+                as={action.as}
+                variant={action.variant || "secondary"}
+                size={action.size || "sm"}
+                onClick={action.onClick}
+                isLoading={action.isLoading}
+                loadingText={action.loadingText}
+                className={action.className}
+                to={action.to}
+                replace={action.replace}
+                state={action.state}
+                aria-label={action.ariaLabel}
+              >
+                {Icon ? <Icon className="h-4 w-4" aria-hidden="true" /> : null}
+                {action.label}
+              </Button>
+            );
+          })}
         </div>
       ) : null}
     </div>

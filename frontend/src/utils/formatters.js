@@ -22,19 +22,39 @@ export function formatCurrency(value) {
 }
 
 export function formatMoney(value, currency = "NGN") {
+  const numericValue = Number(value);
+  const hasFraction = Number.isFinite(numericValue) && Math.round(numericValue) !== numericValue;
+
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency,
-      maximumFractionDigits: 0,
+      maximumFractionDigits: 2,
     }).format(0);
   }
 
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
-    maximumFractionDigits: 0,
-  }).format(Number(value));
+    minimumFractionDigits: hasFraction ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(numericValue);
+}
+
+export function formatPercentage(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "0%";
+  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(Number(value))}%`;
+}
+
+export function formatCompactMoney(value, currency = "NGN") {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return formatMoney(0, currency);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(numericValue);
 }
 
 export function formatDate(value) {

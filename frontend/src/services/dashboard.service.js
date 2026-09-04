@@ -1,8 +1,15 @@
 import { get } from "../api/httpClient";
 import { unwrapResponse } from "../utils/response";
+import { getPlatformAnalyticsOverview } from "./analytics.service";
 
 export async function getDashboardOverview() {
-  const response = await get("/admin/dashboard/overview");
+  const [response, analytics] = await Promise.all([
+    get("/admin/dashboard/overview"),
+    getPlatformAnalyticsOverview({
+      preset: "all",
+      timezoneOffsetMinutes: -new Date().getTimezoneOffset(),
+    }),
+  ]);
 
-  return unwrapResponse(response);
+  return { ...unwrapResponse(response), platformAnalytics: analytics };
 }

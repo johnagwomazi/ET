@@ -13,6 +13,14 @@ import DashboardBottomSheet from "../components/layout/DashboardBottomSheet";
 import { classNames } from "../utils/classNames";
 
 function getPageTitleFromNavigation(navigation, pathname) {
+  if (pathname.startsWith(ROUTE_PATHS.ORGANIZATION_ANALYTICS)) {
+    return "Revenue & Analytics";
+  }
+
+  if (pathname.startsWith("/organization/events/") && pathname.endsWith("/analytics")) {
+    return "Event Analytics";
+  }
+
   if (pathname.startsWith(ROUTE_PATHS.ORGANIZATION_EVENT_CREATE)) {
     return "Create Event";
   }

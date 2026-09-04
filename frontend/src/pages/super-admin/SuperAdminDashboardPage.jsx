@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Building2, CreditCard, LayoutDashboard, Ticket, Users } from "lucide-react";
+import { BarChart3, Building2, CreditCard, LayoutDashboard, Ticket, Users } from "lucide-react";
 import Card from "../../components/ui/Card";
 import EmptyState from "../../components/common/EmptyState";
 import ErrorState from "../../components/common/ErrorState";
@@ -10,7 +10,7 @@ import Avatar from "../../components/dashboard/Avatar";
 import StatusBadge from "../../components/dashboard/StatusBadge";
 import Button from "../../components/ui/Button";
 import { SuperAdminDashboardSkeleton } from "../../components/dashboard/DashboardLoadingStates";
-import { formatCurrency, formatDate, formatNumber } from "../../utils/formatters";
+import { formatDate, formatMoney, formatNumber } from "../../utils/formatters";
 import { DASHBOARD_STAT_KEYS } from "../../constants/dashboard.constants";
 import { ROUTE_PATHS } from "../../routes/routePaths";
 import { useSuperAdminDashboardStore } from "../../store/useSuperAdminDashboardStore";
@@ -33,15 +33,15 @@ const statCards = [
   },
   {
     key: DASHBOARD_STAT_KEYS.REVENUE,
-    label: "Revenue",
+    label: "Gross Sales",
     icon: CreditCard,
-    helper: "Placeholder until payments phase",
+    helper: "Successful ticket orders",
   },
   {
     key: DASHBOARD_STAT_KEYS.EVENTS,
     label: "Events",
     icon: Ticket,
-    helper: "Zero for now",
+    helper: "Platform events",
   },
 ];
 
@@ -93,6 +93,7 @@ function SuperAdminDashboardPage() {
 
   const recentOrganizations = overview?.recentOrganizations || [];
   const recentUsers = overview?.recentUsers || [];
+  const analyticsSummary = overview?.platformAnalytics?.summary || {};
   const showLoadingState = !overview && (!hasTriggeredLoad || isLoading);
 
   if (showLoadingState) {
@@ -120,14 +121,18 @@ function SuperAdminDashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {statCards.map((card) => {
-          const value = overview ? overview[card.key] : null;
+          const value = card.key === DASHBOARD_STAT_KEYS.REVENUE
+            ? analyticsSummary.grossSales
+            : card.key === DASHBOARD_STAT_KEYS.EVENTS
+              ? analyticsSummary.events
+              : overview?.[card.key];
 
           return (
             <StatCard
               key={card.key}
               icon={card.icon}
               label={card.label}
-              value={card.key === DASHBOARD_STAT_KEYS.REVENUE ? formatCurrency(value) : formatNumber(value)}
+              value={card.key === DASHBOARD_STAT_KEYS.REVENUE ? formatMoney(value, analyticsSummary.currency) : formatNumber(value)}
               helperText={card.helper}
               loading={showLoadingState}
             />
@@ -224,30 +229,31 @@ function SuperAdminDashboardPage() {
           <SectionHeader
             eyebrow="Platform metrics"
             title="High-level snapshot"
-            description="Events, revenue, and tickets are placeholder values until those modules arrive."
+            description="All-time ticket transaction and attendance totals."
             className="mb-5"
+            actions={[{ label: "Open analytics", icon: BarChart3, onClick: () => navigate(ROUTE_PATHS.SUPER_ADMIN_ANALYTICS) }]}
           />
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Revenue</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{formatCurrency(overview?.totalRevenue || 0)}</p>
-              <p className="mt-1 text-sm text-slate-500">Placeholder until payments phase</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Net revenue</p>
+              <p className="mt-2 text-2xl font-semibold text-emerald-300">{formatMoney(analyticsSummary.netRevenue || 0, analyticsSummary.currency)}</p>
+              <p className="mt-1 text-sm text-slate-500">Gross sales less successful refunds</p>
             </div>
             <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Events</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{formatNumber(overview?.totalEvents || 0)}</p>
-              <p className="mt-1 text-sm text-slate-500">Live event module total</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{formatNumber(analyticsSummary.events || 0)}</p>
+              <p className="mt-1 text-sm text-slate-500">Platform event total</p>
             </div>
             <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Tickets sold</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{formatNumber(overview?.totalTicketsSold || 0)}</p>
-              <p className="mt-1 text-sm text-slate-500">Reserved for later phases</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{formatNumber(analyticsSummary.ticketsSold || 0)}</p>
+              <p className="mt-1 text-sm text-slate-500">Attached to successful orders</p>
             </div>
             <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Approval rate</p>
-              <p className="mt-2 text-2xl font-semibold text-white">--</p>
-              <p className="mt-1 text-sm text-slate-500">Analytics will compute this later</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Attendance</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{formatNumber(analyticsSummary.attendance || 0)}</p>
+              <p className="mt-1 text-sm text-slate-500">Recorded check-ins</p>
             </div>
           </div>
         </Card>

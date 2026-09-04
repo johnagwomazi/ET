@@ -49,6 +49,11 @@ export const SUPER_ADMIN_NAVIGATION = {
       icon: Users,
       to: ROUTE_PATHS.SUPER_ADMIN_USERS,
     },
+    {
+      label: "Platform Analytics",
+      icon: ChartColumn,
+      to: ROUTE_PATHS.SUPER_ADMIN_ANALYTICS,
+    },
   ],
   overflow: [
     {
@@ -91,6 +96,12 @@ export const ADMIN_NAVIGATION = {
       permission: ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE,
     },
     {
+      label: "Analytics",
+      icon: ChartColumn,
+      to: ROUTE_PATHS.ORGANIZATION_ANALYTICS,
+      permission: ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE,
+    },
+    {
       label: "Organization",
       icon: Building2,
       to: ROUTE_PATHS.ORGANIZATION_PROFILE,
@@ -105,10 +116,10 @@ export const ADMIN_NAVIGATION = {
   ],
   overflow: [
     {
-      label: "Reports",
-      icon: ChartColumn,
-      permission: ORGANIZATION_PERMISSIONS.SETTINGS_VIEW,
-      comingSoon: true,
+      label: "Members",
+      icon: Users,
+      to: ROUTE_PATHS.ORGANIZATION_MEMBERS,
+      permission: ORGANIZATION_PERMISSIONS.MEMBERS_VIEW,
     },
   ],
   footer: sharedFooterItems,
@@ -178,6 +189,12 @@ const ORGANIZATION_NAVIGATION = {
     },
   ],
   overflow: [
+    {
+      label: "Analytics",
+      icon: ChartColumn,
+      to: ROUTE_PATHS.ORGANIZATION_ANALYTICS,
+      permission: ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE,
+    },
     {
       label: "Members",
       icon: Users,

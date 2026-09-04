@@ -2,7 +2,7 @@ import Card from "../ui/Card";
 import { classNames } from "../../utils/classNames";
 import { Skeleton, SkeletonText } from "../common/Skeleton";
 
-function StatCard({ icon: Icon, label, value, helperText, loading = false, className }) {
+function StatCard({ icon: Icon, label, value, helperText, loading = false, className, iconClassName }) {
   return (
     <Card className={classNames("border-slate-800/70 bg-slate-950/85 p-5", className)}>
       <div className="flex items-start justify-between gap-4">
@@ -13,7 +13,7 @@ function StatCard({ icon: Icon, label, value, helperText, loading = false, class
         </div>
 
         {Icon ? (
-          <div className="rounded-2xl bg-app-500/10 p-3 text-app-300 ring-1 ring-app-500/20">
+          <div className={classNames("rounded-2xl bg-app-500/10 p-3 text-app-300 ring-1 ring-app-500/20", iconClassName)}>
             {loading ? <Skeleton className="h-6 w-6 rounded-md" /> : <Icon className="h-6 w-6" />}
           </div>
         ) : null}

@@ -22,8 +22,8 @@ function buildEventRequestBody(payload, bannerFile) {
   return formData;
 }
 
-export async function getOrganizationEvents(query = {}) {
-  const response = await get(buildOrganizationEventPath("", query));
+export async function getOrganizationEvents(query = {}, options = {}) {
+  const response = await get(buildOrganizationEventPath("", query), options);
 
   return unwrapResponse(response);
 }

@@ -35,6 +35,9 @@ import SuperAdminDashboardPage from "../pages/super-admin/SuperAdminDashboardPag
 import OrganizationsPage from "../pages/super-admin/OrganizationsPage";
 import UsersPage from "../pages/super-admin/UsersPage";
 import WithdrawalsPage from "../pages/super-admin/WithdrawalsPage";
+import OrganizationAnalyticsPage from "../pages/analytics/OrganizationAnalyticsPage";
+import EventAnalyticsPage from "../pages/analytics/EventAnalyticsPage";
+import PlatformAnalyticsPage from "../pages/analytics/PlatformAnalyticsPage";
 import ForbiddenPage from "../pages/ForbiddenPage";
 import PublicEventDetailsPage from "../pages/events/PublicEventDetailsPage";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants";
@@ -229,6 +232,26 @@ const router = createBrowserRouter([
                 ),
               },
               {
+                path: ROUTE_PATHS.ORGANIZATION_EVENT_ANALYTICS,
+                element: (
+                  <RoleRoute allowedRoles={[USER_ROLES.ADMIN]}>
+                    <PermissionRoute permission={ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE}>
+                      <EventAnalyticsPage />
+                    </PermissionRoute>
+                  </RoleRoute>
+                ),
+              },
+              {
+                path: ROUTE_PATHS.ORGANIZATION_ANALYTICS,
+                element: (
+                  <RoleRoute allowedRoles={[USER_ROLES.ADMIN]}>
+                    <PermissionRoute permission={ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE}>
+                      <OrganizationAnalyticsPage />
+                    </PermissionRoute>
+                  </RoleRoute>
+                ),
+              },
+              {
                 path: ROUTE_PATHS.ORGANIZATION_PROFILE,
                 element: (
                   <PermissionRoute permission={ORGANIZATION_PERMISSIONS.ORGANIZATION_VIEW}>
@@ -291,6 +314,10 @@ const router = createBrowserRouter([
               {
                 path: ROUTE_PATHS.SUPER_ADMIN_WITHDRAWALS,
                 element: <WithdrawalsPage />,
+              },
+              {
+                path: ROUTE_PATHS.SUPER_ADMIN_ANALYTICS,
+                element: <PlatformAnalyticsPage />,
               },
             ],
           },
