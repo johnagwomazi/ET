@@ -445,7 +445,8 @@ async function buildTicketsForPaidOrder(order, dependencies, session = null) {
 }
 
 export async function markOrderPaidFromProvider(paymentReference, providerPayload = {}, dependencies = defaultDependencies) {
-  return runInTransaction(dependencies, async (session) => {
+  let notificationContext = null;
+  const result = await runInTransaction(dependencies, async (session) => {
     const order = await dependencies.orderRepository.findOrderByPaymentReference(paymentReference, { session });
 
     if (!order) {
@@ -454,6 +455,7 @@ export async function markOrderPaidFromProvider(paymentReference, providerPayloa
 
     if (order.paymentStatus === PAYMENT_STATUS.PAID) {
       const tickets = await dependencies.ticketRepository.findTickets({ order: order._id }, { limit: 500, session });
+      notificationContext = { order, tickets };
       return { order: mapOrderResponse(order), tickets: tickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true })), reused: true };
     }
 
@@ -472,14 +474,23 @@ export async function markOrderPaidFromProvider(paymentReference, providerPayloa
     );
 
     const tickets = await buildTicketsForPaidOrder(paidOrder, dependencies, session);
-    await dependencies.notificationService.sendPaymentSuccessNotification(paidOrder).catch(() => {});
-    await dependencies.notificationService.sendTicketIssuedNotification(paidOrder, tickets).catch(() => {});
+    notificationContext = { order: paidOrder, tickets };
 
     return {
       order: mapOrderResponse(paidOrder),
       tickets: tickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true })),
     };
   });
+
+  if (notificationContext) {
+    await dependencies.notificationService.sendPaymentSuccessNotification(notificationContext.order).catch(() => {});
+    await dependencies.notificationService.sendTicketIssuedNotification(
+      notificationContext.order,
+      notificationContext.tickets
+    ).catch(() => {});
+  }
+
+  return result;
 }
 
 export async function verifyPayment(reference, dependencies = defaultDependencies) {

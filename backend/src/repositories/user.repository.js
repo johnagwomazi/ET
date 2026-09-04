@@ -80,6 +80,10 @@ export async function findUsers(filter = {}, options = {}) {
     .limit(options.limit || 10);
 }
 
+export async function findActiveUsersByRole(role) {
+  return User.find({ role, accountStatus: ACCOUNT_STATUS.ACTIVE, isDeleted: false });
+}
+
 export async function findOrganizationMembers(filter = {}, options = {}) {
   return User.find(filter)
     .populate("organization")

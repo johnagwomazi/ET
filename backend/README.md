@@ -73,7 +73,16 @@ Important variables include:
 - `RATE_LIMIT_MAX`
 - `CLOUDINARY_*`
 - `SMTP_*`
+- `NOTIFICATION_WORKER_ENABLED` enables the in-process 24-hour reminder and email retry worker.
 - `PAYSTACK_*`
+
+## Notification Worker
+
+The notification worker runs every five minutes in the API process. Transactional notifications use unique database
+deduplication keys and atomic email-delivery claims, so repeated webhooks, reminder scans, and multiple API instances do
+not create duplicate records or send the same email concurrently. For deployments that separate web and worker
+processes, set `NOTIFICATION_WORKER_ENABLED=false` on web-only instances and enable it on at least one worker-capable
+instance.
 
 ## Development Workflow
 

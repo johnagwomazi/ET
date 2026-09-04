@@ -22,6 +22,7 @@ import { mapFinanceWithdrawal, mapFinancialPosition, mapPayoutDestination } from
 import { buildPaginationMeta, buildPaginationOptions } from "../utils/query.util.js";
 import { getDocumentId } from "../utils/ticketingResponse.util.js";
 import * as paystackService from "./paystack.service.js";
+import * as notificationService from "./notification.service.js";
 
 const defaultDependencies = {
   analyticsRepository,
@@ -29,7 +30,13 @@ const defaultDependencies = {
   organizationRepository,
   withdrawalRepository,
   paystackService,
+  notificationService,
 };
+
+async function notifyWithdrawal(withdrawal, event, dependencies) {
+  if (!withdrawal) return;
+  await dependencies.notificationService?.sendWithdrawalStatusNotification(withdrawal, { event }).catch(() => {});
+}
 
 function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -226,6 +233,8 @@ export async function requestWithdrawal(organizationId, actorUserId, payload, de
   const lock = await acquireFinanceLock(organizationId, dependencies);
   if (lock.error) return lock;
 
+  let result;
+  let createdWithdrawal;
   try {
     const organization = lock.organization || context.organization;
     if (!isActiveOrganization(organization) || !hasPayoutDestination(organization)) {
@@ -239,7 +248,7 @@ export async function requestWithdrawal(organizationId, actorUserId, payload, de
       return serviceError("Withdrawal amount exceeds available balance", HTTP_STATUS.BAD_REQUEST);
     }
 
-    const withdrawal = await dependencies.withdrawalRepository.createWithdrawal({
+    createdWithdrawal = await dependencies.withdrawalRepository.createWithdrawal({
       reference: withdrawalReference(),
       organization: organizationId,
       requestedBy: actorUserId,
@@ -255,13 +264,20 @@ export async function requestWithdrawal(organizationId, actorUserId, payload, de
       },
     });
 
-    return {
-      withdrawal: mapFinanceWithdrawal(withdrawal),
+    result = {
+      withdrawal: mapFinanceWithdrawal(createdWithdrawal),
       availableBalance: fromMinorUnits(position.availableBalanceMinor - amountMinor),
     };
   } finally {
     await releaseFinanceLock(organizationId, lock.token, dependencies);
   }
+
+  await notifyWithdrawal(
+    { ...createdWithdrawal.toObject?.() || createdWithdrawal, organization: context.organization },
+    "submitted",
+    dependencies
+  );
+  return result;
 }
 
 export async function getOrganizationWithdrawals(organizationId, actorUserId, query = {}, dependencies = defaultDependencies) {
@@ -444,9 +460,11 @@ export async function approveWithdrawal(withdrawalId, reviewerId, payload = {}, 
           failureReason: transfer?.message || "Transfer provider request failed",
         }
       );
+      await notifyWithdrawal(failed, "status_changed", dependencies);
       return { withdrawal: mapFinanceWithdrawal(failed) };
     }
     const updated = await applyProviderTransferState(withdrawal, transfer.data, dependencies);
+    await notifyWithdrawal(updated, "status_changed", dependencies);
     return { withdrawal: mapFinanceWithdrawal(updated) };
   } catch (error) {
     const unknown = await dependencies.withdrawalRepository.updateWithdrawalByStatus(
@@ -457,6 +475,7 @@ export async function approveWithdrawal(withdrawalId, reviewerId, payload = {}, 
         failureReason: "Transfer status is unknown; reconciliation is required",
       }
     );
+    await notifyWithdrawal(unknown, "status_changed", dependencies);
     return { withdrawal: mapFinanceWithdrawal(unknown), reconciliationRequired: true };
   }
 }
@@ -476,7 +495,10 @@ export async function rejectWithdrawal(withdrawalId, reviewerId, reason, depende
       rejectedAt: now,
     }
   );
-  if (rejected) return { withdrawal: mapFinanceWithdrawal(rejected) };
+  if (rejected) {
+    await notifyWithdrawal(rejected, "status_changed", dependencies);
+    return { withdrawal: mapFinanceWithdrawal(rejected) };
+  }
   const current = await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId);
   if (!current) return serviceError("Withdrawal not found", HTTP_STATUS.NOT_FOUND);
   return serviceError("Withdrawal has already been reviewed", HTTP_STATUS.CONFLICT);
@@ -507,6 +529,7 @@ export async function reconcileWithdrawal(withdrawalId, reviewerId, dependencies
     return serviceError("Provider transfer details do not match this withdrawal", HTTP_STATUS.CONFLICT);
   }
   const updated = await applyProviderTransferState(withdrawal, verification.data, dependencies);
+  await notifyWithdrawal(updated, "status_changed", dependencies);
   return { withdrawal: mapFinanceWithdrawal(updated) };
 }
 
@@ -533,5 +556,6 @@ export async function handleTransferWebhook(event, providerData, dependencies = 
     [PAYSTACK_TRANSFER_EVENTS.REVERSED]: "reversed",
   }[event];
   const updated = await applyProviderTransferState(withdrawal, { ...providerData, status: eventStatus }, dependencies);
+  await notifyWithdrawal(updated, "status_changed", dependencies);
   return { processed: true, matched: true, withdrawal: mapFinanceWithdrawal(updated) };
 }

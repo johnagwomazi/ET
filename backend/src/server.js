@@ -8,6 +8,10 @@ import appConfig from "./config/app.config.js";
 import { connectDatabase, disconnectDatabase } from "./config/database.config.js";
 import logger from "./lib/logger.js";
 import { seedInitialSuperAdmin } from "./services/seed.service.js";
+import {
+  startNotificationScheduler,
+  stopNotificationScheduler,
+} from "./services/notificationScheduler.service.js";
 
 let server;
 
@@ -18,6 +22,7 @@ async function startServer() {
 
     server = app.listen(appConfig.port, function onServerStart() {
       logger.info(`Server running on port ${appConfig.port}`);
+      startNotificationScheduler();
     });
 
     setupProcessHandlers();
@@ -49,6 +54,7 @@ function setupProcessHandlers() {
 
 async function shutdownServer(signal) {
   logger.warn(`${signal} received. Starting graceful shutdown.`);
+  stopNotificationScheduler();
 
   if (!server) {
     await disconnectDatabase();

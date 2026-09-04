@@ -7,6 +7,7 @@ import * as eventManagerAssignmentRepository from "../repositories/eventManagerA
 import * as eventRepository from "../repositories/event.repository.js";
 import * as organizationRepository from "../repositories/organization.repository.js";
 import * as userRepository from "../repositories/user.repository.js";
+import * as notificationService from "./notification.service.js";
 import { buildPaginationMeta, buildPaginationOptions } from "../utils/query.util.js";
 import { hasOrganizationPermission } from "../utils/organizationPermission.util.js";
 import { mapEventResponse } from "../utils/eventResponse.util.js";
@@ -21,6 +22,7 @@ const defaultDependencies = {
   eventRepository,
   organizationRepository,
   userRepository,
+  notificationService,
 };
 
 const ACCESSIBLE_EVENT_STATUSES = new Set([
@@ -240,10 +242,16 @@ export async function assignManagerToEvent(organizationId, actorUserId, eventId,
       payload.userId
     );
 
-    return {
+    const result = {
       event: mapEventResponse(event),
       assignment: mapEventManagerAssignmentResponse(createdAssignment || assignment),
     };
+    await dependencies.notificationService?.sendManagerAssignedNotification(
+      targetManager,
+      event,
+      createdAssignment || assignment
+    ).catch(() => {});
+    return result;
   } catch (error) {
     if (error?.code === 11000) {
       return {

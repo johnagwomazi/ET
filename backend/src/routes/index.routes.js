@@ -7,6 +7,7 @@ import organizationRoutes from "./organization.routes.js";
 import managerRoutes from "./manager.routes.js";
 import ticketingRoutes from "./ticketing.routes.js";
 import paymentRoutes from "./payment.routes.js";
+import notificationRoutes from "./notification.routes.js";
 
 const router = express.Router();
 
@@ -18,5 +19,6 @@ router.use("/organizations", organizationRoutes);
 router.use("/manager", managerRoutes);
 router.use("/ticketing", ticketingRoutes);
 router.use("/payments", paymentRoutes);
+router.use("/notifications", notificationRoutes);
 
 export default router;

@@ -217,3 +217,32 @@ export async function markTicketsByOrder(orderId, status, options = {}) {
     options
   );
 }
+
+export async function findEventNotificationRecipients(eventId, options = {}) {
+  const event = mongoose.isValidObjectId(eventId) ? new mongoose.Types.ObjectId(eventId) : eventId;
+  const statuses = options.ticketStatuses || ["VALID"];
+  const paymentStatuses = options.paymentStatuses || ["PAID", "PARTIALLY_REFUNDED"];
+
+  return Ticket.aggregate([
+    { $match: { event, purchaser: { $ne: null }, status: { $in: statuses } } },
+    { $lookup: { from: "orders", localField: "order", foreignField: "_id", as: "orderDocument" } },
+    { $unwind: "$orderDocument" },
+    { $match: { "orderDocument.paymentStatus": { $in: paymentStatuses } } },
+    { $group: { _id: "$purchaser", ticketCount: { $sum: 1 } } },
+    { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "user" } },
+    { $unwind: "$user" },
+    { $match: { "user.isDeleted": false, "user.role": "CUSTOMER", "user.accountStatus": "ACTIVE" } },
+    {
+      $project: {
+        _id: "$user._id",
+        firstName: "$user.firstName",
+        lastName: "$user.lastName",
+        email: "$user.email",
+        role: "$user.role",
+        organization: "$user.organization",
+        accountStatus: "$user.accountStatus",
+        ticketCount: 1,
+      },
+    },
+  ]);
+}

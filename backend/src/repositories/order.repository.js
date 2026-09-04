@@ -20,6 +20,17 @@ export async function findOrderByReference(reference, options = {}) {
   );
 }
 
+export async function findOrderById(orderId, options = {}) {
+  return applySession(
+    Order.findById(orderId)
+      .populate("event")
+      .populate("organization")
+      .populate("customer")
+      .populate("items.ticketType"),
+    options
+  );
+}
+
 export async function findOrderByPaymentReference(paymentReference, options = {}) {
   return applySession(
     Order.findOne({ paymentReference })

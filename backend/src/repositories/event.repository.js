@@ -165,3 +165,9 @@ export async function findPublicEventById(eventId, options = {}) {
     options
   );
 }
+
+export async function findEventsStartingBetween(startAt, endAt, statuses = []) {
+  const filter = { startAt: { $gte: startAt, $lt: endAt } };
+  if (statuses.length) filter.status = { $in: statuses };
+  return Event.find(filter).populate("organization").sort({ startAt: 1 });
+}

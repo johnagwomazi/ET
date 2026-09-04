@@ -8,6 +8,7 @@ import * as eventRepository from "../repositories/event.repository.js";
 import * as eventManagerAssignmentRepository from "../repositories/eventManagerAssignment.repository.js";
 import * as eventStatusHistoryRepository from "../repositories/eventStatusHistory.repository.js";
 import * as organizationRepository from "../repositories/organization.repository.js";
+import * as notificationService from "./notification.service.js";
 import { buildPaginationMeta, buildPaginationOptions, escapeRegex } from "../utils/query.util.js";
 import { hasOrganizationPermission } from "../utils/organizationPermission.util.js";
 import { buildEventSlug } from "../utils/event.util.js";
@@ -21,6 +22,7 @@ const defaultDependencies = {
   eventManagerAssignmentRepository,
   eventStatusHistoryRepository,
   organizationRepository,
+  notificationService,
   mongoose,
 };
 
@@ -363,7 +365,7 @@ async function transitionOrganizationEvent({
   }
 
   try {
-    return await runInTransaction(dependencies, async (session) => {
+    const result = await runInTransaction(dependencies, async (session) => {
       const currentEvent = await dependencies.eventRepository.findEventByIdAndOrganization(eventId, organizationId, {
         session,
       });
@@ -430,6 +432,15 @@ async function transitionOrganizationEvent({
         event: mapEventResponse(updatedEvent),
       };
     });
+
+    if (!result?.error && result?.event) {
+      await dependencies.notificationService?.sendEventLifecycleNotifications(
+        result.event,
+        { action, reason }
+      ).catch(() => {});
+    }
+
+    return result;
   } catch (error) {
     return {
       error: "Something went wrong",

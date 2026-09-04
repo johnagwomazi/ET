@@ -35,6 +35,7 @@ const envConfig = {
   rateLimitMax: toNumber(process.env.RATE_LIMIT_MAX, 100),
   eventOperationsRateLimitMax: toNumber(process.env.EVENT_OPERATIONS_RATE_LIMIT_MAX, 600),
   financeMutationRateLimitMax: toNumber(process.env.FINANCE_MUTATION_RATE_LIMIT_MAX, 20),
+  notificationWorkerEnabled: process.env.NOTIFICATION_WORKER_ENABLED !== "false",
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
     apiKey: process.env.CLOUDINARY_API_KEY || "",
