@@ -226,8 +226,7 @@ function HomePage() {
                     Discover your next event.
                   </h1>
                   <p className="max-w-xl text-base leading-7 text-slate-300 sm:text-lg">
-                    Search public events, browse featured picks, and filter by category without leaving the
-                    application shell.
+                    Search public events, browse featured picks, and find experiences by category.
                   </p>
                 </div>
 
@@ -281,7 +280,7 @@ function HomePage() {
             <SectionHeader
               eyebrow="Popular events"
               title="Popular Events"
-              description="A compact selection of spotlighted public events from the backend."
+              description="A compact selection of spotlighted public events."
             />
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -297,7 +296,7 @@ function HomePage() {
             <SectionHeader
               eyebrow="Discovery results"
               title="All Events"
-              description="Search, filter, and browse the complete public event list returned by the backend."
+              description="Search, filter, and browse the complete public event list."
               actions={[
                 {
                   label: "Reset filters",

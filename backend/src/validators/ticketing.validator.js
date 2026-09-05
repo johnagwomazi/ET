@@ -8,6 +8,7 @@ import {
 
 const mongoIdSchema = z.string().trim().regex(/^[0-9a-fA-F]{24}$/, "Invalid id");
 const optionalDateSchema = z.union([z.coerce.date(), z.null()]).optional();
+const moneySchema = z.coerce.number().finite().nonnegative().max(1000000000).multipleOf(0.01);
 
 export const eventTicketTypeParamSchema = z.object({ eventId: mongoIdSchema }).strict();
 export const ticketTypeParamSchema = z.object({ eventId: mongoIdSchema, ticketTypeId: mongoIdSchema }).strict();
@@ -34,8 +35,8 @@ export const withdrawalListQuerySchema = listQuerySchema.extend({
 const ticketTypeWriteShape = {
     name: z.string().trim().min(1, "Ticket name is required").max(80),
     description: z.string().trim().max(500).optional(),
-    price: z.coerce.number().min(0, "Price cannot be negative"),
-    currency: z.string().trim().length(3).optional(),
+    price: moneySchema,
+    currency: z.string().trim().regex(/^[A-Za-z]{3}$/, "Invalid currency").transform((value) => value.toUpperCase()).optional(),
     quantity: z.coerce.number().int().min(0, "Quantity cannot be negative"),
     saleStartsAt: optionalDateSchema,
     saleEndsAt: optionalDateSchema,
@@ -87,7 +88,23 @@ export const checkoutSchema = z
       .max(20, "Too many ticket lines"),
     idempotencyKey: z.string().trim().min(8).max(120).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((data, context) => {
+    const ticketTypeIds = data.items.map((item) => item.ticketTypeId);
+    if (new Set(ticketTypeIds).size !== ticketTypeIds.length) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "Duplicate ticket types are not allowed", path: ["items"] });
+    }
+
+    data.items.forEach((item, index) => {
+      if (item.attendees && item.attendees.length !== item.quantity) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Attendee count must match ticket quantity",
+          path: ["items", index, "attendees"],
+        });
+      }
+    });
+  });
 
 export const paymentVerifySchema = z
   .object({
@@ -107,7 +124,7 @@ export const ticketValidationSchema = z
 
 export const refundCreateSchema = z
   .object({
-    amount: z.coerce.number().min(1, "Refund amount is required").optional(),
+    amount: moneySchema.min(1, "Refund amount is required").optional(),
     reason: z.string().trim().min(1, "Reason is required").max(500),
     idempotencyKey: z.string().trim().min(8).max(120).optional(),
   })
@@ -115,7 +132,7 @@ export const refundCreateSchema = z
 
 export const withdrawalCreateSchema = z
   .object({
-    amount: z.coerce.number().min(1, "Withdrawal amount is required"),
+    amount: moneySchema.min(1, "Withdrawal amount is required"),
   })
   .strict();
 

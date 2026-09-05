@@ -92,6 +92,24 @@ function hashValue(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
+function checkoutFailure(error, statusCode) {
+  const failure = new Error(error);
+  failure.checkoutResult = { error, statusCode };
+  return failure;
+}
+
+async function releaseReservedInventory(reservedItems, dependencies) {
+  await Promise.allSettled(
+    reservedItems.map((item) =>
+      dependencies.ticketTypeRepository.releaseTicketInventory(item.ticketTypeId, item.quantity)
+    )
+  );
+}
+
+function providerFailureStatus(payment) {
+  return payment?.configured ? HTTP_STATUS.BAD_GATEWAY : HTTP_STATUS.SERVICE_UNAVAILABLE;
+}
+
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -269,6 +287,25 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
   if (payload.idempotencyKey) {
     const existingOrder = await dependencies.orderRepository.findOrderByCustomerAndIdempotencyKey(customerId, payload.idempotencyKey);
     if (existingOrder) {
+      if (existingOrder.paymentStatus === PAYMENT_STATUS.PAID) {
+        return {
+          order: mapOrderResponse(existingOrder),
+          payment: {
+            reference: existingOrder.paymentReference,
+            authorizationUrl: existingOrder.metadata?.authorizationUrl || null,
+            free: Number(existingOrder.total || 0) === 0,
+            reused: true,
+          },
+        };
+      }
+
+      if (!existingOrder.metadata?.authorizationUrl) {
+        return {
+          error: "The previous checkout could not be initialized. Please start a new checkout.",
+          statusCode: HTTP_STATUS.CONFLICT,
+        };
+      }
+
       return {
         order: mapOrderResponse(existingOrder),
         payment: {
@@ -289,11 +326,15 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
   const orderReference = createReference("ord");
   const paymentReference = createReference("pay");
   const reservedItems = [];
+  const transactionUsed = canUseTransactions(dependencies);
+  let reservationCommitted = false;
+  let providerInitialized = false;
 
   try {
     const result = await runInTransaction(dependencies, async (session) => {
       const orderItems = [];
       let subtotal = 0;
+      let orderCurrency = null;
 
       for (const item of payload.items) {
         const ticketType = await dependencies.ticketTypeRepository.findTicketTypeByIdAndEvent(
@@ -304,8 +345,14 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
         );
 
         if (!isTicketTypeAvailable(ticketType, item.quantity)) {
-          return { error: "Ticket type is unavailable or sold out", statusCode: HTTP_STATUS.CONFLICT };
+          throw checkoutFailure("Ticket type is unavailable or sold out", HTTP_STATUS.CONFLICT);
         }
+
+        const ticketCurrency = String(ticketType.currency || DEFAULT_CURRENCY).toUpperCase();
+        if (orderCurrency && orderCurrency !== ticketCurrency) {
+          throw checkoutFailure("All ticket types in an order must use the same currency", HTTP_STATUS.BAD_REQUEST);
+        }
+        orderCurrency = ticketCurrency;
 
         const reservedTicketType = await dependencies.ticketTypeRepository.reserveTicketInventory(
           item.ticketTypeId,
@@ -316,7 +363,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
         );
 
         if (!reservedTicketType) {
-          return { error: "Ticket inventory is no longer available", statusCode: HTTP_STATUS.CONFLICT };
+          throw checkoutFailure("Ticket inventory is no longer available", HTTP_STATUS.CONFLICT);
         }
 
         reservedItems.push({ ticketTypeId: item.ticketTypeId, quantity: item.quantity });
@@ -342,7 +389,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
           subtotal,
           fees: 0,
           total: subtotal,
-          currency: orderItems[0]?.currency || DEFAULT_CURRENCY,
+          currency: orderCurrency || DEFAULT_CURRENCY,
           paymentStatus: PAYMENT_STATUS.PENDING,
           orderStatus: ORDER_STATUS.PENDING,
           paymentReference,
@@ -359,9 +406,41 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
 
       return { order };
     });
+    reservationCommitted = true;
 
-    if (result.error) {
-      return result;
+    if (Number(result.order.total || 0) === 0) {
+      const paidResult = await markOrderPaidFromProvider(
+        paymentReference,
+        {
+          reference: paymentReference,
+          amount: 0,
+          currency: result.order.currency || DEFAULT_CURRENCY,
+          status: "success",
+          channel: "free",
+        },
+        dependencies
+      );
+
+      if (paidResult.error) {
+        await dependencies.orderRepository.updateOrderByReference(orderReference, {
+          paymentStatus: PAYMENT_STATUS.FAILED,
+          orderStatus: ORDER_STATUS.FAILED,
+          failedAt: new Date(),
+        });
+        await releaseReservedInventory(reservedItems, dependencies);
+        return paidResult;
+      }
+
+      return {
+        ...paidResult,
+        payment: {
+          reference: paymentReference,
+          authorizationUrl: null,
+          accessCode: null,
+          providerConfigured: false,
+          free: true,
+        },
+      };
     }
 
     const payment = await dependencies.paystackService.initializeTransaction({
@@ -376,6 +455,23 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
     });
 
     const authorizationUrl = payment?.data?.authorization_url || null;
+    if (!payment?.status || !authorizationUrl) {
+      await dependencies.orderRepository.updateOrderByReference(orderReference, {
+        paymentStatus: PAYMENT_STATUS.FAILED,
+        orderStatus: ORDER_STATUS.FAILED,
+        failedAt: new Date(),
+        metadata: {
+          ...result.order.metadata,
+          paystackConfigured: Boolean(payment?.configured),
+          paymentInitializationFailed: true,
+        },
+      });
+      await releaseReservedInventory(reservedItems, dependencies);
+      return {
+        error: payment?.configured ? "Payment provider could not initialize checkout" : "Payment service is not configured",
+        statusCode: providerFailureStatus(payment),
+      };
+    }
     const updatedOrder = await dependencies.orderRepository.updateOrderByReference(orderReference, {
       paymentStatus: payment?.status ? PAYMENT_STATUS.INITIALIZED : PAYMENT_STATUS.PENDING,
       metadata: {
@@ -384,6 +480,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
         authorizationUrl,
       },
     });
+    providerInitialized = true;
 
     return {
       order: mapOrderResponse(updatedOrder || result.order),
@@ -395,9 +492,16 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
       },
     };
   } catch (error) {
-    for (const item of reservedItems) {
-      await dependencies.ticketTypeRepository.releaseTicketInventory(item.ticketTypeId, item.quantity).catch(() => {});
+    if ((!transactionUsed || reservationCommitted) && !providerInitialized) {
+      await dependencies.orderRepository.updateOrderByReference(orderReference, {
+        paymentStatus: PAYMENT_STATUS.FAILED,
+        orderStatus: ORDER_STATUS.FAILED,
+        failedAt: new Date(),
+      }).catch(() => null);
+      await releaseReservedInventory(reservedItems, dependencies);
     }
+
+    if (error?.checkoutResult) return error.checkoutResult;
 
     if (error?.code === 11000) {
       return { error: "Duplicate order request", statusCode: HTTP_STATUS.CONFLICT };
@@ -405,6 +509,19 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
 
     return { error: "Something went wrong", statusCode: HTTP_STATUS.INTERNAL_SERVER_ERROR };
   }
+}
+
+function validateProviderPayment(order, paymentReference, providerPayload) {
+  const providerReference = providerPayload?.reference;
+  const providerAmount = Number(providerPayload?.amount);
+  const expectedAmount = Math.round(Number(order.total || 0) * 100);
+  const providerCurrency = String(providerPayload?.currency || "").toUpperCase();
+  const expectedCurrency = String(order.currency || DEFAULT_CURRENCY).toUpperCase();
+
+  if (providerReference !== paymentReference) return "Payment reference does not match the order";
+  if (!Number.isSafeInteger(providerAmount) || providerAmount !== expectedAmount) return "Payment amount does not match the order";
+  if (providerCurrency !== expectedCurrency) return "Payment currency does not match the order";
+  return null;
 }
 
 async function buildTicketsForPaidOrder(order, dependencies, session = null) {
@@ -453,14 +570,20 @@ export async function markOrderPaidFromProvider(paymentReference, providerPayloa
       return { error: "Order not found", statusCode: HTTP_STATUS.NOT_FOUND };
     }
 
+    const providerValidationError = validateProviderPayment(order, paymentReference, providerPayload);
+    if (providerValidationError) {
+      return { error: providerValidationError, statusCode: HTTP_STATUS.BAD_REQUEST };
+    }
+
     if (order.paymentStatus === PAYMENT_STATUS.PAID) {
       const tickets = await dependencies.ticketRepository.findTickets({ order: order._id }, { limit: 500, session });
       notificationContext = { order, tickets };
       return { order: mapOrderResponse(order), tickets: tickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true })), reused: true };
     }
 
-    const paidOrder = await dependencies.orderRepository.updateOrderByReference(
-      order.reference,
+    const paidOrder = await dependencies.orderRepository.updateOrderByPaymentReferenceAndStatus(
+      paymentReference,
+      [PAYMENT_STATUS.PENDING, PAYMENT_STATUS.INITIALIZED],
       {
         paymentStatus: PAYMENT_STATUS.PAID,
         orderStatus: ORDER_STATUS.PAID,
@@ -472,6 +595,15 @@ export async function markOrderPaidFromProvider(paymentReference, providerPayloa
       },
       { session }
     );
+
+    if (!paidOrder) {
+      const currentOrder = await dependencies.orderRepository.findOrderByPaymentReference(paymentReference, { session });
+      if (currentOrder?.paymentStatus === PAYMENT_STATUS.PAID) {
+        const tickets = await dependencies.ticketRepository.findTickets({ order: currentOrder._id }, { limit: 500, session });
+        return { order: mapOrderResponse(currentOrder), tickets: tickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true })), reused: true };
+      }
+      return { error: "Order is not payable", statusCode: HTTP_STATUS.CONFLICT };
+    }
 
     const tickets = await buildTicketsForPaidOrder(paidOrder, dependencies, session);
     notificationContext = { order: paidOrder, tickets };
@@ -493,23 +625,52 @@ export async function markOrderPaidFromProvider(paymentReference, providerPayloa
   return result;
 }
 
-export async function verifyPayment(reference, dependencies = defaultDependencies) {
+export async function verifyPayment(customerId, reference, dependencies = defaultDependencies) {
+  const currentOrder = await dependencies.orderRepository.findOrderByPaymentReference(reference);
+  if (!currentOrder || getDocumentId(currentOrder.customer) !== getDocumentId(customerId)) {
+    return { error: "Order not found", statusCode: HTTP_STATUS.NOT_FOUND };
+  }
+
+  if (currentOrder.paymentStatus === PAYMENT_STATUS.PAID) {
+    const tickets = await dependencies.ticketRepository.findTickets({ order: currentOrder._id }, { limit: 500 });
+    return {
+      order: mapOrderResponse(currentOrder),
+      tickets: tickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true })),
+      verified: true,
+      reused: true,
+    };
+  }
+
   const verification = await dependencies.paystackService.verifyTransaction(reference);
 
-  if (!verification?.status || verification?.data?.status !== "success") {
-    const currentOrder = await dependencies.orderRepository.findOrderByPaymentReference(reference);
+  if (!verification?.status) {
+    return {
+      error: verification?.configured === false ? "Payment service is not configured" : "Payment provider is unavailable",
+      statusCode: providerFailureStatus(verification),
+    };
+  }
 
-    if (!currentOrder) {
-      return { error: "Payment verification failed", statusCode: HTTP_STATUS.BAD_REQUEST };
+  if (verification?.data?.status !== "success") {
+    const order = await dependencies.orderRepository.updateOrderByPaymentReferenceAndStatus(
+      reference,
+      [PAYMENT_STATUS.PENDING, PAYMENT_STATUS.INITIALIZED],
+      {
+        paymentStatus: PAYMENT_STATUS.FAILED,
+        orderStatus: ORDER_STATUS.FAILED,
+        failedAt: new Date(),
+      }
+    );
+    if (order) {
+      await releaseReservedInventory(
+        (currentOrder.items || []).map((item) => ({
+          ticketTypeId: getDocumentId(item.ticketType),
+          quantity: Number(item.quantity || 0),
+        })),
+        dependencies
+      );
     }
 
-    const order = await dependencies.orderRepository.updateOrderByReference(currentOrder.reference, {
-      paymentStatus: PAYMENT_STATUS.FAILED,
-      orderStatus: ORDER_STATUS.FAILED,
-      failedAt: new Date(),
-    });
-
-    return { order: mapOrderResponse(order), verified: false };
+    return { order: mapOrderResponse(order || currentOrder), verified: false };
   }
 
   return markOrderPaidFromProvider(reference, verification.data, dependencies);
@@ -527,36 +688,55 @@ export async function handlePaystackWebhook(rawBody, signature, payload, depende
     return { error: "Invalid webhook payload", statusCode: HTTP_STATUS.BAD_REQUEST };
   }
 
+  let duplicate = false;
   try {
     await dependencies.paymentEventRepository.createPaymentEvent({
       provider: "paystack",
       event,
       reference,
       payload,
-      processedAt: new Date(),
+      status: "PROCESSING",
+      processingStartedAt: new Date(),
     });
   } catch (error) {
     if (error?.code === 11000) {
-      if (typeof event === "string" && event.startsWith("transfer.")) {
-        const transferHandler = dependencies.financeService || financeService;
-        return transferHandler.handleTransferWebhook(event, payload.data);
+      duplicate = true;
+      const isTransferEvent = typeof event === "string" && event.startsWith("transfer.");
+      if (isTransferEvent) {
+        // Finance transitions are independently idempotent and duplicate delivery is its recovery signal.
+      } else if (dependencies.paymentEventRepository.claimPaymentEventRetry) {
+        const claimed = await dependencies.paymentEventRepository.claimPaymentEventRetry("paystack", event, reference);
+        if (!claimed) return { processed: true, duplicate: true };
+      } else {
+        return { processed: true, duplicate: true };
       }
-      return { processed: true, duplicate: true };
+    } else {
+      throw error;
+    }
+  }
+
+  try {
+    let result;
+    if (event === "charge.success") {
+      result = await markOrderPaidFromProvider(reference, payload.data, dependencies);
+    } else if (typeof event === "string" && event.startsWith("transfer.")) {
+      const transferHandler = dependencies.financeService || financeService;
+      result = await transferHandler.handleTransferWebhook(event, payload.data);
+    } else {
+      result = { processed: true };
     }
 
+    if (result?.error) {
+      await dependencies.paymentEventRepository.markPaymentEventFailed?.("paystack", event, reference, "BUSINESS_VALIDATION_FAILED");
+      return result;
+    }
+
+    await dependencies.paymentEventRepository.markPaymentEventProcessed?.("paystack", event, reference);
+    return duplicate ? { ...result, retried: true } : result;
+  } catch (error) {
+    await dependencies.paymentEventRepository.markPaymentEventFailed?.("paystack", event, reference, "PROCESSING_FAILED");
     throw error;
   }
-
-  if (event === "charge.success") {
-    return markOrderPaidFromProvider(reference, payload.data, dependencies);
-  }
-
-  if (typeof event === "string" && event.startsWith("transfer.")) {
-    const transferHandler = dependencies.financeService || financeService;
-    return transferHandler.handleTransferWebhook(event, payload.data);
-  }
-
-  return { processed: true };
 }
 
 export async function getCustomerOrders(customerId, query = {}, dependencies = defaultDependencies) {
@@ -994,67 +1174,108 @@ export async function createOrderRefund(organizationId, actorUserId, orderRefere
     return { error: "You cannot access another organization", statusCode: HTTP_STATUS.FORBIDDEN };
   }
 
-  const refundableAmount = Number(order.total || 0) - Number(order.refundedAmount || 0);
-  const refundAmount = payload.amount || refundableAmount;
+  if (![PAYMENT_STATUS.PAID, PAYMENT_STATUS.PARTIALLY_REFUNDED].includes(order.paymentStatus)) {
+    return { error: "Only paid orders can be refunded", statusCode: HTTP_STATUS.CONFLICT };
+  }
 
-  if (refundAmount > refundableAmount) {
+  if (payload.idempotencyKey) {
+    const existingRefund = await dependencies.refundRepository.findRefundByOrderAndIdempotencyKey(
+      order._id,
+      payload.idempotencyKey
+    );
+    if (existingRefund) {
+      return {
+        refund: mapRefundResponse(existingRefund),
+        refundableAmount: Math.max(0, Number(order.total || 0) - Number(order.refundedAmount || 0) - Number(order.refundReservedAmount || 0)),
+        reused: true,
+      };
+    }
+  }
+
+  const refundableAmount = Number(order.total || 0) - Number(order.refundedAmount || 0) - Number(order.refundReservedAmount || 0);
+  const refundAmount = payload.amount ?? refundableAmount;
+
+  if (refundAmount <= 0 || refundAmount > refundableAmount) {
     return { error: "Refund amount exceeds refundable balance", statusCode: HTTP_STATUS.BAD_REQUEST };
   }
 
-  const refund = await dependencies.refundRepository.createRefund({
-    reference: createReference("ref"),
-    order: order._id,
-    organization: organizationId,
-    event: getDocumentId(order.event),
-    requestedBy: actorUserId,
-    amount: refundAmount,
-    reason: payload.reason,
-    status: REFUND_STATUS.PENDING,
-  });
-
-  const providerRefund = await dependencies.paystackService.createRefund?.({
-    transaction: order.paymentReference,
-    amount: refundAmount,
-    currency: order.currency || DEFAULT_CURRENCY,
-    customerNote: payload.reason,
-    merchantNote: `Refund for order ${order.reference}`,
-  });
-
-  let finalRefund = refund;
-
-  if (providerRefund?.status) {
-    const nextRefundedAmount = Number(order.refundedAmount || 0) + refundAmount;
-    const isFullRefund = nextRefundedAmount >= Number(order.total || 0);
-
-    const updatedRefund = await dependencies.refundRepository.updateRefundByReference(refund.reference, {
-      status: REFUND_STATUS.SUCCEEDED,
-      providerReference: providerRefund.data?.reference || providerRefund.data?.id || "",
-      processedAt: new Date(),
-    });
-    finalRefund = updatedRefund?.amount === undefined ? { ...refund, ...updatedRefund } : updatedRefund;
-
-    await dependencies.orderRepository.updateOrderByReference(order.reference, {
-      refundedAmount: nextRefundedAmount,
-      paymentStatus: isFullRefund ? PAYMENT_STATUS.REFUNDED : PAYMENT_STATUS.PARTIALLY_REFUNDED,
-      orderStatus: isFullRefund ? ORDER_STATUS.REFUNDED : ORDER_STATUS.PARTIALLY_REFUNDED,
-    });
-
-    if (isFullRefund) {
-      await dependencies.ticketRepository.markTicketsByOrder(order._id, TICKET_STATUS.REFUNDED);
-    }
-  } else if (providerRefund?.configured) {
-    const updatedRefund = await dependencies.refundRepository.updateRefundByReference(refund.reference, {
-      status: REFUND_STATUS.FAILED,
-      failureReason: providerRefund.message || "Refund provider request failed",
-    });
-    finalRefund = updatedRefund?.amount === undefined ? { ...refund, ...updatedRefund } : updatedRefund;
+  const reservedOrder = await dependencies.orderRepository.reserveOrderRefund(order.reference, refundAmount);
+  if (!reservedOrder) {
+    return { error: "Refund amount exceeds refundable balance", statusCode: HTTP_STATUS.CONFLICT };
   }
+
+  let refund;
+  try {
+    refund = await dependencies.refundRepository.createRefund({
+      reference: createReference("ref"),
+      idempotencyKey: payload.idempotencyKey || "",
+      order: order._id,
+      organization: organizationId,
+      event: getDocumentId(order.event),
+      requestedBy: actorUserId,
+      amount: refundAmount,
+      reason: payload.reason,
+      status: REFUND_STATUS.PROCESSING,
+    });
+  } catch (error) {
+    await dependencies.orderRepository.releaseOrderRefund(order.reference, refundAmount).catch(() => {});
+    if (error?.code === 11000 && payload.idempotencyKey) {
+      const existingRefund = await dependencies.refundRepository.findRefundByOrderAndIdempotencyKey(order._id, payload.idempotencyKey);
+      if (existingRefund) return { refund: mapRefundResponse(existingRefund), reused: true };
+    }
+    throw error;
+  }
+
+  let providerRefund;
+  try {
+    providerRefund = await dependencies.paystackService.createRefund({
+      transaction: order.paymentReference,
+      amount: refundAmount,
+      currency: order.currency || DEFAULT_CURRENCY,
+      customerNote: payload.reason,
+      merchantNote: `Refund for order ${order.reference}`,
+    });
+  } catch (error) {
+    providerRefund = { configured: true, status: false };
+  }
+
+  if (!providerRefund?.status) {
+    await dependencies.orderRepository.releaseOrderRefund(order.reference, refundAmount);
+    const finalRefund = await dependencies.refundRepository.updateRefundByReference(refund.reference, {
+      status: REFUND_STATUS.FAILED,
+      failureReason: "Refund provider request failed",
+    });
+    await dependencies.notificationService.sendRefundStatusNotification(finalRefund || refund).catch(() => {});
+    return {
+      error: providerRefund?.configured === false ? "Payment service is not configured" : "Refund provider is unavailable",
+      statusCode: providerFailureStatus(providerRefund),
+    };
+  }
+
+  const settledOrder = await dependencies.orderRepository.settleOrderRefund(order.reference, refundAmount);
+  if (!settledOrder) {
+    return { error: "Refund settlement could not be recorded", statusCode: HTTP_STATUS.INTERNAL_SERVER_ERROR };
+  }
+  const isFullRefund = Number(settledOrder.refundedAmount || 0) >= Number(settledOrder.total || 0);
+  await dependencies.orderRepository.updateOrderByReference(order.reference, {
+    paymentStatus: isFullRefund ? PAYMENT_STATUS.REFUNDED : PAYMENT_STATUS.PARTIALLY_REFUNDED,
+    orderStatus: isFullRefund ? ORDER_STATUS.REFUNDED : ORDER_STATUS.PARTIALLY_REFUNDED,
+  });
+
+  const updatedRefund = await dependencies.refundRepository.updateRefundByReference(refund.reference, {
+    status: REFUND_STATUS.SUCCEEDED,
+    providerReference: providerRefund.data?.reference || providerRefund.data?.id || "",
+    processedAt: new Date(),
+  });
+  const finalRefund = updatedRefund?.amount === undefined ? { ...refund, ...updatedRefund } : updatedRefund;
+
+  if (isFullRefund) await dependencies.ticketRepository.markTicketsByOrder(order._id, TICKET_STATUS.REFUNDED);
 
   await dependencies.notificationService.sendRefundStatusNotification(finalRefund).catch(() => {});
 
   return {
     refund: mapRefundResponse(finalRefund),
-    refundableAmount: refundableAmount - refundAmount,
+    refundableAmount: Math.max(0, Number(settledOrder.total || 0) - Number(settledOrder.refundedAmount || 0) - Number(settledOrder.refundReservedAmount || 0)),
   };
 }
 

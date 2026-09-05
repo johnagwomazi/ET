@@ -196,7 +196,7 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
               </h2>
               <p className="max-w-3xl text-sm leading-6 text-slate-400">
                 {isEditMode
-                  ? "Update the fields the backend currently allows. The schedule is shown for reference and remains locked here."
+                  ? "Update the event details below. The original schedule remains locked."
                   : "Provide the event information that will be saved as a draft and can be refined later."}
               </p>
             </div>
@@ -266,7 +266,7 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
                   <p className="text-sm font-semibold text-white">Schedule</p>
                   <p className="text-sm leading-6 text-slate-400">
                     {isEditMode
-                      ? "The current backend update contract keeps schedule fields locked after creation."
+                      ? "Schedule fields cannot be changed after creation."
                       : "Choose the event date and start/end time before creating the draft."}
                   </p>
                 </div>
@@ -278,7 +278,7 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
                   type="date"
                   error={errors.eventDate?.message}
                   disabled={isEditMode}
-                  helperText={isEditMode ? "Locked by backend" : "Required"}
+                  helperText={isEditMode ? "Locked after creation" : "Required"}
                   {...register("eventDate")}
                 />
                 <Input
@@ -286,7 +286,7 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
                   type="time"
                   error={errors.startTime?.message}
                   disabled={isEditMode}
-                  helperText={isEditMode ? "Locked by backend" : "Required"}
+                  helperText={isEditMode ? "Locked after creation" : "Required"}
                   {...register("startTime")}
                 />
                 <Input
@@ -294,7 +294,7 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
                   type="time"
                   error={errors.endTime?.message}
                   disabled={isEditMode}
-                  helperText={isEditMode ? "Locked by backend" : "Must be after start time"}
+                  helperText={isEditMode ? "Locked after creation" : "Must be after start time"}
                   {...register("endTime")}
                 />
               </div>
@@ -314,7 +314,7 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-white">Venue</p>
                   <p className="text-sm leading-6 text-slate-400">
-                    Add the location details the backend supports. Leave optional fields blank if they are not needed.
+                    Add the location details attendees need. Leave optional fields blank when they do not apply.
                   </p>
                 </div>
               </div>
@@ -368,7 +368,7 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-white">Capacity</p>
                   <p className="text-sm leading-6 text-slate-400">
-                    Enter the maximum number of attendees supported by the backend event record.
+                    Enter the maximum number of attendees for this event.
                   </p>
                 </div>
               </div>

@@ -1,9 +1,14 @@
+import { useId } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import Button from "../ui/Button";
 import { classNames } from "../../utils/classNames";
+import { useDialogAccessibility } from "../../hooks/useDialogAccessibility";
 
 function DashboardBottomSheet({ open, title, description, items = [], onClose, onItemSelect }) {
+  const titleId = useId();
+  const sheetRef = useDialogAccessibility(open, onClose);
+
   return (
     <AnimatePresence>
       {open ? (
@@ -11,6 +16,11 @@ function DashboardBottomSheet({ open, title, description, items = [], onClose, o
           <button type="button" aria-label="Close sheet" className="absolute inset-0 cursor-default" onClick={onClose} />
 
           <motion.div
+            ref={sheetRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
@@ -20,7 +30,7 @@ function DashboardBottomSheet({ open, title, description, items = [], onClose, o
           >
             <div className="flex items-start justify-between border-b border-slate-800 px-5 py-4">
               <div className="space-y-1">
-                <h3 className="text-lg font-semibold text-white">{title}</h3>
+                <h3 id={titleId} className="text-lg font-semibold text-white">{title}</h3>
                 {description ? <p className="text-sm leading-6 text-slate-400">{description}</p> : null}
               </div>
               <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close sheet">

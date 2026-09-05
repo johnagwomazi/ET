@@ -74,12 +74,14 @@ function ResetPasswordPage() {
             />
             <PasswordInput
               label="New Password"
+              autoComplete="new-password"
               placeholder="Create a new password"
               error={errors.password?.message}
               {...register("password")}
             />
             <PasswordInput
               label="Confirm Password"
+              autoComplete="new-password"
               placeholder="Confirm your new password"
               error={errors.confirmPassword?.message}
               {...register("confirmPassword")}

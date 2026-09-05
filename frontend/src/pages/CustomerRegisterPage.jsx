@@ -72,10 +72,10 @@ function CustomerRegisterPage() {
               <Input label="Last Name" placeholder="Doe" error={errors.lastName?.message} {...register("lastName")} />
             </div>
 
-            <Input label="Email" type="email" placeholder="john@example.com" error={errors.email?.message} {...register("email")} />
+            <Input label="Email" type="email" autoComplete="email" placeholder="john@example.com" error={errors.email?.message} {...register("email")} />
 
-            <PasswordInput label="Password" placeholder="Create a password" error={errors.password?.message} {...register("password")} />
-            <PasswordInput label="Confirm Password" placeholder="Confirm your password" error={errors.confirmPassword?.message} {...register("confirmPassword")} />
+            <PasswordInput label="Password" autoComplete="new-password" placeholder="Create a password" error={errors.password?.message} {...register("password")} />
+            <PasswordInput label="Confirm Password" autoComplete="new-password" placeholder="Confirm your password" error={errors.confirmPassword?.message} {...register("confirmPassword")} />
 
             <Button type="submit" className="w-full" isLoading={isSubmitting} loadingText="Creating account...">
               Create account

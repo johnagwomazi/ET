@@ -108,7 +108,7 @@ function CustomerHistoryPage() {
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase text-app-300">Customer account</p>
             <h1 className="text-3xl font-semibold text-white">History</h1>
-            <p className="max-w-2xl text-sm leading-6 text-slate-400">Review attended, completed, cancelled, and refunded Event activity confirmed by backend records.</p>
+            <p className="max-w-2xl text-sm leading-6 text-slate-400">Review attended, completed, cancelled, and refunded event activity.</p>
           </div>
           <Button variant="secondary" onClick={() => loadHistory(page, status)} isLoading={isLoading} loadingText="Refreshing...">Refresh</Button>
         </header>

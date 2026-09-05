@@ -312,7 +312,7 @@ function LifecycleActionDialog({
             <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3">
               <ShieldAlert className="mt-0.5 h-4 w-4 text-amber-300" />
               <p className="text-sm leading-6 text-amber-100/90">
-                Completing is only allowed after the scheduled end time. The backend will enforce this rule.
+                Completing is only available after the scheduled end time.
               </p>
             </div>
           ) : null}
@@ -478,7 +478,7 @@ function EventLifecyclePanel({ event, canManageLifecycle = false, onEventUpdated
               </div>
               <h3 className="text-lg font-semibold text-white">Event controls</h3>
               <p className="text-sm leading-6 text-slate-400">
-                Use the backend lifecycle transitions to publish, postpone, resume, cancel, or complete this event.
+                Publish, postpone, resume, cancel, or complete this event when each action becomes available.
               </p>
             </div>
             <StatusBadge status={event?.status} />

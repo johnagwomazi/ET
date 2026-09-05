@@ -94,6 +94,7 @@ function OrganizerRegisterPage() {
             <Input
               label="Business Email"
               type="email"
+              autoComplete="email"
               placeholder="business@example.com"
               error={errors.businessEmail?.message}
               {...register("businessEmail")}
@@ -108,12 +109,14 @@ function OrganizerRegisterPage() {
 
             <PasswordInput
               label="Password"
+              autoComplete="new-password"
               placeholder="Create a password"
               error={errors.password?.message}
               {...register("password")}
             />
             <PasswordInput
               label="Confirm Password"
+              autoComplete="new-password"
               placeholder="Confirm your password"
               error={errors.confirmPassword?.message}
               {...register("confirmPassword")}

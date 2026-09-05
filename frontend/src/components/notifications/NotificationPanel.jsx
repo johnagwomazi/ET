@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { CheckCheck, Inbox, RotateCw, X } from "lucide-react";
 import toast from "react-hot-toast";
 import NotificationItem from "./NotificationItem";
 import NotificationListSkeleton from "./NotificationListSkeleton";
 import { useNotificationStore } from "../../store/useNotificationStore";
+import { useDialogAccessibility } from "../../hooks/useDialogAccessibility";
 
 function NotificationPanel({ onClose, onOpenNotification, onViewAll, hasHistoryRoute }) {
-  const panelRef = useRef(null);
+  const panelRef = useDialogAccessibility(true, onClose);
   const [updatingIds, setUpdatingIds] = useState([]);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
   const notifications = useNotificationStore((state) => state.notifications);
@@ -16,17 +17,6 @@ function NotificationPanel({ onClose, onOpenNotification, onViewAll, hasHistoryR
   const loadRecent = useNotificationStore((state) => state.loadRecent);
   const markRead = useNotificationStore((state) => state.markRead);
   const markAllRead = useNotificationStore((state) => state.markAllRead);
-
-  useEffect(() => {
-    panelRef.current?.focus();
-
-    function handleKeyDown(event) {
-      if (event.key === "Escape") onClose();
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
 
   async function handleOpen(notification) {
     setUpdatingIds((ids) => [...ids, notification.id]);

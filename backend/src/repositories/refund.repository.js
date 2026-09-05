@@ -24,6 +24,10 @@ export async function countRefunds(filter = {}, options = {}) {
   return applySession(Refund.countDocuments(filter), options);
 }
 
+export async function findRefundByOrderAndIdempotencyKey(orderId, idempotencyKey, options = {}) {
+  return applySession(Refund.findOne({ order: orderId, idempotencyKey }).populate("order"), options);
+}
+
 export async function updateRefundByReference(reference, updateData, options = {}) {
   return applySession(
     Refund.findOneAndUpdate({ reference }, updateData, { new: true, runValidators: true }).populate("order"),

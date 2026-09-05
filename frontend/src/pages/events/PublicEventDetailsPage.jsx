@@ -22,6 +22,7 @@ import { ROUTE_PATHS } from "../../routes/routePaths";
 import { getPublicEventById } from "../../services/publicEvent.service";
 import { formatDate, formatDateTime, formatNumber } from "../../utils/formatters";
 import PublicTicketSelectionPanel from "../../components/ticketing/PublicTicketSelectionPanel";
+import { getSafeExternalUrl } from "../../utils/externalUrl";
 
 function formatTime(value) {
   if (!value) {
@@ -78,7 +79,7 @@ function getSocialLinks(socialLinks) {
         .replace(/([a-z])([A-Z])/g, "$1 $2")
         .replace(/[_-]+/g, " ")
         .trim(),
-      url: typeof value === "string" ? value.trim() : "",
+      url: getSafeExternalUrl(value),
     }))
     .filter((item) => item.url);
 }
@@ -232,7 +233,11 @@ function PublicEventDetailsPage() {
           return;
         }
 
-        setError(loadError instanceof Error ? loadError.message : "Unable to load event details");
+        setError(
+          loadError?.status === 404
+            ? "This event is no longer available."
+            : "Event details could not be loaded. Please try again."
+        );
         setEvent(null);
       } finally {
         if (!signal.aborted) {
@@ -249,6 +254,10 @@ function PublicEventDetailsPage() {
 
   const location = useMemo(() => getLocationLines(event), [event]);
   const socialLinks = useMemo(() => getSocialLinks(event?.organization?.socialLinks), [event?.organization?.socialLinks]);
+  const organizerWebsite = useMemo(
+    () => getSafeExternalUrl(event?.organization?.website),
+    [event?.organization?.website]
+  );
   const capacityLabel = useMemo(() => formatNumber(event?.capacity || 0), [event?.capacity]);
   const isPostponed = event?.status === "POSTPONED";
   const scheduleLabel = useMemo(() => {
@@ -418,9 +427,9 @@ function PublicEventDetailsPage() {
                     <p className="text-base font-semibold text-white">
                       {event.organization?.organizationName || "Organization details unavailable"}
                     </p>
-                    {event.organization?.website ? (
+                    {organizerWebsite ? (
                       <a
-                        href={event.organization.website}
+                        href={organizerWebsite}
                         target="_blank"
                         rel="noreferrer"
                         className="mt-1 inline-flex items-center gap-1 text-sm text-slate-400 transition hover:text-white"
@@ -464,7 +473,7 @@ function PublicEventDetailsPage() {
                   <p className="text-sm font-semibold text-white">Status summary</p>
                 </div>
                 <p className="text-sm leading-6 text-slate-400">
-                  {isRefreshing ? "Refreshing event details..." : "This public page uses the backend as the source of truth for visibility and status."}
+                  {isRefreshing ? "Refreshing event details..." : "Schedule and availability are current as of the latest refresh."}
                 </p>
                 {event.updatedAt ? (
                   <p className="text-xs text-slate-500">Last updated {formatDateTime(event.updatedAt)}</p>

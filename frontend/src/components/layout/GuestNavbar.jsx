@@ -55,6 +55,20 @@ function GuestNavbar() {
     setIsAccountMenuOpen(false);
   }, [location.pathname, location.hash]);
 
+  useEffect(() => {
+    if (!isMenuOpen && !isAccountMenuOpen) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setIsMenuOpen(false);
+        setIsAccountMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isAccountMenuOpen, isMenuOpen]);
+
   async function handleLogout() {
     setIsLoggingOut(true);
 
@@ -122,6 +136,8 @@ function GuestNavbar() {
                   className="flex h-10 items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-2 text-left text-slate-200 transition hover:border-slate-700 hover:bg-slate-800"
                   aria-haspopup="menu"
                   aria-expanded={isAccountMenuOpen}
+                  aria-controls="account-navigation-menu"
+                  aria-label="Open account menu"
                 >
                   <Avatar name={customerName || currentUser.email} size="sm" />
                   <span className="max-w-28 truncate text-sm font-medium">
@@ -132,6 +148,7 @@ function GuestNavbar() {
 
                 {isAccountMenuOpen ? (
                   <div
+                    id="account-navigation-menu"
                     className="absolute right-0 top-12 z-40 w-64 rounded-lg border border-slate-800 bg-slate-950 p-2 shadow-soft"
                     role="menu"
                   >
@@ -203,23 +220,25 @@ function GuestNavbar() {
               className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-800 bg-slate-900 text-slate-200 transition hover:border-slate-700 hover:bg-slate-800"
               aria-label={isMenuOpen ? "Close customer menu" : "Open customer menu"}
               aria-expanded={isMenuOpen}
+              aria-controls="mobile-public-navigation"
             >
               {isMenuOpen ? <X className="h-4 w-4" /> : <Avatar name={customerName || currentUser.email} size="sm" />}
             </button>
           ) : null}
           {!isInitializing && hasSession && !isCustomer ? (
-            <Button as={Link} to={dashboardRoute} variant="secondary" size="sm">
+            <Button as={Link} to={dashboardRoute} variant="secondary" size="sm" aria-label="Open dashboard">
               <LayoutDashboard className="h-4 w-4" />
-              Dashboard
+              <span className="hidden sm:inline">Dashboard</span>
             </Button>
           ) : null}
-          {!hasSession || !isCustomer ? (
+          {!isInitializing && (!hasSession || !isCustomer) ? (
             <button
               type="button"
               onClick={() => setIsMenuOpen((current) => !current)}
               className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 text-slate-200 transition hover:border-slate-700 hover:bg-slate-800"
               aria-label={isMenuOpen ? "Close navigation menu" : "Open navigation menu"}
               aria-expanded={isMenuOpen}
+              aria-controls="mobile-public-navigation"
             >
               {isMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             </button>
@@ -228,7 +247,7 @@ function GuestNavbar() {
       </PageContainer>
 
       {isMenuOpen ? (
-        <div className="border-t border-slate-800/60 bg-slate-950/95 lg:hidden">
+        <div id="mobile-public-navigation" className="border-t border-slate-800/60 bg-slate-950/95 lg:hidden">
           <PageContainer className="space-y-4 py-4">
             <nav className="grid gap-2">
               {navLinks.map((link) => (
@@ -247,15 +266,15 @@ function GuestNavbar() {
 
               {hasSession && isCustomer ? (
                 <>
-                  <Button as={Link} to={profileRoute} variant="ghost" size="sm" className="justify-start">
+                  <Button as={Link} to={profileRoute} variant="ghost" size="sm" className="justify-start" onClick={() => setIsMenuOpen(false)}>
                     <UserRound className="h-4 w-4" />
                     My Profile
                   </Button>
-                  <Button as={Link} to={ROUTE_PATHS.CUSTOMER_TICKETS} variant="ghost" size="sm" className="justify-start">
+                  <Button as={Link} to={ROUTE_PATHS.CUSTOMER_TICKETS} variant="ghost" size="sm" className="justify-start" onClick={() => setIsMenuOpen(false)}>
                     <Ticket className="h-4 w-4" />
                     My Tickets
                   </Button>
-                  <Button as={Link} to={ROUTE_PATHS.CUSTOMER_HISTORY} variant="ghost" size="sm" className="justify-start">
+                  <Button as={Link} to={ROUTE_PATHS.CUSTOMER_HISTORY} variant="ghost" size="sm" className="justify-start" onClick={() => setIsMenuOpen(false)}>
                     <Clock3 className="h-4 w-4" />
                     History
                   </Button>

@@ -37,8 +37,9 @@ import {
 
 const adminRouter = express.Router();
 const financeMutationLimiter = createRateLimiter({ max: envConfig.financeMutationRateLimitMax });
+const adminLoginLimiter = createRateLimiter({ max: envConfig.authRateLimitMax, skipSuccessfulRequests: true });
 
-adminRouter.post("/login", validate(adminLoginSchema), adminController.login);
+adminRouter.post("/login", adminLoginLimiter, validate(adminLoginSchema), adminController.login);
 
 adminRouter.use(protectRoute);
 adminRouter.use(authorizeRoles(USER_ROLES.SUPER_ADMIN));

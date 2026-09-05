@@ -1,10 +1,6 @@
-import dns from 'node:dns';
-
-dns.setServers(['8.8.8.8', '1.1.1.1']);
-
-
 import app from "./app.js";
 import appConfig from "./config/app.config.js";
+import { validateEnvironment } from "./config/env.config.js";
 import { connectDatabase, disconnectDatabase } from "./config/database.config.js";
 import logger from "./lib/logger.js";
 import { seedInitialSuperAdmin } from "./services/seed.service.js";
@@ -17,6 +13,7 @@ let server;
 
 async function startServer() {
   try {
+    validateEnvironment();
     await connectDatabase();
     await seedInitialSuperAdmin();
 

@@ -2,6 +2,9 @@ import { create } from "zustand";
 import * as userService from "../services/user.service";
 import { DEFAULT_TABLE_PAGE_SIZE } from "../constants/dashboard.constants";
 
+let listController = null;
+let detailController = null;
+
 const initialQuery = {
   search: "",
   role: "",
@@ -50,6 +53,9 @@ export const useUserStore = create((set, get) => ({
   },
 
   async fetchUsers(overrides = {}) {
+    listController?.abort();
+    const controller = new AbortController();
+    listController = controller;
     const query = {
       ...get().query,
       ...overrides,
@@ -62,7 +68,8 @@ export const useUserStore = create((set, get) => ({
     });
 
     try {
-      const response = await userService.getUsers(query);
+      const response = await userService.getUsers(query, { signal: controller.signal });
+      if (controller.signal.aborted) return null;
 
       set({
         users: response?.users || [],
@@ -73,6 +80,7 @@ export const useUserStore = create((set, get) => ({
 
       return response;
     } catch (error) {
+      if (controller.signal.aborted) return null;
       const message = error instanceof Error ? error.message : "Something went wrong";
 
       set({
@@ -81,14 +89,20 @@ export const useUserStore = create((set, get) => ({
       });
 
       throw error;
+    } finally {
+      if (listController === controller) listController = null;
     }
   },
 
   async fetchUserById(userId) {
+    detailController?.abort();
+    const controller = new AbortController();
+    detailController = controller;
     set({ isDetailLoading: true, detailError: null });
 
     try {
-      const response = await userService.getUserById(userId);
+      const response = await userService.getUserById(userId, { signal: controller.signal });
+      if (controller.signal.aborted) return null;
       const user = response?.user || null;
 
       set({
@@ -98,6 +112,7 @@ export const useUserStore = create((set, get) => ({
 
       return user;
     } catch (error) {
+      if (controller.signal.aborted) return null;
       const message = error instanceof Error ? error.message : "Something went wrong";
 
       set({
@@ -106,6 +121,8 @@ export const useUserStore = create((set, get) => ({
       });
 
       throw error;
+    } finally {
+      if (detailController === controller) detailController = null;
     }
   },
 

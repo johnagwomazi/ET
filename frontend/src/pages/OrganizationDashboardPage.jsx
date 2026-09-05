@@ -98,8 +98,12 @@ function OrganizationDashboardPage() {
   const stats = dashboard?.stats || {};
   const recentActivity = dashboard?.recentActivity || [];
   const quickActions = dashboard?.quickActions || [];
+  const supportedQuickActions = useMemo(
+    () => quickActions.filter((action) => QUICK_ACTION_ROUTE_MAP[action.path]),
+    [quickActions]
+  );
 
-  async function loadDashboard({ quiet = false } = {}) {
+  async function loadDashboard({ quiet = false, signal } = {}) {
     const hasExistingDashboard = Boolean(dashboard);
 
     if (quiet) {
@@ -111,24 +115,30 @@ function OrganizationDashboardPage() {
     setError(null);
 
     try {
-      const response = await organizationService.getMyOrganizationDashboard();
+      const response = await organizationService.getMyOrganizationDashboard({ signal });
+      if (signal?.aborted) return;
       setDashboard(response || null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Something went wrong");
+      if (loadError?.name === "AbortError") return;
+
+      setError("The organization dashboard could not be loaded. Please try again.");
 
       if (quiet || hasExistingDashboard) {
-        toast.error(loadError instanceof Error ? loadError.message : "Unable to refresh dashboard");
+        toast.error("The dashboard could not be refreshed. Please try again.");
       }
-
-      throw loadError;
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (!signal?.aborted) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
   }
 
   useEffect(() => {
-    loadDashboard().catch(() => {});
+    const controller = new AbortController();
+    loadDashboard({ signal: controller.signal });
+
+    return () => controller.abort();
   }, []);
 
   const statCards = useMemo(() => getStatCards(stats), [stats]);
@@ -155,7 +165,7 @@ function OrganizationDashboardPage() {
         title="Unable to load dashboard"
         message={error}
         onRetry={() => {
-          loadDashboard().catch(() => {});
+          loadDashboard();
         }}
       />
     );
@@ -171,7 +181,7 @@ function OrganizationDashboardPage() {
           {
             label: isRefreshing ? "Refreshing..." : "Refresh",
             variant: "secondary",
-            onClick: () => loadDashboard({ quiet: true }).catch(() => {}),
+            onClick: () => loadDashboard({ quiet: true }),
             isLoading: isRefreshing,
             loadingText: "Refreshing...",
           },
@@ -234,7 +244,7 @@ function OrganizationDashboardPage() {
               <p className="text-sm font-semibold text-rose-200">Dashboard refresh failed</p>
               <p className="text-sm text-rose-100/80">{error}</p>
             </div>
-            <Button variant="secondary" size="sm" onClick={() => loadDashboard({ quiet: true }).catch(() => {})}>
+            <Button variant="secondary" size="sm" onClick={() => loadDashboard({ quiet: true })}>
               Try again
             </Button>
           </div>
@@ -259,7 +269,7 @@ function OrganizationDashboardPage() {
           <div className="flex items-center justify-between gap-3 border-b border-slate-800/70 pb-4">
             <div>
               <p className="text-sm font-semibold text-white">Organization overview</p>
-              <p className="text-sm text-slate-400">Key details surfaced from the dashboard API.</p>
+              <p className="text-sm text-slate-400">Key organization details.</p>
             </div>
             <Building2 className="h-5 w-5 text-app-300" aria-hidden="true" />
           </div>
@@ -278,37 +288,26 @@ function OrganizationDashboardPage() {
           <div className="flex items-center justify-between gap-3 border-b border-slate-800/70 pb-4">
             <div>
               <p className="text-sm font-semibold text-white">Quick actions</p>
-              <p className="text-sm text-slate-400">Shortcuts based on the backend response.</p>
+              <p className="text-sm text-slate-400">Available organization shortcuts.</p>
             </div>
             <Activity className="h-5 w-5 text-app-300" aria-hidden="true" />
           </div>
 
           <div className="mt-5 grid gap-3">
-            {quickActions.length > 0 ? (
-              quickActions.map((action) => {
+            {supportedQuickActions.length > 0 ? (
+              supportedQuickActions.map((action) => {
                 const targetRoute = QUICK_ACTION_ROUTE_MAP[action.path];
-                const isComingSoon = !targetRoute;
 
                 return (
                   <button
                     key={action.label}
                     type="button"
-                    disabled={isComingSoon}
-                    onClick={() => {
-                      if (!targetRoute) {
-                        toast("This section will be available in a later phase.");
-                        return;
-                      }
-
-                      navigate(targetRoute);
-                    }}
-                    className="flex items-center justify-between rounded-2xl border border-slate-800 px-4 py-3 text-left text-sm text-slate-200 transition hover:border-app-500/30 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => navigate(targetRoute)}
+                    className="flex items-center justify-between rounded-2xl border border-slate-800 px-4 py-3 text-left text-sm text-slate-200 transition hover:border-app-500/30 hover:bg-slate-900"
                   >
                     <span className="min-w-0">
                       <span className="block font-medium">{action.label}</span>
-                      <span className="block text-xs text-slate-500">
-                        {isComingSoon ? "Coming soon" : "Open now"}
-                      </span>
+                      <span className="block text-xs text-slate-500">Open now</span>
                     </span>
                     <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
                   </button>
@@ -317,7 +316,7 @@ function OrganizationDashboardPage() {
             ) : (
               <EmptyState
                 title="No quick actions"
-                message="The backend did not return any dashboard shortcuts yet."
+                message="No dashboard shortcuts are available for your account."
               />
             )}
           </div>

@@ -94,14 +94,6 @@ function DashboardLayout() {
       return;
     }
 
-    if (item.action === "profile") {
-      toast("Profile settings will be available in a future phase");
-      return;
-    }
-
-    if (item.comingSoon) {
-      toast("This section is coming soon");
-    }
   }
 
   return (

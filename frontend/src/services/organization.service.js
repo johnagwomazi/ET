@@ -16,8 +16,8 @@ export async function getOrganizations(query = {}, options = {}) {
   return unwrapResponse(response);
 }
 
-export async function getOrganizationById(organizationId) {
-  const response = await get(buildOrganizationPath(`/${organizationId}`));
+export async function getOrganizationById(organizationId, options = {}) {
+  const response = await get(buildOrganizationPath(`/${organizationId}`), options);
 
   return unwrapResponse(response);
 }
@@ -82,14 +82,14 @@ export async function updateMyOrganizationSettings(payload) {
   return unwrapResponse(response);
 }
 
-export async function getMyOrganizationDashboard() {
-  const response = await get(buildMyOrganizationPath("/dashboard"));
+export async function getMyOrganizationDashboard(options = {}) {
+  const response = await get(buildMyOrganizationPath("/dashboard"), options);
 
   return unwrapResponse(response);
 }
 
-export async function getOrganizationMembers(query = {}) {
-  const response = await get(buildMyOrganizationPath("/members", query));
+export async function getOrganizationMembers(query = {}, options = {}) {
+  const response = await get(buildMyOrganizationPath("/members", query), options);
 
   return unwrapResponse(response);
 }

@@ -1,8 +1,5 @@
-import dns from 'node:dns';
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
-dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 import express from "express";
 import helmet from "helmet";
@@ -19,6 +16,7 @@ import createRequestLogger from "./middleware/requestLogger.middleware.js";
 import routes from "./routes/index.routes.js";
 import notFoundMiddleware from "./middleware/notFound.middleware.js";
 import errorHandlerMiddleware from "./middleware/errorHandler.middleware.js";
+import cacheControlMiddleware from "./middleware/cacheControl.middleware.js";
 
 const app = express();
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -28,8 +26,8 @@ const eventOperationsPattern = new RegExp(
   `^${escapedApiPrefix}/(?:manager/events/[^/]+|organizations/me/events/[^/]+)/(?:tickets|attendance)(?:/|$)`
 );
 
-function isEventOperationsRequest(req) {
-  return eventOperationsPattern.test(req.path);
+function isHighVolumeOperationalRequest(req) {
+  return eventOperationsPattern.test(req.path) || req.path === `${appConfig.apiPrefix}/payments/paystack/webhook`;
 }
 
 app.set("trust proxy", appConfig.trustProxy);
@@ -51,7 +49,8 @@ app.use(`${appConfig.apiPrefix}/payments/paystack/webhook`, express.raw({ type: 
 app.use(express.json({ limit: appConfig.requestBodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: appConfig.requestBodyLimit }));
 app.use(createRequestLogger());
-app.use(createRateLimiter({ skip: isEventOperationsRequest }));
+app.use(cacheControlMiddleware);
+app.use(createRateLimiter({ skip: isHighVolumeOperationalRequest }));
 app.use(
   [
     `${appConfig.apiPrefix}/manager/events/:eventId/tickets`,
@@ -59,6 +58,10 @@ app.use(
     `${appConfig.apiPrefix}/organizations/me/events/:eventId/tickets`,
     `${appConfig.apiPrefix}/organizations/me/events/:eventId/attendance`,
   ],
+  createRateLimiter({ max: envConfig.eventOperationsRateLimitMax })
+);
+app.use(
+  `${appConfig.apiPrefix}/payments/paystack/webhook`,
   createRateLimiter({ max: envConfig.eventOperationsRateLimitMax })
 );
 

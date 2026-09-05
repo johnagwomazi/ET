@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import PublicLayout from "../layouts/PublicLayout";
 import AuthLayout from "../layouts/AuthLayout";
@@ -10,42 +11,44 @@ import OrganizationRoute from "./guards/OrganizationRoute";
 import PermissionRoute from "./guards/PermissionRoute";
 import { ROUTE_PATHS } from "./routePaths";
 import HomePage from "../pages/HomePage";
-import SignUpChoicePage from "../pages/SignUpChoicePage";
-import CustomerRegisterPage from "../pages/CustomerRegisterPage";
-import OrganizerRegisterPage from "../pages/OrganizerRegisterPage";
-import LoginPage from "../pages/LoginPage";
-import CheckoutPage from "../pages/CheckoutPage";
-import PaymentConfirmationPage from "../pages/PaymentConfirmationPage";
-import AdminLoginPage from "../pages/AdminLoginPage";
-import ForgotPasswordPage from "../pages/ForgotPasswordPage";
-import ResetPasswordPage from "../pages/ResetPasswordPage";
-import VerifyEmailPage from "../pages/VerifyEmailPage";
-import OrganizationDashboardPage from "../pages/OrganizationDashboardPage";
-import EventsPage from "../pages/events/EventsPage";
-import EventDetailsPage from "../pages/events/EventDetailsPage";
-import EventEditorPage from "../pages/events/EventEditorPage";
-import OrganizationProfilePage from "../pages/organization/OrganizationProfilePage";
-import OrganizationSettingsPage from "../pages/organization/OrganizationSettingsPage";
-import OrganizationMembersPage from "../pages/organization/OrganizationMembersPage";
-import OrganizationFinancePage from "../pages/organization/OrganizationFinancePage";
-import CustomerTicketsPage from "../pages/customer/CustomerTicketsPage";
-import CustomerProfilePage from "../pages/customer/CustomerProfilePage";
-import CustomerHistoryPage from "../pages/customer/CustomerHistoryPage";
-import SuperAdminRolesPermissionsPage from "../pages/super-admin/SuperAdminRolesPermissionsPage";
-import SuperAdminDashboardPage from "../pages/super-admin/SuperAdminDashboardPage";
-import OrganizationsPage from "../pages/super-admin/OrganizationsPage";
-import UsersPage from "../pages/super-admin/UsersPage";
-import WithdrawalsPage from "../pages/super-admin/WithdrawalsPage";
-import OrganizationAnalyticsPage from "../pages/analytics/OrganizationAnalyticsPage";
-import EventAnalyticsPage from "../pages/analytics/EventAnalyticsPage";
-import PlatformAnalyticsPage from "../pages/analytics/PlatformAnalyticsPage";
-import NotificationHistoryPage from "../pages/notifications/NotificationHistoryPage";
-import ForbiddenPage from "../pages/ForbiddenPage";
-import PublicEventDetailsPage from "../pages/events/PublicEventDetailsPage";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants";
 import { USER_ROLES } from "../constants/roles.constants";
-import NotFoundPage from "../pages/NotFoundPage";
 import { Navigate } from "react-router-dom";
+import RouteLoadingState from "../components/common/RouteLoadingState";
+
+const SignUpChoicePage = lazy(() => import("../pages/SignUpChoicePage"));
+const CustomerRegisterPage = lazy(() => import("../pages/CustomerRegisterPage"));
+const OrganizerRegisterPage = lazy(() => import("../pages/OrganizerRegisterPage"));
+const LoginPage = lazy(() => import("../pages/LoginPage"));
+const CheckoutPage = lazy(() => import("../pages/CheckoutPage"));
+const PaymentConfirmationPage = lazy(() => import("../pages/PaymentConfirmationPage"));
+const AdminLoginPage = lazy(() => import("../pages/AdminLoginPage"));
+const ForgotPasswordPage = lazy(() => import("../pages/ForgotPasswordPage"));
+const ResetPasswordPage = lazy(() => import("../pages/ResetPasswordPage"));
+const VerifyEmailPage = lazy(() => import("../pages/VerifyEmailPage"));
+const OrganizationDashboardPage = lazy(() => import("../pages/OrganizationDashboardPage"));
+const EventsPage = lazy(() => import("../pages/events/EventsPage"));
+const EventDetailsPage = lazy(() => import("../pages/events/EventDetailsPage"));
+const EventEditorPage = lazy(() => import("../pages/events/EventEditorPage"));
+const OrganizationProfilePage = lazy(() => import("../pages/organization/OrganizationProfilePage"));
+const OrganizationSettingsPage = lazy(() => import("../pages/organization/OrganizationSettingsPage"));
+const OrganizationMembersPage = lazy(() => import("../pages/organization/OrganizationMembersPage"));
+const OrganizationFinancePage = lazy(() => import("../pages/organization/OrganizationFinancePage"));
+const CustomerTicketsPage = lazy(() => import("../pages/customer/CustomerTicketsPage"));
+const CustomerProfilePage = lazy(() => import("../pages/customer/CustomerProfilePage"));
+const CustomerHistoryPage = lazy(() => import("../pages/customer/CustomerHistoryPage"));
+const SuperAdminRolesPermissionsPage = lazy(() => import("../pages/super-admin/SuperAdminRolesPermissionsPage"));
+const SuperAdminDashboardPage = lazy(() => import("../pages/super-admin/SuperAdminDashboardPage"));
+const OrganizationsPage = lazy(() => import("../pages/super-admin/OrganizationsPage"));
+const UsersPage = lazy(() => import("../pages/super-admin/UsersPage"));
+const WithdrawalsPage = lazy(() => import("../pages/super-admin/WithdrawalsPage"));
+const OrganizationAnalyticsPage = lazy(() => import("../pages/analytics/OrganizationAnalyticsPage"));
+const EventAnalyticsPage = lazy(() => import("../pages/analytics/EventAnalyticsPage"));
+const PlatformAnalyticsPage = lazy(() => import("../pages/analytics/PlatformAnalyticsPage"));
+const NotificationHistoryPage = lazy(() => import("../pages/notifications/NotificationHistoryPage"));
+const ForbiddenPage = lazy(() => import("../pages/ForbiddenPage"));
+const PublicEventDetailsPage = lazy(() => import("../pages/events/PublicEventDetailsPage"));
+const NotFoundPage = lazy(() => import("../pages/NotFoundPage"));
 
 const router = createBrowserRouter([
   {
@@ -368,7 +371,11 @@ const router = createBrowserRouter([
 ]);
 
 function AppRouter() {
-  return <RouterProvider router={router} />;
+  return (
+    <Suspense fallback={<RouteLoadingState />}>
+      <RouterProvider router={router} future={{ v7_startTransition: true }} />
+    </Suspense>
+  );
 }
 
 export default AppRouter;

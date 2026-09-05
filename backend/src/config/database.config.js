@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import dns from "node:dns";
 import envConfig from "./env.config.js";
 import logger from "../lib/logger.js";
 import EventAttendance from "../models/eventAttendance.model.js";
@@ -17,8 +18,12 @@ export async function connectDatabase() {
     return mongoose.connection;
   }
 
+  if (envConfig.dnsServers.length > 0) {
+    dns.setServers(envConfig.dnsServers);
+  }
+
   await mongoose.connect(envConfig.mongoUri);
-  await EventAttendance.syncIndexes();
+  await EventAttendance.createIndexes();
   isConnected = true;
 
   logger.info("MongoDB connection established");

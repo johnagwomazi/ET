@@ -6,7 +6,6 @@ import {
   Settings2,
   Ticket,
   Users,
-  FileText,
   ChartColumn,
   CalendarDays,
   Clock3,
@@ -19,11 +18,6 @@ import { USER_ROLES } from "./roles.constants";
 import { ORGANIZATION_PERMISSIONS } from "./organizationPermissions.constants";
 
 const sharedFooterItems = [
-  {
-    label: "Profile",
-    icon: CircleUserRound,
-    action: "profile",
-  },
   {
     label: "Logout",
     icon: LogOut,
@@ -66,16 +60,6 @@ export const SUPER_ADMIN_NAVIGATION = {
       label: "Withdrawals",
       icon: CreditCard,
       to: ROUTE_PATHS.SUPER_ADMIN_WITHDRAWALS,
-    },
-    {
-      label: "Reports",
-      icon: FileText,
-      comingSoon: true,
-    },
-    {
-      label: "Settings",
-      icon: Settings2,
-      comingSoon: true,
     },
   ],
   footer: sharedFooterItems,
@@ -165,7 +149,7 @@ export const CUSTOMER_NAVIGATION = {
     },
   ],
   overflow: [],
-  footer: [sharedFooterItems[1]],
+  footer: sharedFooterItems,
 };
 
 const ORGANIZATION_NAVIGATION = {

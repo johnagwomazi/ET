@@ -108,7 +108,6 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: "",
       trim: true,
-      index: true,
     },
     paymentProvider: {
       type: String,
@@ -132,6 +131,11 @@ const orderSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    refundReservedAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     metadata: {
       type: mongoose.Schema.Types.Mixed,
       default: () => ({}),
@@ -143,6 +147,10 @@ const orderSchema = new mongoose.Schema(
 );
 
 orderSchema.index({ customer: 1, createdAt: -1 });
+orderSchema.index(
+  { paymentReference: 1 },
+  { unique: true, partialFilterExpression: { paymentReference: { $type: "string", $gt: "" } } }
+);
 orderSchema.index({ organization: 1, event: 1, createdAt: -1 });
 orderSchema.index({ paymentStatus: 1, paidAt: -1, createdAt: -1 });
 orderSchema.index({ organization: 1, event: 1, paymentStatus: 1, paidAt: -1 });

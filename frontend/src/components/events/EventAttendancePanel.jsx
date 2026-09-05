@@ -304,6 +304,8 @@ function EventAttendancePanel({ event, scope = "organization" }) {
   const pollingRef = useRef(false);
   const attendanceRequestRef = useRef(0);
   const liveRequestRef = useRef(0);
+  const attendanceControllerRef = useRef(null);
+  const liveControllerRef = useRef(null);
   const ticketValidationLockRef = useRef(false);
   const ticketCheckInLockRef = useRef(false);
   const [attendance, setAttendance] = useState([]);
@@ -345,14 +347,21 @@ function EventAttendancePanel({ event, scope = "organization" }) {
 
     const requestId = attendanceRequestRef.current + 1;
     attendanceRequestRef.current = requestId;
+    attendanceControllerRef.current?.abort();
+    const controller = new AbortController();
+    attendanceControllerRef.current = controller;
 
     if (!quiet) setIsLoading(true);
     setError(null);
 
     try {
-      const response = await service.list(eventId, { page, limit: ATTENDANCE_PAGE_LIMIT, search });
+      const response = await service.list(
+        eventId,
+        { page, limit: ATTENDANCE_PAGE_LIMIT, search },
+        { signal: controller.signal }
+      );
 
-      if (requestId !== attendanceRequestRef.current) {
+      if (controller.signal.aborted || requestId !== attendanceRequestRef.current) {
         return response;
       }
 
@@ -362,7 +371,7 @@ function EventAttendancePanel({ event, scope = "organization" }) {
       setLastSyncedAt(new Date());
       return response;
     } catch (loadError) {
-      if (requestId !== attendanceRequestRef.current) {
+      if (controller.signal.aborted || requestId !== attendanceRequestRef.current) {
         return null;
       }
 
@@ -371,6 +380,7 @@ function EventAttendancePanel({ event, scope = "organization" }) {
       throw loadError;
     } finally {
       if (!quiet && requestId === attendanceRequestRef.current) setIsLoading(false);
+      if (attendanceControllerRef.current === controller) attendanceControllerRef.current = null;
     }
   }
 
@@ -379,14 +389,17 @@ function EventAttendancePanel({ event, scope = "organization" }) {
     pollingRef.current = true;
     const requestId = liveRequestRef.current + 1;
     liveRequestRef.current = requestId;
+    liveControllerRef.current?.abort();
+    const controller = new AbortController();
+    liveControllerRef.current = controller;
 
     try {
       const [recentResult, countResult] = await Promise.allSettled([
-        service.recent(eventId, { limit: RECENT_CHECK_IN_LIMIT }),
-        service.count(eventId),
+        service.recent(eventId, { limit: RECENT_CHECK_IN_LIMIT }, { signal: controller.signal }),
+        service.count(eventId, { signal: controller.signal }),
       ]);
 
-      if (requestId !== liveRequestRef.current) return;
+      if (controller.signal.aborted || requestId !== liveRequestRef.current) return;
 
       if (recentResult.status === "fulfilled") {
         setRecentCheckIns(recentResult.value?.recentCheckIns || []);
@@ -407,6 +420,7 @@ function EventAttendancePanel({ event, scope = "organization" }) {
         pollingRef.current = false;
         setIsLiveLoading(false);
       }
+      if (liveControllerRef.current === controller) liveControllerRef.current = null;
     }
   }
 
@@ -418,6 +432,7 @@ function EventAttendancePanel({ event, scope = "organization" }) {
     loadAttendance({ page: queryPage, search: debouncedSearch }).catch(() => {});
 
     return () => {
+      attendanceControllerRef.current?.abort();
       attendanceRequestRef.current += 1;
     };
   }, [eventId, queryPage, scope, debouncedSearch]);
@@ -436,6 +451,7 @@ function EventAttendancePanel({ event, scope = "organization" }) {
 
     return () => {
       if (intervalId) window.clearInterval(intervalId);
+      liveControllerRef.current?.abort();
       liveRequestRef.current += 1;
       pollingRef.current = false;
     };

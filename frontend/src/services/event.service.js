@@ -28,14 +28,14 @@ export async function getOrganizationEvents(query = {}, options = {}) {
   return unwrapResponse(response);
 }
 
-export async function getOrganizationEventById(eventId) {
-  const response = await get(buildOrganizationEventPath(`/${eventId}`));
+export async function getOrganizationEventById(eventId, options = {}) {
+  const response = await get(buildOrganizationEventPath(`/${eventId}`), options);
 
   return unwrapResponse(response);
 }
 
-export async function getOrganizationEventHistory(eventId, query = {}) {
-  const response = await get(buildOrganizationEventPath(`/${eventId}/history`, query));
+export async function getOrganizationEventHistory(eventId, query = {}, options = {}) {
+  const response = await get(buildOrganizationEventPath(`/${eventId}/history`, query), options);
 
   return unwrapResponse(response);
 }
@@ -70,8 +70,8 @@ export async function completeOrganizationEvent(eventId) {
   return unwrapResponse(response);
 }
 
-export async function getOrganizationEventManagers(eventId, query = {}) {
-  const response = await get(buildOrganizationEventPath(`/${eventId}/managers`, query));
+export async function getOrganizationEventManagers(eventId, query = {}, options = {}) {
+  const response = await get(buildOrganizationEventPath(`/${eventId}/managers`, query), options);
 
   return unwrapResponse(response);
 }
@@ -88,8 +88,8 @@ export async function removeOrganizationEventManager(eventId, userId) {
   return unwrapResponse(response);
 }
 
-export async function getOrganizationEventAttendance(eventId, query = {}) {
-  const response = await get(buildOrganizationEventPath(`/${eventId}/attendance`, query));
+export async function getOrganizationEventAttendance(eventId, query = {}, options = {}) {
+  const response = await get(buildOrganizationEventPath(`/${eventId}/attendance`, query), options);
 
   return unwrapResponse(response);
 }
@@ -100,14 +100,14 @@ export async function recordOrganizationEventAttendance(eventId, payload) {
   return unwrapResponse(response);
 }
 
-export async function getOrganizationEventAttendanceCount(eventId) {
-  const response = await get(buildOrganizationEventPath(`/${eventId}/attendance/count`));
+export async function getOrganizationEventAttendanceCount(eventId, options = {}) {
+  const response = await get(buildOrganizationEventPath(`/${eventId}/attendance/count`), options);
 
   return unwrapResponse(response);
 }
 
-export async function getOrganizationEventRecentAttendance(eventId, query = {}) {
-  const response = await get(buildOrganizationEventPath(`/${eventId}/attendance/recent`, query));
+export async function getOrganizationEventRecentAttendance(eventId, query = {}, options = {}) {
+  const response = await get(buildOrganizationEventPath(`/${eventId}/attendance/recent`, query), options);
 
   return unwrapResponse(response);
 }
@@ -124,8 +124,8 @@ export async function getOrganizationEventAttendanceExcel(eventId, query = {}) {
   });
 }
 
-export async function getManagerEventAttendance(eventId, query = {}) {
-  const response = await get(buildManagerEventPath(`/${eventId}/attendance`, query));
+export async function getManagerEventAttendance(eventId, query = {}, options = {}) {
+  const response = await get(buildManagerEventPath(`/${eventId}/attendance`, query), options);
 
   return unwrapResponse(response);
 }
@@ -136,14 +136,14 @@ export async function recordManagerEventAttendance(eventId, payload) {
   return unwrapResponse(response);
 }
 
-export async function getManagerEventAttendanceCount(eventId) {
-  const response = await get(buildManagerEventPath(`/${eventId}/attendance/count`));
+export async function getManagerEventAttendanceCount(eventId, options = {}) {
+  const response = await get(buildManagerEventPath(`/${eventId}/attendance/count`), options);
 
   return unwrapResponse(response);
 }
 
-export async function getManagerEventRecentAttendance(eventId, query = {}) {
-  const response = await get(buildManagerEventPath(`/${eventId}/attendance/recent`, query));
+export async function getManagerEventRecentAttendance(eventId, query = {}, options = {}) {
+  const response = await get(buildManagerEventPath(`/${eventId}/attendance/recent`, query), options);
 
   return unwrapResponse(response);
 }
@@ -175,14 +175,14 @@ export async function updateEvent(eventId, payload, bannerFile = null) {
   return unwrapResponse(response);
 }
 
-export async function getManagerAssignedEvents(query = {}) {
-  const response = await get(buildManagerEventPath("", query));
+export async function getManagerAssignedEvents(query = {}, options = {}) {
+  const response = await get(buildManagerEventPath("", query), options);
 
   return unwrapResponse(response);
 }
 
-export async function getManagerAssignedEventById(eventId) {
-  const response = await get(buildManagerEventPath(`/${eventId}`));
+export async function getManagerAssignedEventById(eventId, options = {}) {
+  const response = await get(buildManagerEventPath(`/${eventId}`), options);
 
   return unwrapResponse(response);
 }

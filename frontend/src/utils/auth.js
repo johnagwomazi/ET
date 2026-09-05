@@ -48,7 +48,14 @@ export function getPostLoginRouteForRole(role) {
 }
 
 function getSafeInternalPath(path) {
-  if (typeof path !== "string" || !path.startsWith("/") || path.startsWith("//")) {
+  if (
+    typeof path !== "string" ||
+    !path.startsWith("/") ||
+    path.startsWith("//") ||
+    path.includes("\\") ||
+    /%5c/i.test(path) ||
+    /[\u0000-\u001f\u007f]/.test(path)
+  ) {
     return null;
   }
 

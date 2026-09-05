@@ -73,8 +73,8 @@ function LoginPage() {
           </div>
 
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
-            <Input label="Email" type="email" placeholder="name@example.com" error={errors.email?.message} {...register("email")} />
-            <PasswordInput label="Password" placeholder="Enter your password" error={errors.password?.message} {...register("password")} />
+            <Input label="Email" type="email" autoComplete="email" placeholder="name@example.com" error={errors.email?.message} {...register("email")} />
+            <PasswordInput label="Password" autoComplete="current-password" placeholder="Enter your password" error={errors.password?.message} {...register("password")} />
 
             <div className="flex items-center justify-between gap-4 text-sm">
               <Link to={ROUTE_PATHS.FORGOT_PASSWORD} className="text-slate-400 transition hover:text-slate-200">

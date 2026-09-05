@@ -232,9 +232,13 @@ function EventsPage({ scope = "organization" }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const queryRef = useRef(isManager ? managerInitialQuery : orgInitialQuery);
+  const requestControllerRef = useRef(null);
   const debouncedSearch = useDebouncedValue(searchValue, 350);
 
   async function loadEvents(overrides = {}, options = {}) {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     const nextQuery = {
       ...queryRef.current,
       ...overrides,
@@ -261,24 +265,32 @@ function EventsPage({ scope = "organization" }) {
 
     try {
       const response = isManager
-        ? await eventService.getManagerAssignedEvents(nextQuery)
-        : await eventService.getOrganizationEvents(nextQuery);
+        ? await eventService.getManagerAssignedEvents(nextQuery, { signal: controller.signal })
+        : await eventService.getOrganizationEvents(nextQuery, { signal: controller.signal });
+
+      if (controller.signal.aborted) return null;
 
       setEvents(response?.events || []);
       setPagination(response?.pagination || { page: 1, limit: TABLE_QUERY_LIMIT, totalItems: 0, totalPages: 0 });
       return response;
     } catch (loadError) {
+      if (controller.signal.aborted) return null;
       const message = loadError instanceof Error ? loadError.message : "Unable to load events";
       setError(message);
       throw loadError;
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (requestControllerRef.current === controller) {
+        requestControllerRef.current = null;
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
   }
 
   useEffect(() => {
     loadEvents().catch(() => {});
+
+    return () => requestControllerRef.current?.abort();
   }, [scope]);
 
   useEffect(() => {

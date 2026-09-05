@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, RefreshCw, Search } from "lucide-react";
 import toast from "react-hot-toast";
 import Card from "../ui/Card";
@@ -87,6 +87,8 @@ function EventManagersPanel({ event, canManageManagers = false }) {
   const [assigningUserId, setAssigningUserId] = useState(null);
   const [managerToRemove, setManagerToRemove] = useState(null);
   const [isRemovingManager, setIsRemovingManager] = useState(false);
+  const managersControllerRef = useRef(null);
+  const candidatesControllerRef = useRef(null);
 
   const debouncedCandidateSearch = useDebouncedValue(candidateSearch, 300);
   const currentManagerIds = useMemo(
@@ -103,22 +105,31 @@ function EventManagersPanel({ event, canManageManagers = false }) {
 
     setIsLoading(true);
     setError(null);
+    managersControllerRef.current?.abort();
+    const controller = new AbortController();
+    managersControllerRef.current = controller;
 
     try {
       const response = await eventService.getOrganizationEventManagers(eventId, {
         page: 1,
         limit: 100,
-      });
+      }, { signal: controller.signal });
+
+      if (controller.signal.aborted) return null;
 
       setManagers(response?.managers || []);
       setPagination(response?.pagination || null);
       return response;
     } catch (loadError) {
+      if (controller.signal.aborted) return null;
       const message = loadError instanceof Error ? loadError.message : "Unable to load managers";
       setError(message);
       throw loadError;
     } finally {
-      setIsLoading(false);
+      if (managersControllerRef.current === controller) {
+        managersControllerRef.current = null;
+        setIsLoading(false);
+      }
     }
   }
 
@@ -131,17 +142,25 @@ function EventManagersPanel({ event, canManageManagers = false }) {
 
     setIsCandidatesLoading(true);
     setCandidatesError(null);
+    candidatesControllerRef.current?.abort();
+    const controller = new AbortController();
+    candidatesControllerRef.current = controller;
 
     try {
-      const response = await organizationService.getOrganizationMembers({
-        search,
-        role: "MANAGER",
-        status: "ACTIVE",
-        page,
-        limit: MANAGER_PAGE_LIMIT,
-        sortBy: "createdAt",
-        sortOrder: "desc",
-      });
+      const response = await organizationService.getOrganizationMembers(
+        {
+          search,
+          role: "MANAGER",
+          status: "ACTIVE",
+          page,
+          limit: MANAGER_PAGE_LIMIT,
+          sortBy: "createdAt",
+          sortOrder: "desc",
+        },
+        { signal: controller.signal }
+      );
+
+      if (controller.signal.aborted) return null;
 
       const members = (response?.members || []).filter((member) => !currentManagerIds.has(String(member.id || member._id || "")));
 
@@ -149,16 +168,22 @@ function EventManagersPanel({ event, canManageManagers = false }) {
       setCandidatePagination(response?.pagination || null);
       return response;
     } catch (loadError) {
+      if (controller.signal.aborted) return null;
       const message = loadError instanceof Error ? loadError.message : "Unable to load manager candidates";
       setCandidatesError(message);
       throw loadError;
     } finally {
-      setIsCandidatesLoading(false);
+      if (candidatesControllerRef.current === controller) {
+        candidatesControllerRef.current = null;
+        setIsCandidatesLoading(false);
+      }
     }
   }
 
   useEffect(() => {
     loadManagers().catch(() => {});
+
+    return () => managersControllerRef.current?.abort();
   }, [canManageManagers, eventId]);
 
   useEffect(() => {
@@ -175,7 +200,7 @@ function EventManagersPanel({ event, canManageManagers = false }) {
     }
 
     loadCandidates({ page: candidatePage, search: debouncedCandidateSearch }).catch(() => {});
-    return undefined;
+    return () => candidatesControllerRef.current?.abort();
   }, [candidatePage, debouncedCandidateSearch, eventId, isAssignOpen]);
 
   function openAssignModal() {
@@ -263,7 +288,7 @@ function EventManagersPanel({ event, canManageManagers = false }) {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-app-300">Managers</p>
           <h3 className="text-lg font-semibold text-white">Event manager assignments</h3>
           <p className="text-sm leading-6 text-slate-400">
-            Assign active organization managers to this event and keep the current roster in sync with the backend.
+            Assign active organization managers to this event and review the current roster.
           </p>
         </div>
 

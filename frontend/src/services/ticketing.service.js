@@ -2,8 +2,8 @@ import { get, patch, post } from "../api/httpClient";
 import { unwrapResponse } from "../utils/response";
 import { buildQueryString } from "../utils/query";
 
-export async function getPublicEventTicketTypes(eventId) {
-  const response = await get(`/events/${eventId}/ticket-types`);
+export async function getPublicEventTicketTypes(eventId, options = {}) {
+  const response = await get(`/events/${eventId}/ticket-types`, options);
   return unwrapResponse(response);
 }
 
@@ -12,8 +12,8 @@ export async function createCheckoutOrder(payload) {
   return unwrapResponse(response);
 }
 
-export async function verifyPayment(payload) {
-  const response = await post("/ticketing/payments/verify", payload);
+export async function verifyPayment(payload, options = {}) {
+  const response = await post("/ticketing/payments/verify", payload, options);
   return unwrapResponse(response);
 }
 

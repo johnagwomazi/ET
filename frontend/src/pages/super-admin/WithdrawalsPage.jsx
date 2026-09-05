@@ -259,7 +259,7 @@ function WithdrawalsPage() {
       <ConfirmationDialog
         open={action?.type === "approve"}
         title="Approve withdrawal"
-        message={action?.withdrawal ? `Approve ${formatMoney(action.withdrawal.amount, action.withdrawal.currency)} for ${action.withdrawal.organizationDetails?.name || "this organization"}? The backend will initiate the Paystack transfer and return its authoritative state.` : ""}
+        message={action?.withdrawal ? `Approve ${formatMoney(action.withdrawal.amount, action.withdrawal.currency)} for ${action.withdrawal.organizationDetails?.name || "this organization"}? This will begin the Paystack transfer.` : ""}
         confirmText="Approve Withdrawal"
         isLoading={isMutating}
         onCancel={() => setAction(null)}

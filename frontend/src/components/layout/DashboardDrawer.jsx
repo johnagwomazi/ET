@@ -1,9 +1,13 @@
+import { useId } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import Button from "../ui/Button";
+import { useDialogAccessibility } from "../../hooks/useDialogAccessibility";
 
 function DashboardDrawer({ open, title, subtitle, children, footer, onClose, side = "right", widthClass = "max-w-md" }) {
   const slideFrom = side === "left" ? { x: "-100%" } : { x: "100%" };
+  const titleId = useId();
+  const drawerRef = useDialogAccessibility(open, onClose);
 
   return (
     <AnimatePresence>
@@ -12,6 +16,11 @@ function DashboardDrawer({ open, title, subtitle, children, footer, onClose, sid
           <button type="button" aria-label="Close drawer" className="absolute inset-0 cursor-default" onClick={onClose} />
 
           <motion.aside
+            ref={drawerRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
             initial={slideFrom}
             animate={{ x: 0 }}
             exit={slideFrom}
@@ -22,7 +31,7 @@ function DashboardDrawer({ open, title, subtitle, children, footer, onClose, sid
             <div className="flex h-full flex-col">
               <div className="flex items-start justify-between border-b border-slate-800 px-6 py-5">
                 <div className="space-y-1">
-                  <h3 className="text-lg font-semibold text-white">{title}</h3>
+                  <h3 id={titleId} className="text-lg font-semibold text-white">{title}</h3>
                   {subtitle ? <p className="text-sm leading-6 text-slate-400">{subtitle}</p> : null}
                 </div>
 

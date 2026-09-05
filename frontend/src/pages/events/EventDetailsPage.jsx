@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Building2, CalendarDays, Clock3, MapPin, UserCircle2, Users } from "lucide-react";
 import Card from "../../components/ui/Card";
@@ -74,6 +74,7 @@ function EventDetailsPage({ scope = "organization" }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [errorStatus, setErrorStatus] = useState(null);
+  const requestControllerRef = useRef(null);
 
   async function loadEvent({ quiet = false } = {}) {
     if (!eventId) {
@@ -90,16 +91,22 @@ function EventDetailsPage({ scope = "organization" }) {
 
     setError(null);
     setErrorStatus(null);
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
 
     try {
       const response = isManager
-        ? await eventService.getManagerAssignedEventById(eventId)
-        : await eventService.getOrganizationEventById(eventId);
+        ? await eventService.getManagerAssignedEventById(eventId, { signal: controller.signal })
+        : await eventService.getOrganizationEventById(eventId, { signal: controller.signal });
+
+      if (controller.signal.aborted) return null;
 
       const nextEvent = response?.event || null;
       setEvent(nextEvent);
       return nextEvent;
     } catch (loadError) {
+      if (controller.signal.aborted) return null;
       const status = loadError?.status || null;
       const message = loadError instanceof Error ? loadError.message : "Unable to load event details";
       setError(message);
@@ -118,13 +125,18 @@ function EventDetailsPage({ scope = "organization" }) {
 
       throw loadError;
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (requestControllerRef.current === controller) {
+        requestControllerRef.current = null;
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
   }
 
   useEffect(() => {
     loadEvent().catch(() => {});
+
+    return () => requestControllerRef.current?.abort();
   }, [eventId, scope]);
 
   const summaryCards = useMemo(() => {
@@ -204,7 +216,7 @@ function EventDetailsPage({ scope = "organization" }) {
             {event.banner?.url ? (
               <img
                 src={event.banner.url}
-                alt=""
+                alt={event.eventName || "Event banner"}
                 className="h-20 w-20 shrink-0 rounded-lg object-cover sm:h-24 sm:w-24"
               />
             ) : null}
@@ -369,7 +381,6 @@ function EventDetailsPage({ scope = "organization" }) {
               label="Organization"
               value={
                 event.organization?.organizationName ||
-                event.organization?.name ||
                 (isManager ? "Assigned organization" : "Organization not attached")
               }
               icon={Building2}

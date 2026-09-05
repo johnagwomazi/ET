@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, CircleAlert, RefreshCw } from "lucide-react";
 import AuthCard from "../components/layout/AuthCard";
 import AuthHeader from "../components/layout/AuthHeader";
 import Button from "../components/ui/Button";
@@ -10,15 +10,30 @@ import StatusBadge from "../components/dashboard/StatusBadge";
 import { ROUTE_PATHS } from "../routes/routePaths";
 import { formatMoney } from "../utils/formatters";
 import * as ticketingService from "../services/ticketing.service";
+import {
+  clearCheckoutSelection,
+  clearPaymentReference,
+  loadPaymentReference,
+} from "../utils/checkoutStorage";
+
+function getVerificationErrorMessage(error) {
+  if (error?.status === 429) return "Payment verification is temporarily limited. Wait a moment before trying again.";
+  if (error?.status === 502 || error?.status === 503) return "The payment provider is not responding yet. Your payment has not been marked successful.";
+  if (error?.status === 0) return "The server could not be reached. Check your connection before trying again.";
+  return "Payment could not be verified. Your order has not been marked successful.";
+}
 
 function PaymentConfirmationPage() {
   const [searchParams] = useSearchParams();
-  const reference = searchParams.get("reference") || sessionStorage.getItem("events_last_payment_reference") || "";
+  const [reference] = useState(() => searchParams.get("reference") || loadPaymentReference());
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     async function verify() {
       if (!reference) {
         setError("Payment reference is missing");
@@ -26,32 +41,82 @@ function PaymentConfirmationPage() {
         return;
       }
 
+      setIsLoading(true);
+      setError(null);
+
       try {
-        const response = await ticketingService.verifyPayment({ reference });
+        const response = await ticketingService.verifyPayment(
+          { reference },
+          { signal: controller.signal }
+        );
+        if (controller.signal.aborted) return;
         setResult(response);
+        if (response?.order?.paymentStatus === "PAID") {
+          clearCheckoutSelection();
+          clearPaymentReference();
+        }
       } catch (verifyError) {
-        setError(verifyError.message || "Payment verification failed");
+        if (!controller.signal.aborted) setError(getVerificationErrorMessage(verifyError));
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted) setIsLoading(false);
       }
     }
 
     verify();
-  }, [reference]);
+
+    return () => controller.abort();
+  }, [reference, refreshKey]);
 
   if (isLoading) {
     return <LoadingState label="Verifying payment..." />;
   }
 
   if (error) {
-    return <ErrorState title="Payment not verified" message={error} />;
+    return (
+      <div className="space-y-4">
+        <ErrorState title="Payment not verified" message={error} onRetry={() => setRefreshKey((value) => value + 1)} />
+        <div className="flex justify-center">
+          <Button as={Link} to={ROUTE_PATHS.CUSTOMER_HISTORY} variant="secondary">View order history</Button>
+        </div>
+      </div>
+    );
   }
 
   const order = result?.order;
+  const isPaid = order?.paymentStatus === "PAID";
+
+  if (!isPaid) {
+    return (
+      <AuthCard>
+        <AuthHeader
+          eyebrow="Payment status"
+          title="Payment not confirmed"
+          description="This payment has not been confirmed for the order."
+        />
+        <div className="mt-6 space-y-4">
+          <div className="flex items-start gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 p-4" role="status">
+            <CircleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" aria-hidden="true" />
+            <div>
+              <p className="font-semibold text-amber-100">No ticket has been confirmed from this payment</p>
+              <p className="mt-1 text-sm text-amber-100/80">Check your order history before attempting another payment.</p>
+            </div>
+            {order?.paymentStatus ? <StatusBadge status={order.paymentStatus} className="ml-auto" /> : null}
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={() => setRefreshKey((value) => value + 1)}>
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Verify again
+            </Button>
+            <Button as={Link} to={ROUTE_PATHS.CUSTOMER_HISTORY} variant="secondary">View history</Button>
+          </div>
+        </div>
+      </AuthCard>
+    );
+  }
 
   return (
     <AuthCard>
-      <AuthHeader eyebrow="Confirmation" title="Payment verified" description="Your order was confirmed by the backend and tickets are now available." />
+      <AuthHeader eyebrow="Confirmation" title="Payment verified" description="Your order is confirmed and the tickets are now available." />
       <div className="mt-6 space-y-4">
         <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
           <div className="flex items-center gap-3">

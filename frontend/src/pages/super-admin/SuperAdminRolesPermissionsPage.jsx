@@ -56,7 +56,7 @@ function SuperAdminRolesPermissionsPage() {
   }, [roleDefinitions, selectedRoleKey]);
 
   if (roleDefinitions.length === 0) {
-    return <EmptyState title="No roles available." message="The backend did not return any organization roles." />;
+    return <EmptyState title="No roles available" message="No organization roles are currently available." />;
   }
 
   const selectedRole = roleDefinitions.find((role) => role.key === selectedRoleKey) || roleDefinitions[0];
@@ -69,7 +69,7 @@ function SuperAdminRolesPermissionsPage() {
       <SectionHeader
         eyebrow="Access control"
         title="Roles & Permissions"
-        description="The backend currently exposes a fixed organization role map. Super Admin can review the exact role-to-permission relationship here."
+        description="Review the permissions assigned to each organization role."
         actions={[
           {
             label: "Users",
@@ -90,7 +90,7 @@ function SuperAdminRolesPermissionsPage() {
             System roles only
           </span>
           <span className="text-slate-400">
-            Role editing is not exposed by the current backend, so this page is read only.
+            Organization roles and permissions are read only.
           </span>
         </div>
       </Card>
@@ -153,7 +153,7 @@ function SuperAdminRolesPermissionsPage() {
                 </div>
                 <p className="text-sm leading-6 text-slate-400">{getOrganizationRoleDescription(selectedRole.key)}</p>
                 <p className="text-sm text-slate-500">
-                  The Members page uses the same backend-defined role list for its member role selector.
+                  These roles are also available when assigning access from the Members page.
                 </p>
               </div>
 
@@ -198,7 +198,7 @@ function SuperAdminRolesPermissionsPage() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-white">Role matrix</p>
-                <p className="mt-1 text-sm text-slate-400">Compare all backend-defined permissions across the available organization roles.</p>
+                <p className="mt-1 text-sm text-slate-400">Compare permissions across the available organization roles.</p>
               </div>
               <ShieldCheck className="h-5 w-5 text-slate-400" />
             </div>

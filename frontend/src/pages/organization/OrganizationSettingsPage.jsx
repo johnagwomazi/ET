@@ -175,7 +175,7 @@ function OrganizationSettingsPage() {
           <div className="flex items-start justify-between gap-4 border-b border-slate-800/70 pb-4">
             <div className="space-y-1">
               <p className="text-sm font-semibold text-white">Social links</p>
-              <p className="text-sm text-slate-400">Keep the organization's public link profile in sync with the backend.</p>
+              <p className="text-sm text-slate-400">Manage the organization's public links.</p>
             </div>
             {!canEdit ? (
               <span className="rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
@@ -229,8 +229,7 @@ function OrganizationSettingsPage() {
             <div className="space-y-3">
               <h3 className="text-base font-semibold text-white">Settings overview</h3>
               <p className="text-sm leading-6 text-slate-400">
-                These settings are stored in the organization's backend record and refreshed back into the organization
-                context after every successful save.
+                These settings control how the organization appears and communicates across the platform.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
@@ -249,8 +248,7 @@ function OrganizationSettingsPage() {
             <div className="space-y-3">
               <h3 className="text-base font-semibold text-white">Validation</h3>
               <p className="text-sm leading-6 text-slate-400">
-                The form validates obvious URL mistakes and lets the backend remain the final source of truth for data
-                rules and permissions.
+                Use complete website and social profile URLs, including the `https://` prefix.
               </p>
             </div>
           </Card>

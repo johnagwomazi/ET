@@ -78,7 +78,7 @@ export async function createCheckoutOrder(req, res) {
 }
 
 export async function verifyPayment(req, res) {
-  const result = await ticketingService.verifyPayment(req.body.reference);
+  const result = await ticketingService.verifyPayment(req.auth.userId, req.body.reference);
 
   if (result.error) {
     return sendServiceError(res, result);
@@ -89,7 +89,12 @@ export async function verifyPayment(req, res) {
 
 export async function handlePaystackWebhook(req, res) {
   const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body || {}));
-  const payload = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString("utf8")) : req.body;
+  let payload;
+  try {
+    payload = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString("utf8")) : req.body;
+  } catch (error) {
+    return res.status(HTTP_STATUS.BAD_REQUEST).json(errorResponse("Invalid webhook payload"));
+  }
   const signature = req.headers["x-paystack-signature"];
   const result = await ticketingService.handlePaystackWebhook(rawBody, signature, payload);
 

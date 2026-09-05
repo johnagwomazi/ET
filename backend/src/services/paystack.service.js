@@ -28,27 +28,37 @@ async function paystackRequest(path, options = {}) {
     };
   }
 
-  const response = await fetch(`${PAYSTACK_BASE_URL}${path}`, {
-    method: options.method || "GET",
-    headers: getAuthorizationHeaders(),
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  try {
+    const response = await fetch(`${PAYSTACK_BASE_URL}${path}`, {
+      method: options.method || "GET",
+      headers: getAuthorizationHeaders(),
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: AbortSignal.timeout(envConfig.paystackTimeoutMs),
+    });
 
-  const payload = await response.json().catch(() => null);
+    const payload = await response.json().catch(() => null);
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return {
+        configured: true,
+        status: false,
+        message: payload?.message || "Payment provider request failed",
+        data: payload?.data || null,
+      };
+    }
+
+    return {
+      configured: true,
+      ...payload,
+    };
+  } catch (error) {
     return {
       configured: true,
       status: false,
-      message: payload?.message || "Payment provider request failed",
-      data: payload?.data || null,
+      message: error?.name === "TimeoutError" ? "Payment provider timed out" : "Payment provider is unavailable",
+      data: null,
     };
   }
-
-  return {
-    configured: true,
-    ...payload,
-  };
 }
 
 export async function initializeTransaction({ email, amount, reference, callbackUrl, metadata }) {

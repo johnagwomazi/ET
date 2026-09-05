@@ -1,5 +1,6 @@
 import { API_URL } from "../constants/app.constants";
-import { getStoredAccessToken } from "../utils/authToken";
+
+const inFlightGetRequests = new Map();
 
 function buildUrl(path) {
   if (!path) {
@@ -42,12 +43,6 @@ export async function request(method, path, options = {}) {
       ...headers,
     };
 
-    const storedAccessToken = getStoredAccessToken();
-
-    if (storedAccessToken && !requestHeaders.Authorization && !requestHeaders.authorization) {
-      requestHeaders.Authorization = `Bearer ${storedAccessToken}`;
-    }
-
     if (!isFormData && body !== undefined) {
       requestHeaders["Content-Type"] = "application/json";
     }
@@ -86,15 +81,58 @@ export async function request(method, path, options = {}) {
 
     return payload;
   } catch (error) {
-    if (error?.name !== "AbortError") {
-      console.log(error);
+    if (error?.name === "AbortError") {
+      throw error;
     }
+
+    if (error instanceof TypeError) {
+      const networkError = new Error("Unable to reach the server. Check your connection and try again.");
+      networkError.status = 0;
+      throw networkError;
+    }
+
     throw error;
   }
 }
 
-export function get(path, options) {
-  return request("GET", path, options);
+function waitForRequest(promise, signal) {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new DOMException("The request was aborted", "AbortError"));
+
+  return new Promise((resolve, reject) => {
+    function handleAbort() {
+      reject(new DOMException("The request was aborted", "AbortError"));
+    }
+
+    signal.addEventListener("abort", handleAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", handleAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", handleAbort);
+        reject(error);
+      }
+    );
+  });
+}
+
+export function get(path, options = {}) {
+  const { signal, ...requestOptions } = options;
+  const requestKey = JSON.stringify([path, requestOptions.responseType || "json", requestOptions.headers || {}]);
+  let pendingRequest = inFlightGetRequests.get(requestKey);
+
+  if (!pendingRequest) {
+    pendingRequest = request("GET", path, requestOptions);
+    inFlightGetRequests.set(requestKey, pendingRequest);
+    pendingRequest.then(
+      () => inFlightGetRequests.delete(requestKey),
+      () => inFlightGetRequests.delete(requestKey)
+    );
+  }
+
+  return waitForRequest(pendingRequest, signal);
 }
 
 export function post(path, body, options = {}) {

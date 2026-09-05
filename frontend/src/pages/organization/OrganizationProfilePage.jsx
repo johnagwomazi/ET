@@ -276,8 +276,7 @@ function OrganizationProfilePage() {
                 <h3 className="text-base font-semibold text-white">Logo and media</h3>
               </div>
               <p className="text-sm leading-6 text-slate-400">
-                Logo upload is deferred until the media pipeline is wired. The current API already supports logo metadata,
-                so the page shows the existing logo when available.
+                Review the logo currently associated with this organization.
               </p>
               <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-400">
                 {organization?.logo?.url ? "Current logo is displayed above." : "No logo has been configured yet."}

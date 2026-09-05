@@ -6,7 +6,8 @@ export async function getHealthStatus(req, res) {
   try {
     const healthStatus = await healthService.getHealthStatus();
 
-    return res.status(HTTP_STATUS.OK).json(
+    const statusCode = healthStatus.status === "ready" ? HTTP_STATUS.OK : HTTP_STATUS.SERVICE_UNAVAILABLE;
+    return res.status(statusCode).json(
       successResponse("Operation successful", healthStatus)
     );
   } catch (error) {

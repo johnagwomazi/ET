@@ -31,7 +31,7 @@ function PayoutDetailsModal({ open, isSubmitting, submissionError, onClose, onSu
     <Modal open={open} title="Configure payout account" onClose={isSubmitting ? undefined : onClose} className="max-w-md">
       <form className="space-y-5" onSubmit={handleSubmit}>
         <p className="text-sm leading-6 text-slate-400">
-          The backend verifies this account with Paystack before it can receive withdrawals.
+          Paystack verifies this account before it can receive withdrawals.
         </p>
         <Input
           autoFocus
@@ -67,4 +67,3 @@ function PayoutDetailsModal({ open, isSubmitting, submissionError, onClose, onSu
 }
 
 export default PayoutDetailsModal;
-

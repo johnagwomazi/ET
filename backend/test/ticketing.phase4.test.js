@@ -99,6 +99,7 @@ function createDependencies(overrides = {}) {
     },
   };
   let tickets = [];
+  let refunds = [];
 
   function hydrateTicket(ticket) {
     if (!ticket) {
@@ -201,6 +202,31 @@ function createDependencies(overrides = {}) {
         order = { ...order, ...data };
         return order;
       },
+      async updateOrderByPaymentReferenceAndStatus(reference, statuses, data) {
+        if (reference !== order.paymentReference || !statuses.includes(order.paymentStatus)) {
+          return null;
+        }
+
+        order = { ...order, ...data };
+        return order;
+      },
+      async reserveOrderRefund(reference, amount) {
+        const available = Number(order.total || 0) - Number(order.refundedAmount || 0) - Number(order.refundReservedAmount || 0);
+        if (reference !== order.reference || ![PAYMENT_STATUS.PAID, PAYMENT_STATUS.PARTIALLY_REFUNDED].includes(order.paymentStatus) || amount > available) return null;
+        order.refundReservedAmount = Number(order.refundReservedAmount || 0) + amount;
+        return order;
+      },
+      async settleOrderRefund(reference, amount) {
+        if (reference !== order.reference || Number(order.refundReservedAmount || 0) < amount) return null;
+        order.refundReservedAmount -= amount;
+        order.refundedAmount = Number(order.refundedAmount || 0) + amount;
+        return order;
+      },
+      async releaseOrderRefund(reference, amount) {
+        if (reference !== order.reference || Number(order.refundReservedAmount || 0) < amount) return null;
+        order.refundReservedAmount -= amount;
+        return order;
+      },
       async findOrders() {
         return [order];
       },
@@ -296,10 +322,18 @@ function createDependencies(overrides = {}) {
     },
     refundRepository: {
       async createRefund(data) {
-        return { _id: "64b64b64b64b64b64b64b649", ...data };
+        const refund = { _id: "64b64b64b64b64b64b64b649", ...data };
+        refunds.push(refund);
+        return refund;
       },
       async updateRefundByReference(reference, data) {
-        return { _id: "64b64b64b64b64b64b64b649", reference, ...data };
+        const refund = refunds.find((item) => item.reference === reference);
+        if (!refund) return null;
+        Object.assign(refund, data);
+        return refund;
+      },
+      async findRefundByOrderAndIdempotencyKey(orderId, idempotencyKey) {
+        return refunds.find((item) => item.order === orderId && item.idempotencyKey === idempotencyKey) || null;
       },
     },
     withdrawalRepository: {
@@ -358,10 +392,13 @@ function createDependencies(overrides = {}) {
       },
       async verifyTransaction() {
         return {
+          configured: true,
           status: true,
           data: {
             status: "success",
             reference: order.paymentReference,
+            amount: Math.round(order.total * 100),
+            currency: order.currency,
           },
         };
       },
@@ -459,10 +496,114 @@ test("checkout rejects unavailable inventory without trusting client totals", as
   assert.match(result.error, /unavailable|sold out/i);
 });
 
+test("checkout returns a provider error and releases inventory when Paystack initialization fails", async () => {
+  const { dependencies, state } = createDependencies({
+    paystackService: {
+      async initializeTransaction() {
+        return { configured: true, status: false, message: "provider unavailable", data: null };
+      },
+    },
+  });
+
+  const result = await ticketingService.createCheckoutOrder(
+    ids.customer,
+    {
+      eventId: ids.event,
+      customerInfo: { name: "Ada Buyer", phone: "+2348012345678", email: "ada@example.com" },
+      items: [{ ticketTypeId: ids.ticketType, quantity: 2 }],
+      idempotencyKey: "checkout-provider-failure",
+    },
+    dependencies
+  );
+
+  assert.equal(result.statusCode, 502);
+  assert.equal(state.order.paymentStatus, PAYMENT_STATUS.FAILED);
+  assert.equal(state.ticketType.soldQuantity, 2);
+});
+
+test("checkout fails closed when the Paystack authorization state cannot be persisted", async () => {
+  const { dependencies, state } = createDependencies();
+  const updateOrderByReference = dependencies.orderRepository.updateOrderByReference;
+  dependencies.orderRepository.updateOrderByReference = async (reference, data) => {
+    if (data.paymentStatus === PAYMENT_STATUS.INITIALIZED) {
+      throw new Error("database write failed");
+    }
+
+    return updateOrderByReference(reference, data);
+  };
+
+  const result = await ticketingService.createCheckoutOrder(
+    ids.customer,
+    {
+      eventId: ids.event,
+      customerInfo: { name: "Ada Buyer", phone: "+2348012345678", email: "ada@example.com" },
+      items: [{ ticketTypeId: ids.ticketType, quantity: 2 }],
+      idempotencyKey: "checkout-persistence-failure",
+    },
+    dependencies
+  );
+
+  assert.equal(result.statusCode, 500);
+  assert.equal(state.order.paymentStatus, PAYMENT_STATUS.FAILED);
+  assert.equal(state.ticketType.soldQuantity, 2);
+});
+
+test("checkout validation rejects duplicate lines and attendee count mismatches", () => {
+  const customerInfo = { name: "Ada Buyer", phone: "+2348012345678", email: "ada@example.com" };
+  const duplicateLines = checkoutSchema.safeParse({
+    eventId: ids.event,
+    customerInfo,
+    items: [
+      { ticketTypeId: ids.ticketType, quantity: 1 },
+      { ticketTypeId: ids.ticketType, quantity: 1 },
+    ],
+  });
+  const attendeeMismatch = checkoutSchema.safeParse({
+    eventId: ids.event,
+    customerInfo,
+    items: [{ ticketTypeId: ids.ticketType, quantity: 2, attendees: [customerInfo] }],
+  });
+
+  assert.equal(duplicateLines.success, false);
+  assert.equal(attendeeMismatch.success, false);
+});
+
+test("zero-total checkout issues tickets without calling Paystack", async () => {
+  let initializationCalls = 0;
+  const { dependencies, state } = createDependencies();
+  state.ticketType.price = 0;
+  dependencies.paystackService.initializeTransaction = async () => {
+    initializationCalls += 1;
+    throw new Error("Paystack should not be called for free orders");
+  };
+
+  const checkout = await ticketingService.createCheckoutOrder(
+    ids.customer,
+    {
+      eventId: ids.event,
+      customerInfo: { name: "Ada Buyer", phone: "+2348012345678", email: "ada@example.com" },
+      items: [{ ticketTypeId: ids.ticketType, quantity: 1 }],
+      idempotencyKey: "checkout-free-order",
+    },
+    dependencies
+  );
+  const verification = await ticketingService.verifyPayment(
+    ids.customer,
+    checkout.payment.reference,
+    dependencies
+  );
+
+  assert.equal(initializationCalls, 0);
+  assert.equal(checkout.payment.free, true);
+  assert.equal(checkout.order.paymentStatus, PAYMENT_STATUS.PAID);
+  assert.equal(verification.reused, true);
+  assert.equal(state.tickets.length, 1);
+});
+
 test("payment verification marks an order paid and creates individual tickets once", async () => {
   const { dependencies, state } = createDependencies();
-  const first = await ticketingService.verifyPayment("pay_test", dependencies);
-  const second = await ticketingService.verifyPayment("pay_test", dependencies);
+  const first = await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
+  const second = await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
 
   assert.equal(first.error, undefined);
   assert.equal(first.order.paymentStatus, PAYMENT_STATUS.PAID);
@@ -472,9 +613,59 @@ test("payment verification marks an order paid and creates individual tickets on
   assert.ok(first.tickets[0].qrToken);
 });
 
+test("payment verification enforces customer ownership and authoritative provider totals", async () => {
+  let providerCalls = 0;
+  const wrongCustomer = createDependencies({
+    paystackService: {
+      async verifyTransaction() {
+        providerCalls += 1;
+        return { configured: true, status: true, data: { status: "success" } };
+      },
+    },
+  });
+  const denied = await ticketingService.verifyPayment(ids.manager, "pay_test", wrongCustomer.dependencies);
+
+  const amountMismatch = createDependencies({
+    paystackService: {
+      async verifyTransaction() {
+        return {
+          configured: true,
+          status: true,
+          data: { status: "success", reference: "pay_test", amount: 499999, currency: "NGN" },
+        };
+      },
+    },
+  });
+  const rejected = await ticketingService.verifyPayment(ids.customer, "pay_test", amountMismatch.dependencies);
+
+  assert.equal(denied.statusCode, 404);
+  assert.equal(providerCalls, 0);
+  assert.equal(rejected.statusCode, 400);
+  assert.match(rejected.error, /amount/i);
+  assert.equal(amountMismatch.state.order.paymentStatus, PAYMENT_STATUS.PENDING);
+  assert.equal(amountMismatch.state.tickets.length, 0);
+});
+
+test("definitively failed payment verification releases inventory only once", async () => {
+  const { dependencies, state } = createDependencies({
+    paystackService: {
+      async verifyTransaction() {
+        return { configured: true, status: true, data: { status: "failed", reference: "pay_test" } };
+      },
+    },
+  });
+
+  const first = await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
+  const second = await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
+
+  assert.equal(first.verified, false);
+  assert.equal(second.verified, false);
+  assert.equal(state.ticketType.soldQuantity, 0);
+});
+
 test("manager ticket check-in validates event scope and records attendance once", async () => {
   const { dependencies, state } = createDependencies();
-  await ticketingService.verifyPayment("pay_test", dependencies);
+  await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
 
   const ticket = state.tickets[0];
   const checkedIn = await ticketingService.checkInEventTicket(
@@ -501,7 +692,7 @@ test("manager ticket check-in validates event scope and records attendance once"
 
 test("Phase 5 ticket validation returns stable outcomes without exposing QR secrets", async () => {
   const { dependencies, state } = createDependencies();
-  await ticketingService.verifyPayment("pay_test", dependencies);
+  await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
   const ticket = state.tickets[0];
 
   const validReference = await ticketingService.validateEventTicket(
@@ -578,7 +769,7 @@ test("Phase 5 ticket validation rejects invalid ticket, order, type, and event s
 
   for (const validationCase of cases) {
     const { dependencies, state } = createDependencies();
-    await ticketingService.verifyPayment("pay_test", dependencies);
+    await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
     validationCase.mutate(state);
     const result = await ticketingService.validateEventTicket(
       ids.organization,
@@ -595,7 +786,7 @@ test("Phase 5 ticket validation rejects invalid ticket, order, type, and event s
 
 test("Phase 5 check-in enforces manager assignment, organization scope, and admin access", async () => {
   const unassigned = createDependencies();
-  await ticketingService.verifyPayment("pay_test", unassigned.dependencies);
+  await ticketingService.verifyPayment(ids.customer, "pay_test", unassigned.dependencies);
   unassigned.dependencies.eventManagerAssignmentRepository.findActiveEventManagerAssignment = async () => null;
   const unassignedResult = await ticketingService.validateEventTicket(
     ids.organization,
@@ -635,7 +826,7 @@ test("Phase 5 check-in enforces manager assignment, organization scope, and admi
 
 test("concurrent scans produce exactly one check-in and one attendance record", async () => {
   const { dependencies, state } = createDependencies();
-  await ticketingService.verifyPayment("pay_test", dependencies);
+  await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
   const payload = { reference: state.tickets[0].reference };
 
   const results = await Promise.all([
@@ -660,7 +851,7 @@ test("concurrent scans produce exactly one check-in and one attendance record", 
 
 test("multiple tickets with the same attendee email check in independently", async () => {
   const { dependencies, state } = createDependencies();
-  await ticketingService.verifyPayment("pay_test", dependencies);
+  await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
   state.tickets[0].attendee.email = "shared@example.com";
   state.tickets[1].attendee.email = "shared@example.com";
 
@@ -690,7 +881,7 @@ test("multiple tickets with the same attendee email check in independently", asy
 
 test("failed attendance persistence rolls back a standalone ticket update", async () => {
   const { dependencies, state } = createDependencies();
-  await ticketingService.verifyPayment("pay_test", dependencies);
+  await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
   dependencies.eventAttendanceRepository.createEventAttendance = async () => {
     throw new Error("attendance write failed");
   };
@@ -711,7 +902,7 @@ test("failed attendance persistence rolls back a standalone ticket update", asyn
 
 test("customer history only marks actual checked-in tickets as attended", async () => {
   const { dependencies, state } = createDependencies();
-  await ticketingService.verifyPayment("pay_test", dependencies);
+  await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
 
   await ticketingService.checkInEventTicket(
     ids.organization,
@@ -731,6 +922,7 @@ test("customer history only marks actual checked-in tickets as attended", async 
 
 test("refunds preserve orders and reject excessive amounts", async () => {
   const { dependencies } = createDependencies();
+  await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
   const valid = await ticketingService.createOrderRefund(
     ids.organization,
     ids.admin,
@@ -749,6 +941,51 @@ test("refunds preserve orders and reject excessive amounts", async () => {
   assert.equal(valid.refund.amount, 1000);
   assert.equal(valid.refund.status, "SUCCEEDED");
   assert.equal(excessive.statusCode, 400);
+});
+
+test("refund idempotency prevents duplicate provider requests", async () => {
+  let providerCalls = 0;
+  const { dependencies } = createDependencies();
+  const originalCreateRefund = dependencies.paystackService.createRefund;
+  dependencies.paystackService.createRefund = async (...args) => {
+    providerCalls += 1;
+    return originalCreateRefund(...args);
+  };
+  await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
+
+  const payload = { amount: 1000, reason: "Event canceled", idempotencyKey: "refund-same-request" };
+  const first = await ticketingService.createOrderRefund(ids.organization, ids.admin, "ord_test", payload, dependencies);
+  const second = await ticketingService.createOrderRefund(ids.organization, ids.admin, "ord_test", payload, dependencies);
+
+  assert.equal(first.refund.status, "SUCCEEDED");
+  assert.equal(second.reused, true);
+  assert.equal(providerCalls, 1);
+});
+
+test("concurrent refunds cannot reserve more than the order balance", async () => {
+  const { dependencies, state } = createDependencies();
+  await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
+
+  const results = await Promise.all([
+    ticketingService.createOrderRefund(
+      ids.organization,
+      ids.admin,
+      "ord_test",
+      { amount: 3000, reason: "Partial refund one", idempotencyKey: "refund-concurrent-one" },
+      dependencies
+    ),
+    ticketingService.createOrderRefund(
+      ids.organization,
+      ids.admin,
+      "ord_test",
+      { amount: 3000, reason: "Partial refund two", idempotencyKey: "refund-concurrent-two" },
+      dependencies
+    ),
+  ]);
+
+  assert.equal(results.filter((result) => result.refund?.status === "SUCCEEDED").length, 1);
+  assert.equal(results.filter((result) => [400, 409].includes(result.statusCode)).length, 1);
+  assert.equal(state.order.refundedAmount, 3000);
 });
 
 test("withdrawals are limited by backend-calculated available balance", async () => {
@@ -842,6 +1079,8 @@ test("Paystack webhook processing is idempotent for duplicate provider events", 
     data: {
       reference: "pay_test",
       status: "success",
+      amount: 500000,
+      currency: "NGN",
     },
   };
 
@@ -851,4 +1090,56 @@ test("Paystack webhook processing is idempotent for duplicate provider events", 
   assert.equal(first.order.paymentStatus, PAYMENT_STATUS.PAID);
   assert.equal(second.duplicate, true);
   assert.equal(eventCount, 2);
+});
+
+test("failed charge webhook processing can be claimed and retried safely", async () => {
+  let eventCreated = false;
+  let updateAttempts = 0;
+  let retryClaims = 0;
+  let failedEvents = 0;
+  let processedEvents = 0;
+  const { dependencies } = createDependencies();
+  const updateOrder = dependencies.orderRepository.updateOrderByPaymentReferenceAndStatus;
+  dependencies.orderRepository.updateOrderByPaymentReferenceAndStatus = async (...args) => {
+    updateAttempts += 1;
+    if (updateAttempts === 1) throw new Error("temporary database failure");
+    return updateOrder(...args);
+  };
+  dependencies.paymentEventRepository = {
+    async createPaymentEvent(data) {
+      if (eventCreated) {
+        const error = new Error("duplicate");
+        error.code = 11000;
+        throw error;
+      }
+      eventCreated = true;
+      return data;
+    },
+    async claimPaymentEventRetry() {
+      retryClaims += 1;
+      return { status: "PROCESSING" };
+    },
+    async markPaymentEventFailed() {
+      failedEvents += 1;
+    },
+    async markPaymentEventProcessed() {
+      processedEvents += 1;
+    },
+  };
+  const payload = {
+    event: "charge.success",
+    data: { reference: "pay_test", status: "success", amount: 500000, currency: "NGN" },
+  };
+
+  await assert.rejects(
+    ticketingService.handlePaystackWebhook(Buffer.from("{}"), "sig", payload, dependencies),
+    /temporary database failure/
+  );
+  const retried = await ticketingService.handlePaystackWebhook(Buffer.from("{}"), "sig", payload, dependencies);
+
+  assert.equal(retried.retried, true);
+  assert.equal(retried.order.paymentStatus, PAYMENT_STATUS.PAID);
+  assert.equal(retryClaims, 1);
+  assert.equal(failedEvents, 1);
+  assert.equal(processedEvents, 1);
 });

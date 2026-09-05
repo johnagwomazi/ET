@@ -2,6 +2,9 @@ import { create } from "zustand";
 import * as organizationService from "../services/organization.service";
 import { DEFAULT_TABLE_PAGE_SIZE } from "../constants/dashboard.constants";
 
+let listController = null;
+let detailController = null;
+
 const initialQuery = {
   search: "",
   status: "",
@@ -51,6 +54,9 @@ export const useOrganizationStore = create((set, get) => ({
   },
 
   async fetchOrganizations(overrides = {}) {
+    listController?.abort();
+    const controller = new AbortController();
+    listController = controller;
     const query = {
       ...get().query,
       ...overrides,
@@ -63,7 +69,8 @@ export const useOrganizationStore = create((set, get) => ({
     });
 
     try {
-      const response = await organizationService.getOrganizations(query);
+      const response = await organizationService.getOrganizations(query, { signal: controller.signal });
+      if (controller.signal.aborted) return null;
 
       set({
         organizations: response?.organizations || [],
@@ -74,6 +81,7 @@ export const useOrganizationStore = create((set, get) => ({
 
       return response;
     } catch (error) {
+      if (controller.signal.aborted) return null;
       const message = error instanceof Error ? error.message : "Something went wrong";
 
       set({
@@ -82,14 +90,20 @@ export const useOrganizationStore = create((set, get) => ({
       });
 
       throw error;
+    } finally {
+      if (listController === controller) listController = null;
     }
   },
 
   async fetchOrganizationById(organizationId) {
+    detailController?.abort();
+    const controller = new AbortController();
+    detailController = controller;
     set({ isDetailLoading: true, detailError: null });
 
     try {
-      const response = await organizationService.getOrganizationById(organizationId);
+      const response = await organizationService.getOrganizationById(organizationId, { signal: controller.signal });
+      if (controller.signal.aborted) return null;
       const organization = response?.organization || null;
 
       set({
@@ -99,6 +113,7 @@ export const useOrganizationStore = create((set, get) => ({
 
       return organization;
     } catch (error) {
+      if (controller.signal.aborted) return null;
       const message = error instanceof Error ? error.message : "Something went wrong";
 
       set({
@@ -107,6 +122,8 @@ export const useOrganizationStore = create((set, get) => ({
       });
 
       throw error;
+    } finally {
+      if (detailController === controller) detailController = null;
     }
   },
 

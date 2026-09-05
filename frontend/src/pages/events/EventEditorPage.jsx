@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import ErrorState from "../../components/common/ErrorState";
@@ -22,6 +22,7 @@ function EventEditorPage({ mode = "create" }) {
   const [event, setEvent] = useState(null);
   const [isLoading, setIsLoading] = useState(Boolean(isEditMode));
   const [error, setError] = useState(null);
+  const requestControllerRef = useRef(null);
 
   async function loadEvent() {
     if (!isEditMode) {
@@ -31,17 +32,26 @@ function EventEditorPage({ mode = "create" }) {
     setIsLoading(true);
     setError(null);
 
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
+
     try {
-      const response = await eventService.getOrganizationEventById(eventId);
+      const response = await eventService.getOrganizationEventById(eventId, { signal: controller.signal });
+      if (controller.signal.aborted) return null;
       const nextEvent = response?.event || null;
       setEvent(nextEvent);
       return nextEvent;
     } catch (loadError) {
+      if (controller.signal.aborted) return null;
       const message = loadError instanceof Error ? loadError.message : "Unable to load event";
       setError(message);
       throw loadError;
     } finally {
-      setIsLoading(false);
+      if (requestControllerRef.current === controller) {
+        requestControllerRef.current = null;
+        setIsLoading(false);
+      }
     }
   }
 
@@ -51,7 +61,7 @@ function EventEditorPage({ mode = "create" }) {
     }
 
     loadEvent().catch(() => {});
-    return undefined;
+    return () => requestControllerRef.current?.abort();
   }, [eventId, isEditMode]);
 
   if (isLoading && isEditMode && !event) {
@@ -77,8 +87,8 @@ function EventEditorPage({ mode = "create" }) {
         title={isEditMode ? "Edit Event" : "Create Event"}
         description={
           isEditMode
-            ? "Update the event fields supported by the current backend contract."
-            : "Create a new event draft and fill in the information the backend stores today."
+            ? "Update this event's details, schedule, venue, capacity, and banner."
+            : "Create a draft with the event details needed for publishing."
         }
         actions={[
           {

@@ -38,6 +38,7 @@ import {
 
 const organizationRouter = express.Router();
 const financeMutationLimiter = createRateLimiter({ max: envConfig.financeMutationRateLimitMax });
+const paymentMutationLimiter = createRateLimiter({ max: envConfig.paymentMutationRateLimitMax });
 
 organizationRouter.use(protectRoute);
 organizationRouter.use(requireOrganizationContext);
@@ -115,6 +116,7 @@ organizationRouter.get(
 
 organizationRouter.post(
   "/me/orders/:reference/refunds",
+  paymentMutationLimiter,
   requireOrganizationPermission(ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE),
   validate(orderReferenceParamSchema, "params"),
   validate(refundCreateSchema),

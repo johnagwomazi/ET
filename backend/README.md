@@ -92,6 +92,58 @@ instance.
 4. Put business rules in services.
 5. Keep response formats consistent.
 
+## Production Verification
+
+Run the regression suite before every deployment:
+
+```bash
+npm ci
+npm test
+NODE_ENV=production npm start
+```
+
+The production start command validates configuration before opening a database connection. The process exits instead
+of starting with weak JWT secrets, insecure cookies, an invalid frontend origin, or missing Paystack, Cloudinary, and
+SMTP configuration. `GET /api/health` returns HTTP 200 only after MongoDB is connected; otherwise it returns HTTP 503.
+
+### Required Production Variables
+
+- `MONGODB_URI`: production MongoDB connection string.
+- `DNS_SERVERS`: optional comma-separated resolver override for local SRV lookup failures. Leave unset on Render unless required.
+- `FRONTEND_URL`: one or more comma-separated allowed frontend origins. Never use `*` with credentials.
+- `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`: different random values of at least 32 characters.
+- `JWT_ACCESS_EXPIRES_IN` and `JWT_REFRESH_EXPIRES_IN`: normally `15m` and `7d`.
+- `COOKIE_HTTP_ONLY=true`, `COOKIE_SECURE=true`, and `COOKIE_SAME_SITE=none` for a separately hosted HTTPS frontend.
+- `PAYSTACK_SECRET_KEY` and `PAYSTACK_WEBHOOK_SECRET`: backend-only keys from the same Paystack test or live mode.
+- `PAYSTACK_TIMEOUT_MS`: provider request timeout between 1000 and 60000 milliseconds.
+- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM`.
+- `REQUIRE_EMAIL_VERIFICATION=true`.
+
+Optional initial seed values are `SUPER_ADMIN_FIRST_NAME`, `SUPER_ADMIN_LAST_NAME`, `SUPER_ADMIN_EMAIL`, and
+`SUPER_ADMIN_PASSWORD`. They are used only when that email does not already exist. Remove the seed password from the
+service environment after the first verified startup.
+
+### Render
+
+The repository-level `render.yaml` uses `backend` as the service root, `npm ci` as the build command, `npm start` as
+the start command, and `/api/health` as the health check. Add every `sync: false` value in the Render dashboard before
+deploying. Render supplies `PORT`; the server does not hardcode a production port.
+
+Configure the Paystack webhook as:
+
+```text
+https://YOUR_BACKEND_HOST/api/payments/paystack/webhook
+```
+
+Keep Paystack in test mode for deployment verification. A real test transaction must confirm that the provider amount,
+currency, and reference exactly match the stored order before switching both backend keys and webhook configuration to
+live mode.
+
+Before enabling new unique payment/refund indexes against an existing database, take a backup and check for historical
+duplicate non-empty references. Do not delete historical orders, tickets, attendance, refunds, or withdrawals to make
+an index build pass.
+
 ## Coding Standards
 
 This backend follows the standards in `standard.txt`:

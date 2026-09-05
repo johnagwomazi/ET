@@ -10,7 +10,7 @@ import { Skeleton } from "../common/Skeleton";
 import { ROUTE_PATHS } from "../../routes/routePaths";
 import { useSessionStore } from "../../store/useSessionStore";
 import { formatDateTime, formatMoney } from "../../utils/formatters";
-import { saveCheckoutSelection } from "../../pages/CheckoutPage";
+import { saveCheckoutSelection } from "../../utils/checkoutStorage";
 import * as ticketingService from "../../services/ticketing.service";
 
 function isPurchasable(ticketType) {
@@ -27,23 +27,32 @@ function PublicTicketSelectionPanel({ event }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     async function loadTicketTypes() {
       setIsLoading(true);
       setError(null);
 
       try {
-        const response = await ticketingService.getPublicEventTicketTypes(event.id);
+        const response = await ticketingService.getPublicEventTicketTypes(event.id, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
         setTicketTypes(response?.ticketTypes || []);
       } catch (loadError) {
-        setError(loadError.message || "Unable to load tickets");
+        if (!controller.signal.aborted) {
+          setError("Tickets could not be loaded. Please try again.");
+        }
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted) setIsLoading(false);
       }
     }
 
     if (event?.id) {
       loadTicketTypes();
     }
+
+    return () => controller.abort();
   }, [event?.id]);
 
   const selectedItems = useMemo(
@@ -131,9 +140,25 @@ function PublicTicketSelectionPanel({ event }) {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="secondary" size="sm" disabled={!purchasable || quantity <= 0} onClick={() => updateQuantity(ticketType, quantity - 1)}><Minus className="h-4 w-4" /></Button>
-                    <span className="w-10 text-center text-sm font-semibold text-white">{quantity}</span>
-                    <Button variant="secondary" size="sm" disabled={!purchasable} onClick={() => updateQuantity(ticketType, quantity + 1)}><Plus className="h-4 w-4" /></Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      aria-label={`Decrease ${ticketType.name} quantity`}
+                      disabled={!purchasable || quantity <= 0}
+                      onClick={() => updateQuantity(ticketType, quantity - 1)}
+                    >
+                      <Minus className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                    <span className="w-10 text-center text-sm font-semibold text-white" aria-live="polite">{quantity}</span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      aria-label={`Increase ${ticketType.name} quantity`}
+                      disabled={!purchasable || quantity >= Math.min(Number(ticketType.remainingQuantity || 0), Number(ticketType.maxPerOrder || 1))}
+                      onClick={() => updateQuantity(ticketType, quantity + 1)}
+                    >
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                    </Button>
                   </div>
                 </div>
               </div>

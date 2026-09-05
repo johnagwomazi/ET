@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import * as authService from "../services/auth.service";
-import { clearStoredAccessToken, setStoredAccessToken } from "../utils/authToken";
+import { clearStoredAccessToken } from "../utils/authToken";
 import { useNotificationStore } from "./useNotificationStore";
 
 let initializeSessionPromise = null;
@@ -64,6 +64,7 @@ export const useSessionStore = create((set, get) => ({
     }
 
     set({ isLoading: true });
+    clearStoredAccessToken();
 
     initializeSessionPromise = (async () => {
       const response = await authService.getCurrentUser();
@@ -110,7 +111,6 @@ export const useSessionStore = create((set, get) => ({
 
     try {
       const response = await authService.login(credentials);
-      setStoredAccessToken(response?.accessToken || null);
 
       const currentUserResponse = await authService.getCurrentUser();
       const user = currentUserResponse?.user || null;
@@ -137,7 +137,6 @@ export const useSessionStore = create((set, get) => ({
 
     try {
       const response = await authService.adminLogin(credentials);
-      setStoredAccessToken(response?.accessToken || null);
 
       const currentUserResponse = await authService.getCurrentUser();
       const user = currentUserResponse?.user || null;
@@ -165,7 +164,7 @@ export const useSessionStore = create((set, get) => ({
     try {
       await authService.logout();
     } catch (error) {
-      console.log(error);
+      // Local session state must still be cleared when the server is unreachable.
     } finally {
       clearStoredAccessToken();
       useNotificationStore.getState().reset();

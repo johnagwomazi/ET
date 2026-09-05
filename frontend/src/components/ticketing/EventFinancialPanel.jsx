@@ -102,7 +102,7 @@ function EventFinancialPanel({ event, canView = false }) {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-app-300">Sales</p>
           <h3 className="mt-1 text-lg font-semibold text-white">Event reporting and financials</h3>
-          <p className="mt-2 text-sm text-slate-400">Backend-calculated sales, refunds, and attendance signals.</p>
+          <p className="mt-2 text-sm text-slate-400">Sales, refunds, and attendance at a glance.</p>
         </div>
         <Button variant="secondary" size="sm" onClick={loadSummary} isLoading={isLoading}><RefreshCw className="h-4 w-4" />Refresh</Button>
       </div>

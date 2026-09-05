@@ -4,6 +4,7 @@ import { REFUND_STATUS } from "../constants/ticketing.constants.js";
 const refundSchema = new mongoose.Schema(
   {
     reference: { type: String, required: true, unique: true, trim: true },
+    idempotencyKey: { type: String, default: "", trim: true, maxlength: 120 },
     order: { type: mongoose.Schema.Types.ObjectId, ref: "Order", required: true },
     organization: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", required: true },
     event: { type: mongoose.Schema.Types.ObjectId, ref: "Event", required: true },
@@ -19,9 +20,17 @@ const refundSchema = new mongoose.Schema(
 );
 
 refundSchema.index({ order: 1, status: 1 });
+refundSchema.index(
+  { order: 1, idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string", $gt: "" } } }
+);
 refundSchema.index({ organization: 1, createdAt: -1 });
 refundSchema.index({ status: 1, processedAt: -1, createdAt: -1 });
 refundSchema.index({ organization: 1, event: 1, status: 1, processedAt: -1 });
+refundSchema.index(
+  { providerReference: 1 },
+  { unique: true, partialFilterExpression: { providerReference: { $type: "string", $gt: "" } } }
+);
 
 const Refund = mongoose.models.Refund || mongoose.model("Refund", refundSchema);
 

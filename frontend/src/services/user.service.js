@@ -6,14 +6,14 @@ function buildUserPath(path = "", query = {}) {
   return `/admin/users${path}${buildQueryString(query)}`;
 }
 
-export async function getUsers(query = {}) {
-  const response = await get(buildUserPath("", query));
+export async function getUsers(query = {}, options = {}) {
+  const response = await get(buildUserPath("", query), options);
 
   return unwrapResponse(response);
 }
 
-export async function getUserById(userId) {
-  const response = await get(buildUserPath(`/${userId}`));
+export async function getUserById(userId, options = {}) {
+  const response = await get(buildUserPath(`/${userId}`), options);
 
   return unwrapResponse(response);
 }

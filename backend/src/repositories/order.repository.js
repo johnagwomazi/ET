@@ -78,6 +78,73 @@ export async function updateOrderByReference(reference, updateData, options = {}
   );
 }
 
+export async function updateOrderByPaymentReferenceAndStatus(
+  paymentReference,
+  expectedPaymentStatuses,
+  updateData,
+  options = {}
+) {
+  return applySession(
+    Order.findOneAndUpdate(
+      { paymentReference, paymentStatus: { $in: expectedPaymentStatuses } },
+      updateData,
+      { new: true, runValidators: true }
+    )
+      .populate("event")
+      .populate("organization")
+      .populate("customer")
+      .populate("items.ticketType"),
+    options
+  );
+}
+
+export async function reserveOrderRefund(reference, amount, options = {}) {
+  return applySession(
+    Order.findOneAndUpdate(
+      {
+        reference,
+        paymentStatus: { $in: ["PAID", "PARTIALLY_REFUNDED"] },
+        $expr: {
+          $gte: [
+            {
+              $subtract: [
+                "$total",
+                { $add: [{ $ifNull: ["$refundedAmount", 0] }, { $ifNull: ["$refundReservedAmount", 0] }] },
+              ],
+            },
+            amount,
+          ],
+        },
+      },
+      { $inc: { refundReservedAmount: amount } },
+      { new: true, runValidators: true }
+    ),
+    options
+  );
+}
+
+export async function settleOrderRefund(reference, amount, options = {}) {
+  return applySession(
+    Order.findOneAndUpdate(
+      { reference, refundReservedAmount: { $gte: amount } },
+      { $inc: { refundReservedAmount: -amount, refundedAmount: amount } },
+      { new: true, runValidators: true }
+    ),
+    options
+  );
+}
+
+export async function releaseOrderRefund(reference, amount, options = {}) {
+  return applySession(
+    Order.findOneAndUpdate(
+      { reference, refundReservedAmount: { $gte: amount } },
+      { $inc: { refundReservedAmount: -amount } },
+      { new: true, runValidators: true }
+    ),
+    options
+  );
+}
+
 export async function getOrganizationFinancialAggregation(organizationId, eventId = null) {
   const match = {
     organization: organizationId,

@@ -39,7 +39,9 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    return callback(new Error(`CORS policy does not allow this origin: ${origin}`));
+    const error = new Error("CORS policy does not allow this origin");
+    error.statusCode = 403;
+    return callback(error);
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
