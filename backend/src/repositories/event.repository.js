@@ -167,7 +167,13 @@ export async function findPublicEventById(eventId, options = {}) {
 }
 
 export async function findEventsStartingBetween(startAt, endAt, statuses = []) {
-  const filter = { startAt: { $gte: startAt, $lt: endAt } };
-  if (statuses.length) filter.status = { $in: statuses };
+  const filter = {
+    startAt: mongoose.trusted({ $gte: startAt, $lt: endAt }),
+  };
+
+  if (statuses.length) {
+    filter.status = mongoose.trusted({ $in: statuses });
+  }
+
   return Event.find(filter).populate("organization").sort({ startAt: 1 });
 }

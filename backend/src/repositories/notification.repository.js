@@ -1,5 +1,19 @@
+import mongoose from "mongoose";
 import { EMAIL_DELIVERY_STATUS } from "../constants/notification.constants.js";
 import Notification from "../models/notification.model.js";
+
+function buildRetryableEmailFilter(maxAttempts, now) {
+  return {
+    "emailDelivery.status": mongoose.trusted({
+      $in: [EMAIL_DELIVERY_STATUS.PENDING, EMAIL_DELIVERY_STATUS.FAILED],
+    }),
+    "emailDelivery.attempts": mongoose.trusted({ $lt: maxAttempts }),
+    $or: [
+      { "emailDelivery.nextAttemptAt": null },
+      { "emailDelivery.nextAttemptAt": mongoose.trusted({ $lte: now }) },
+    ],
+  };
+}
 
 export async function createNotification(data) {
   return Notification.create(data);
@@ -43,12 +57,7 @@ export async function claimNotificationEmail(notificationId, maxAttempts, now = 
   return Notification.findOneAndUpdate(
     {
       _id: notificationId,
-      "emailDelivery.status": { $in: [EMAIL_DELIVERY_STATUS.PENDING, EMAIL_DELIVERY_STATUS.FAILED] },
-      "emailDelivery.attempts": { $lt: maxAttempts },
-      $or: [
-        { "emailDelivery.nextAttemptAt": null },
-        { "emailDelivery.nextAttemptAt": { $lte: now } },
-      ],
+      ...buildRetryableEmailFilter(maxAttempts, now),
     },
     {
       $set: {
@@ -113,12 +122,7 @@ export async function markNotificationEmailUndeliverable(notificationId) {
 export async function findRetryableNotificationEmails(maxAttempts, now = new Date(), limit = 50) {
   return Notification.find({
     channels: "EMAIL",
-    "emailDelivery.status": { $in: [EMAIL_DELIVERY_STATUS.PENDING, EMAIL_DELIVERY_STATUS.FAILED] },
-    "emailDelivery.attempts": { $lt: maxAttempts },
-    $or: [
-      { "emailDelivery.nextAttemptAt": null },
-      { "emailDelivery.nextAttemptAt": { $lte: now } },
-    ],
+    ...buildRetryableEmailFilter(maxAttempts, now),
   })
     .select("_id")
     .sort({ "emailDelivery.nextAttemptAt": 1, createdAt: 1 })
