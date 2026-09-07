@@ -2,6 +2,16 @@ import crypto from "node:crypto";
 import envConfig from "../config/env.config.js";
 
 const PAYSTACK_BASE_URL = "https://api.paystack.co";
+const SUCCESSFUL_TRANSACTION_STATUSES = new Set(["success"]);
+const NON_FINAL_TRANSACTION_STATUSES = new Set(["pending", "ongoing", "processing", "queued"]);
+const FINAL_FAILURE_TRANSACTION_STATUSES = new Set(["abandoned", "failed", "reversed"]);
+
+export const PAYSTACK_TRANSACTION_OUTCOME = Object.freeze({
+  SUCCESS: "SUCCESS",
+  PENDING: "PENDING",
+  FAILED: "FAILED",
+  UNKNOWN: "UNKNOWN",
+});
 
 function getAuthorizationHeaders() {
   return {
@@ -61,7 +71,7 @@ async function paystackRequest(path, options = {}) {
   }
 }
 
-export async function initializeTransaction({ email, amount, reference, callbackUrl, metadata }) {
+export async function initializeTransaction({ email, amount, currency, reference, callbackUrl, metadata }) {
   const amountInKobo = Math.round(Number(amount || 0) * 100);
 
   return paystackRequest("/transaction/initialize", {
@@ -69,6 +79,7 @@ export async function initializeTransaction({ email, amount, reference, callback
     body: {
       email,
       amount: amountInKobo,
+      currency,
       reference,
       callback_url: callbackUrl,
       metadata,
@@ -78,6 +89,14 @@ export async function initializeTransaction({ email, amount, reference, callback
 
 export async function verifyTransaction(reference) {
   return paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`);
+}
+
+export function classifyTransactionStatus(status) {
+  const normalizedStatus = String(status || "").trim().toLowerCase();
+  if (SUCCESSFUL_TRANSACTION_STATUSES.has(normalizedStatus)) return PAYSTACK_TRANSACTION_OUTCOME.SUCCESS;
+  if (NON_FINAL_TRANSACTION_STATUSES.has(normalizedStatus)) return PAYSTACK_TRANSACTION_OUTCOME.PENDING;
+  if (FINAL_FAILURE_TRANSACTION_STATUSES.has(normalizedStatus)) return PAYSTACK_TRANSACTION_OUTCOME.FAILED;
+  return PAYSTACK_TRANSACTION_OUTCOME.UNKNOWN;
 }
 
 export async function createRefund({ transaction, amount, currency, customerNote, merchantNote }) {
@@ -130,11 +149,11 @@ export async function verifyTransfer(reference) {
 }
 
 export function verifyWebhookSignature(rawBody, signature) {
-  if (!envConfig.paystackWebhookSecret || !signature || !rawBody) {
+  if (!envConfig.paystackSecretKey || !signature || !rawBody) {
     return false;
   }
 
-  const expected = crypto.createHmac("sha512", envConfig.paystackWebhookSecret).update(rawBody).digest("hex");
+  const expected = crypto.createHmac("sha512", envConfig.paystackSecretKey).update(rawBody).digest("hex");
   const expectedBuffer = Buffer.from(expected);
   const receivedBuffer = Buffer.from(signature);
 

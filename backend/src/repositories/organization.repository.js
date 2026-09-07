@@ -1,4 +1,5 @@
 import Organization from "../models/organization.model.js";
+import { trustedOperator } from "../utils/trustedFilter.util.js";
 
 export async function createOrganization(organizationData) {
   return Organization.create(organizationData);
@@ -55,9 +56,9 @@ export async function acquireOrganizationFinanceLock(organizationId, token, expi
       _id: organizationId,
       isDeleted: false,
       $or: [
-        { "financeLock.expiresAt": { $exists: false } },
+        { "financeLock.expiresAt": trustedOperator({ $exists: false }) },
         { "financeLock.expiresAt": null },
-        { "financeLock.expiresAt": { $lte: now } },
+        { "financeLock.expiresAt": trustedOperator({ $lte: now }) },
       ],
     },
     { $set: { financeLock: { token, expiresAt } } },

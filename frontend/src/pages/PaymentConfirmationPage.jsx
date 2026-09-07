@@ -84,21 +84,30 @@ function PaymentConfirmationPage() {
 
   const order = result?.order;
   const isPaid = order?.paymentStatus === "PAID";
+  const isPending = Boolean(result?.pending) || ["PENDING", "INITIALIZED"].includes(order?.paymentStatus);
 
   if (!isPaid) {
     return (
       <AuthCard>
         <AuthHeader
           eyebrow="Payment status"
-          title="Payment not confirmed"
-          description="This payment has not been confirmed for the order."
+          title={isPending ? "Payment processing" : "Payment not completed"}
+          description={isPending
+            ? "Paystack is still processing this payment. Your ticket inventory remains reserved."
+            : "This payment was not completed and no ticket was issued."}
         />
         <div className="mt-6 space-y-4">
           <div className="flex items-start gap-3 rounded-lg border border-amber-500/25 bg-amber-500/10 p-4" role="status">
             <CircleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" aria-hidden="true" />
             <div>
-              <p className="font-semibold text-amber-100">No ticket has been confirmed from this payment</p>
-              <p className="mt-1 text-sm text-amber-100/80">Check your order history before attempting another payment.</p>
+              <p className="font-semibold text-amber-100">
+                {isPending ? "Payment confirmation is still pending" : "No ticket was issued for this payment"}
+              </p>
+              <p className="mt-1 text-sm text-amber-100/80">
+                {isPending
+                  ? "Verify again shortly. Do not start another checkout while this payment is processing."
+                  : "Check your order history before attempting another payment."}
+              </p>
             </div>
             {order?.paymentStatus ? <StatusBadge status={order.paymentStatus} className="ml-auto" /> : null}
           </div>

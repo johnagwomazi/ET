@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 
 import app from "../src/app.js";
 import envConfig, { validateEnvironment } from "../src/config/env.config.js";
@@ -9,6 +10,7 @@ import PaymentEvent from "../src/models/paymentEvent.model.js";
 import Refund from "../src/models/refund.model.js";
 import * as paystackService from "../src/services/paystack.service.js";
 import { setAuthCookies } from "../src/utils/authCookie.util.js";
+import { buildPaymentCallbackUrl } from "../src/utils/payment.util.js";
 
 function productionConfig(overrides = {}) {
   return {
@@ -22,7 +24,6 @@ function productionConfig(overrides = {}) {
     cookieSecure: true,
     cookieSameSite: "none",
     paystackSecretKey: "sk_test_placeholder",
-    paystackWebhookSecret: "whsec_placeholder",
     paystackTimeoutMs: 10000,
     cloudinary: { cloudName: "cloud", apiKey: "key", apiSecret: "secret" },
     smtp: { host: "smtp.example.com", port: 587, user: "user", pass: "pass", from: "events@example.com" },
@@ -46,10 +47,7 @@ test("production environment validation fails closed on unsafe configuration", (
     () => validateEnvironment(productionConfig({ jwtAccessSecret: "short", cookieSecure: false })),
     /JWT_ACCESS_SECRET|COOKIE_SECURE/
   );
-  assert.throws(
-    () => validateEnvironment(productionConfig({ paystackWebhookSecret: "" })),
-    /PAYSTACK_WEBHOOK_SECRET/
-  );
+  assert.throws(() => validateEnvironment(productionConfig({ paystackSecretKey: "" })), /PAYSTACK_SECRET_KEY/);
 });
 
 test("private and dynamic endpoints are no-store while public event reads are briefly cacheable", () => {
@@ -99,6 +97,89 @@ test("Paystack transport failures return a controlled provider result", async ()
     global.fetch = originalFetch;
     envConfig.paystackSecretKey = originalSecret;
   }
+});
+
+test("Paystack initialization sends authorization, callback, currency, and configured timeout", async () => {
+  const originalFetch = global.fetch;
+  const originalAbortTimeout = AbortSignal.timeout;
+  const originalSecret = envConfig.paystackSecretKey;
+  const originalTimeout = envConfig.paystackTimeoutMs;
+  let captured;
+  let capturedTimeout;
+  envConfig.paystackSecretKey = "sk_test_placeholder";
+  envConfig.paystackTimeoutMs = 4321;
+  AbortSignal.timeout = (milliseconds) => {
+    capturedTimeout = milliseconds;
+    return originalAbortTimeout(milliseconds);
+  };
+  global.fetch = async (url, options) => {
+    captured = { url, options };
+    return new Response(JSON.stringify({
+      status: true,
+      data: { authorization_url: "https://checkout.paystack.test", access_code: "access" },
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    await paystackService.initializeTransaction({
+      email: "buyer@example.com",
+      amount: 2500,
+      currency: "NGN",
+      reference: "pay_test",
+      callbackUrl: "http://localhost:5173/payment/confirmation",
+      metadata: { orderReference: "ord_test" },
+    });
+    const body = JSON.parse(captured.options.body);
+    assert.equal(captured.url, "https://api.paystack.co/transaction/initialize");
+    assert.equal(captured.options.headers.Authorization, "Bearer sk_test_placeholder");
+    assert.equal(body.amount, 250000);
+    assert.equal(body.currency, "NGN");
+    assert.equal(body.callback_url, "http://localhost:5173/payment/confirmation");
+    assert.equal(capturedTimeout, 4321);
+    assert.equal(captured.options.signal.aborted, false);
+  } finally {
+    global.fetch = originalFetch;
+    AbortSignal.timeout = originalAbortTimeout;
+    envConfig.paystackSecretKey = originalSecret;
+    envConfig.paystackTimeoutMs = originalTimeout;
+  }
+});
+
+test("payment callback generation is normalized and fixed to the confirmation route", () => {
+  assert.equal(
+    buildPaymentCallbackUrl("http://localhost:5173/"),
+    "http://localhost:5173/payment/confirmation"
+  );
+  assert.equal(
+    buildPaymentCallbackUrl("https://events.example.com,https://www.events.example.com"),
+    "https://events.example.com/payment/confirmation"
+  );
+});
+
+test("Paystack webhook signatures use the canonical secret key and reject invalid input", () => {
+  const originalSecret = envConfig.paystackSecretKey;
+  const rawBody = Buffer.from(JSON.stringify({ event: "charge.success", data: { reference: "pay_test" } }));
+  envConfig.paystackSecretKey = "sk_test_webhook_signing_secret";
+  const signature = crypto.createHmac("sha512", envConfig.paystackSecretKey).update(rawBody).digest("hex");
+
+  try {
+    assert.equal(paystackService.verifyWebhookSignature(rawBody, signature), true);
+    assert.equal(paystackService.verifyWebhookSignature(rawBody, "invalid"), false);
+    assert.equal(paystackService.verifyWebhookSignature(rawBody, ""), false);
+  } finally {
+    envConfig.paystackSecretKey = originalSecret;
+  }
+});
+
+test("Paystack transaction statuses distinguish success, pending, failure, and unknown", () => {
+  assert.equal(paystackService.classifyTransactionStatus("success"), paystackService.PAYSTACK_TRANSACTION_OUTCOME.SUCCESS);
+  for (const status of ["pending", "ongoing", "processing", "queued"]) {
+    assert.equal(paystackService.classifyTransactionStatus(status), paystackService.PAYSTACK_TRANSACTION_OUTCOME.PENDING);
+  }
+  for (const status of ["failed", "abandoned", "reversed"]) {
+    assert.equal(paystackService.classifyTransactionStatus(status), paystackService.PAYSTACK_TRANSACTION_OUTCOME.FAILED);
+  }
+  assert.equal(paystackService.classifyTransactionStatus("new-provider-state"), paystackService.PAYSTACK_TRANSACTION_OUTCOME.UNKNOWN);
 });
 
 test("HTTP boundary applies security headers, safe CORS errors, and readiness status", async () => {

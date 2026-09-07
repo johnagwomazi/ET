@@ -1,4 +1,5 @@
 import TicketType from "../models/ticketType.model.js";
+import { trustedOperator } from "../utils/trustedFilter.util.js";
 
 function applySession(query, options = {}) {
   return options.session ? query.session(options.session) : query;
@@ -60,9 +61,9 @@ export async function reserveTicketInventory(ticketTypeId, eventId, organization
         event: eventId,
         organization: organizationId,
         status: "ACTIVE",
-        $expr: {
+        $expr: trustedOperator({
           $gte: [{ $subtract: ["$quantity", "$soldQuantity"] }, quantity],
-        },
+        }),
       },
       {
         $inc: { soldQuantity: quantity },
@@ -81,7 +82,7 @@ export async function releaseTicketInventory(ticketTypeId, quantity, options = {
     TicketType.findOneAndUpdate(
       {
         _id: ticketTypeId,
-        soldQuantity: { $gte: quantity },
+        soldQuantity: trustedOperator({ $gte: quantity }),
       },
       {
         $inc: { soldQuantity: -quantity },

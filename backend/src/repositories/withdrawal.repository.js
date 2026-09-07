@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Withdrawal from "../models/withdrawal.model.js";
+import { trustedOperator } from "../utils/trustedFilter.util.js";
 
 function applySession(query, options = {}) {
   return options.session ? query.session(options.session) : query;
@@ -94,7 +95,7 @@ export async function updateWithdrawalById(withdrawalId, updateData, options = {
 export async function updateWithdrawalByStatus(withdrawalId, expectedStatuses, updateData, options = {}) {
   return applySession(
     Withdrawal.findOneAndUpdate(
-      { _id: withdrawalId, status: { $in: expectedStatuses } },
+      { _id: withdrawalId, status: trustedOperator({ $in: expectedStatuses }) },
       updateData,
       { new: true, runValidators: true }
     )

@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Ticket from "../models/ticket.model.js";
 import { escapeRegex } from "../utils/query.util.js";
+import { trustedOperator } from "../utils/trustedFilter.util.js";
 
 function applySession(query, options = {}) {
   return options.session ? query.session(options.session) : query;
@@ -209,7 +210,7 @@ export async function markTicketsByOrder(orderId, status, options = {}) {
     Ticket.updateMany(
       {
         order: orderId,
-        status: { $ne: "USED" },
+        status: trustedOperator({ $ne: "USED" }),
       },
       { status },
       { runValidators: true }

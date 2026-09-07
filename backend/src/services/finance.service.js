@@ -21,6 +21,7 @@ import { fromMinorUnits, toMinorUnits } from "../utils/analytics.util.js";
 import { mapFinanceWithdrawal, mapFinancialPosition, mapPayoutDestination } from "../utils/financeResponse.util.js";
 import { buildPaginationMeta, buildPaginationOptions } from "../utils/query.util.js";
 import { getDocumentId } from "../utils/ticketingResponse.util.js";
+import { trustedOperator } from "../utils/trustedFilter.util.js";
 import * as paystackService from "./paystack.service.js";
 import * as notificationService from "./notification.service.js";
 
@@ -153,9 +154,10 @@ function buildWithdrawalFilter(query = {}, organizationId = null) {
   if (query.organizationId) filter.organization = query.organizationId;
   if (query.status) filter.status = query.status;
   if (query.startDate || query.endDate) {
-    filter.createdAt = {};
-    if (query.startDate) filter.createdAt.$gte = query.startDate;
-    if (query.endDate) filter.createdAt.$lte = query.endDate;
+    const dateRange = {};
+    if (query.startDate) dateRange.$gte = query.startDate;
+    if (query.endDate) dateRange.$lte = query.endDate;
+    filter.createdAt = trustedOperator(dateRange);
   }
   return filter;
 }

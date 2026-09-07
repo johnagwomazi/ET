@@ -60,3 +60,5 @@ export const WITHDRAWAL_STATUS = {
 };
 
 export const DEFAULT_CURRENCY = "NGN";
+
+export const SUPPORTED_PAYMENT_CURRENCIES = Object.freeze([DEFAULT_CURRENCY]);

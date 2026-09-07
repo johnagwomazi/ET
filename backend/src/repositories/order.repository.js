@@ -1,4 +1,5 @@
 import Order from "../models/order.model.js";
+import { trustedOperator } from "../utils/trustedFilter.util.js";
 
 function applySession(query, options = {}) {
   return options.session ? query.session(options.session) : query;
@@ -86,7 +87,7 @@ export async function updateOrderByPaymentReferenceAndStatus(
 ) {
   return applySession(
     Order.findOneAndUpdate(
-      { paymentReference, paymentStatus: { $in: expectedPaymentStatuses } },
+      { paymentReference, paymentStatus: trustedOperator({ $in: expectedPaymentStatuses }) },
       updateData,
       { new: true, runValidators: true }
     )
@@ -103,8 +104,8 @@ export async function reserveOrderRefund(reference, amount, options = {}) {
     Order.findOneAndUpdate(
       {
         reference,
-        paymentStatus: { $in: ["PAID", "PARTIALLY_REFUNDED"] },
-        $expr: {
+        paymentStatus: trustedOperator({ $in: ["PAID", "PARTIALLY_REFUNDED"] }),
+        $expr: trustedOperator({
           $gte: [
             {
               $subtract: [
@@ -114,7 +115,7 @@ export async function reserveOrderRefund(reference, amount, options = {}) {
             },
             amount,
           ],
-        },
+        }),
       },
       { $inc: { refundReservedAmount: amount } },
       { new: true, runValidators: true }
@@ -126,7 +127,7 @@ export async function reserveOrderRefund(reference, amount, options = {}) {
 export async function settleOrderRefund(reference, amount, options = {}) {
   return applySession(
     Order.findOneAndUpdate(
-      { reference, refundReservedAmount: { $gte: amount } },
+      { reference, refundReservedAmount: trustedOperator({ $gte: amount }) },
       { $inc: { refundReservedAmount: -amount, refundedAmount: amount } },
       { new: true, runValidators: true }
     ),
@@ -137,7 +138,7 @@ export async function settleOrderRefund(reference, amount, options = {}) {
 export async function releaseOrderRefund(reference, amount, options = {}) {
   return applySession(
     Order.findOneAndUpdate(
-      { reference, refundReservedAmount: { $gte: amount } },
+      { reference, refundReservedAmount: trustedOperator({ $gte: amount }) },
       { $inc: { refundReservedAmount: -amount } },
       { new: true, runValidators: true }
     ),

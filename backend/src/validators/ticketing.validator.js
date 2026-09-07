@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import {
   REFUND_STATUS,
+  SUPPORTED_PAYMENT_CURRENCIES,
   TICKET_TYPE_STATUS,
   WITHDRAWAL_STATUS,
 } from "../constants/ticketing.constants.js";
@@ -9,6 +10,11 @@ import {
 const mongoIdSchema = z.string().trim().regex(/^[0-9a-fA-F]{24}$/, "Invalid id");
 const optionalDateSchema = z.union([z.coerce.date(), z.null()]).optional();
 const moneySchema = z.coerce.number().finite().nonnegative().max(1000000000).multipleOf(0.01);
+const paymentCurrencySchema = z
+  .string()
+  .trim()
+  .transform((value) => value.toUpperCase())
+  .refine((value) => SUPPORTED_PAYMENT_CURRENCIES.includes(value), "Unsupported payment currency");
 
 export const eventTicketTypeParamSchema = z.object({ eventId: mongoIdSchema }).strict();
 export const ticketTypeParamSchema = z.object({ eventId: mongoIdSchema, ticketTypeId: mongoIdSchema }).strict();
@@ -36,7 +42,7 @@ const ticketTypeWriteShape = {
     name: z.string().trim().min(1, "Ticket name is required").max(80),
     description: z.string().trim().max(500).optional(),
     price: moneySchema,
-    currency: z.string().trim().regex(/^[A-Za-z]{3}$/, "Invalid currency").transform((value) => value.toUpperCase()).optional(),
+    currency: paymentCurrencySchema.optional(),
     quantity: z.coerce.number().int().min(0, "Quantity cannot be negative"),
     saleStartsAt: optionalDateSchema,
     saleEndsAt: optionalDateSchema,
