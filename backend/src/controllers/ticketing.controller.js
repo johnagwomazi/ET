@@ -84,7 +84,12 @@ export async function verifyPayment(req, res) {
     return sendServiceError(res, result);
   }
 
-  return res.status(HTTP_STATUS.OK).json(successResponse("Payment verified successfully", result));
+  const message = result.pending
+    ? "Payment is still processing"
+    : result.verified === false
+      ? "Payment was not completed"
+      : "Payment verified successfully";
+  return res.status(HTTP_STATUS.OK).json(successResponse(message, result));
 }
 
 export async function handlePaystackWebhook(req, res) {

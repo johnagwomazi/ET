@@ -17,6 +17,7 @@ import {
 import { EVENT_STATUS } from "../src/constants/eventStatus.constants.js";
 import { USER_ROLES } from "../src/constants/roles.constants.js";
 import * as ticketingService from "../src/services/ticketing.service.js";
+import { buildPaymentCallbackUrl } from "../src/utils/payment.util.js";
 
 const ids = {
   customer: "64b64b64b64b64b64b64b641",
@@ -456,12 +457,25 @@ test("ticketing validators enforce ticket, checkout, refund, withdrawal, and val
   assert.equal(ticketValidationSchema.safeParse({ reference: "tkt_123" }).success, true);
   assert.equal(ticketValidationSchema.safeParse({ token: "short" }).success, false);
   assert.equal(ticketValidationSchema.safeParse({ reference: "tkt_123", token: "a".repeat(32) }).success, false);
+  assert.equal(ticketTypeCreateSchema.safeParse({ name: "USD", price: 1000, quantity: 20, currency: "USD" }).success, false);
   assert.equal(refundCreateSchema.safeParse({ reason: "Event canceled" }).success, true);
   assert.equal(withdrawalCreateSchema.safeParse({ amount: 1000 }).success, true);
 });
 
 test("checkout creates server-priced orders and reserves ticket inventory", async () => {
-  const { dependencies, state } = createDependencies();
+  let initializationPayload;
+  const { dependencies, state } = createDependencies({
+    paystackService: {
+      async initializeTransaction(payload) {
+        initializationPayload = payload;
+        return {
+          configured: true,
+          status: true,
+          data: { authorization_url: "https://checkout.paystack.test", access_code: "access_code", reference: payload.reference },
+        };
+      },
+    },
+  });
   const result = await ticketingService.createCheckoutOrder(
     ids.customer,
     {
@@ -477,6 +491,8 @@ test("checkout creates server-priced orders and reserves ticket inventory", asyn
   assert.equal(result.order.total, 5000);
   assert.equal(result.order.items[0].unitPrice, 2500);
   assert.equal(result.payment.authorizationUrl, "https://checkout.paystack.test");
+  assert.equal(initializationPayload.currency, "NGN");
+  assert.equal(initializationPayload.callbackUrl, buildPaymentCallbackUrl());
   assert.equal(state.ticketType.soldQuantity, 4);
 });
 
@@ -494,6 +510,35 @@ test("checkout rejects unavailable inventory without trusting client totals", as
 
   assert.equal(result.statusCode, 409);
   assert.match(result.error, /unavailable|sold out/i);
+});
+
+test("checkout rejects a legacy unsupported currency before provider initialization", async () => {
+  let initializationCalls = 0;
+  const { dependencies, state } = createDependencies({
+    paystackService: {
+      async initializeTransaction() {
+        initializationCalls += 1;
+        return { configured: true, status: true, data: {} };
+      },
+    },
+  });
+  state.ticketType.currency = "USD";
+
+  const result = await ticketingService.createCheckoutOrder(
+    ids.customer,
+    {
+      eventId: ids.event,
+      customerInfo: { name: "Ada Buyer", phone: "+2348012345678", email: "ada@example.com" },
+      items: [{ ticketTypeId: ids.ticketType, quantity: 1 }],
+      idempotencyKey: "checkout-unsupported-currency",
+    },
+    dependencies
+  );
+
+  assert.equal(result.statusCode, 400);
+  assert.match(result.error, /unsupported payment currency/i);
+  assert.equal(initializationCalls, 0);
+  assert.equal(state.ticketType.soldQuantity, 2);
 });
 
 test("checkout returns a provider error and releases inventory when Paystack initialization fails", async () => {
@@ -661,6 +706,37 @@ test("definitively failed payment verification releases inventory only once", as
   assert.equal(first.verified, false);
   assert.equal(second.verified, false);
   assert.equal(state.ticketType.soldQuantity, 0);
+});
+
+test("non-final payment verification remains pending and can later complete", async () => {
+  let providerStatus = "pending";
+  const { dependencies, state } = createDependencies({
+    paystackService: {
+      async verifyTransaction() {
+        return {
+          configured: true,
+          status: true,
+          data: {
+            status: providerStatus,
+            reference: "pay_test",
+            amount: 500000,
+            currency: "NGN",
+          },
+        };
+      },
+    },
+  });
+
+  const pending = await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
+  assert.equal(pending.pending, true);
+  assert.equal(state.order.paymentStatus, PAYMENT_STATUS.PENDING);
+  assert.equal(state.ticketType.soldQuantity, 2);
+  assert.equal(state.tickets.length, 0);
+
+  providerStatus = "success";
+  const completed = await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
+  assert.equal(completed.order.paymentStatus, PAYMENT_STATUS.PAID);
+  assert.equal(state.tickets.length, 2);
 });
 
 test("manager ticket check-in validates event scope and records attendance once", async () => {

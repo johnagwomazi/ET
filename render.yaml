@@ -32,8 +32,6 @@ services:
         value: none
       - key: PAYSTACK_SECRET_KEY
         sync: false
-      - key: PAYSTACK_WEBHOOK_SECRET
-        sync: false
       - key: PAYSTACK_TIMEOUT_MS
         value: "10000"
       - key: CLOUDINARY_CLOUD_NAME

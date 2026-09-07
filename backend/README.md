@@ -114,8 +114,9 @@ SMTP configuration. `GET /api/health` returns HTTP 200 only after MongoDB is con
 - `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`: different random values of at least 32 characters.
 - `JWT_ACCESS_EXPIRES_IN` and `JWT_REFRESH_EXPIRES_IN`: normally `15m` and `7d`.
 - `COOKIE_HTTP_ONLY=true`, `COOKIE_SECURE=true`, and `COOKIE_SAME_SITE=none` for a separately hosted HTTPS frontend.
-- `PAYSTACK_SECRET_KEY` and `PAYSTACK_WEBHOOK_SECRET`: backend-only keys from the same Paystack test or live mode.
+- `PAYSTACK_SECRET_KEY`: backend-only API key used for Paystack requests and webhook HMAC verification.
 - `PAYSTACK_TIMEOUT_MS`: provider request timeout between 1000 and 60000 milliseconds.
+- Ticket payments currently support `NGN` only. Paystack initialization receives the server-authoritative order currency.
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM`.
 - `REQUIRE_EMAIL_VERIFICATION=true`.
@@ -137,8 +138,11 @@ https://YOUR_BACKEND_HOST/api/payments/paystack/webhook
 ```
 
 Keep Paystack in test mode for deployment verification. A real test transaction must confirm that the provider amount,
-currency, and reference exactly match the stored order before switching both backend keys and webhook configuration to
-live mode.
+currency, and reference exactly match the stored order before switching the backend key and Paystack dashboard webhook
+configuration to live mode.
+
+Checkout sends an explicit callback to `${FRONTEND_URL}/payment/confirmation`. For local webhook testing, expose the
+backend webhook through a public HTTPS tunnel; Paystack cannot deliver webhooks directly to `localhost`.
 
 Before enabling new unique payment/refund indexes against an existing database, take a backup and check for historical
 duplicate non-empty references. Do not delete historical orders, tickets, attendance, refunds, or withdrawals to make

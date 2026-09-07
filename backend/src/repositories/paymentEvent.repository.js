@@ -1,4 +1,5 @@
 import PaymentEvent from "../models/paymentEvent.model.js";
+import { trustedOperator } from "../utils/trustedFilter.util.js";
 
 export async function createPaymentEvent(paymentEventData) {
   const paymentEvent = new PaymentEvent(paymentEventData);
@@ -13,7 +14,7 @@ export async function claimPaymentEventRetry(provider, event, reference, staleBe
       reference,
       $or: [
         { status: "FAILED" },
-        { status: "PROCESSING", processingStartedAt: { $lte: staleBefore } },
+        { status: "PROCESSING", processingStartedAt: trustedOperator({ $lte: staleBefore }) },
       ],
     },
     {

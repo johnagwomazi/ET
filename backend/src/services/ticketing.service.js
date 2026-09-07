@@ -10,6 +10,7 @@ import {
   ORDER_STATUS,
   PAYMENT_STATUS,
   REFUND_STATUS,
+  SUPPORTED_PAYMENT_CURRENCIES,
   TICKET_STATUS,
   TICKET_TYPE_STATUS,
   TICKET_VALIDATION_OUTCOME,
@@ -29,7 +30,9 @@ import * as paystackService from "./paystack.service.js";
 import * as notificationService from "./notification.service.js";
 import * as analyticsService from "./analytics.service.js";
 import * as financeService from "./finance.service.js";
+import logger from "../lib/logger.js";
 import { buildPaginationMeta, buildPaginationOptions, escapeRegex } from "../utils/query.util.js";
+import { buildPaymentCallbackUrl } from "../utils/payment.util.js";
 import { hasOrganizationPermission } from "../utils/organizationPermission.util.js";
 import {
   getDocumentId,
@@ -108,6 +111,17 @@ async function releaseReservedInventory(reservedItems, dependencies) {
 
 function providerFailureStatus(payment) {
   return payment?.configured ? HTTP_STATUS.BAD_GATEWAY : HTTP_STATUS.SERVICE_UNAVAILABLE;
+}
+
+function logPaymentError(operation, error, context = {}) {
+  const identifiers = Object.entries(context)
+    .filter(([, value]) => value)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(" ");
+  const message = `[${operation}]${identifiers ? ` ${identifiers}` : ""}: ${error?.message || String(error)}`;
+  const loggedError = new Error(message);
+  if (error?.stack && process.env.NODE_ENV !== "production") loggedError.stack = `${loggedError.stack}\nCaused by: ${error.stack}`;
+  logger.error(loggedError);
 }
 
 function normalizeEmail(value) {
@@ -349,6 +363,9 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
         }
 
         const ticketCurrency = String(ticketType.currency || DEFAULT_CURRENCY).toUpperCase();
+        if (!SUPPORTED_PAYMENT_CURRENCIES.includes(ticketCurrency)) {
+          throw checkoutFailure("Unsupported payment currency", HTTP_STATUS.BAD_REQUEST);
+        }
         if (orderCurrency && orderCurrency !== ticketCurrency) {
           throw checkoutFailure("All ticket types in an order must use the same currency", HTTP_STATUS.BAD_REQUEST);
         }
@@ -422,12 +439,16 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
       );
 
       if (paidResult.error) {
-        await dependencies.orderRepository.updateOrderByReference(orderReference, {
+        const failedOrder = await dependencies.orderRepository.updateOrderByPaymentReferenceAndStatus(
+          paymentReference,
+          [PAYMENT_STATUS.PENDING, PAYMENT_STATUS.INITIALIZED],
+          {
           paymentStatus: PAYMENT_STATUS.FAILED,
           orderStatus: ORDER_STATUS.FAILED,
           failedAt: new Date(),
-        });
-        await releaseReservedInventory(reservedItems, dependencies);
+          }
+        );
+        if (failedOrder) await releaseReservedInventory(reservedItems, dependencies);
         return paidResult;
       }
 
@@ -446,7 +467,9 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
     const payment = await dependencies.paystackService.initializeTransaction({
       email: payload.customerInfo.email,
       amount: result.order.total,
+      currency: result.order.currency,
       reference: paymentReference,
+      callbackUrl: buildPaymentCallbackUrl(),
       metadata: {
         orderReference,
         customerId,
@@ -456,17 +479,22 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
 
     const authorizationUrl = payment?.data?.authorization_url || null;
     if (!payment?.status || !authorizationUrl) {
-      await dependencies.orderRepository.updateOrderByReference(orderReference, {
-        paymentStatus: PAYMENT_STATUS.FAILED,
-        orderStatus: ORDER_STATUS.FAILED,
-        failedAt: new Date(),
-        metadata: {
-          ...result.order.metadata,
-          paystackConfigured: Boolean(payment?.configured),
-          paymentInitializationFailed: true,
-        },
-      });
-      await releaseReservedInventory(reservedItems, dependencies);
+      const failedOrder = await dependencies.orderRepository.updateOrderByPaymentReferenceAndStatus(
+        paymentReference,
+        [PAYMENT_STATUS.PENDING, PAYMENT_STATUS.INITIALIZED],
+        {
+          paymentStatus: PAYMENT_STATUS.FAILED,
+          orderStatus: ORDER_STATUS.FAILED,
+          failedAt: new Date(),
+          metadata: {
+            ...result.order.metadata,
+            paystackConfigured: Boolean(payment?.configured),
+            paymentInitializationFailed: true,
+          },
+        }
+      );
+      if (failedOrder) await releaseReservedInventory(reservedItems, dependencies);
+      logger.warn(`[checkout.initialize] orderReference=${orderReference} paymentReference=${paymentReference}: ${payment?.message || "Paystack initialization failed"}`);
       return {
         error: payment?.configured ? "Payment provider could not initialize checkout" : "Payment service is not configured",
         statusCode: providerFailureStatus(payment),
@@ -492,13 +520,24 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
       },
     };
   } catch (error) {
+    if (error?.checkoutResult) {
+      logger.warn(`[checkout] orderReference=${orderReference} paymentReference=${paymentReference}: ${error.message}`);
+    } else {
+      logPaymentError("checkout", error, { orderReference, paymentReference });
+    }
     if ((!transactionUsed || reservationCommitted) && !providerInitialized) {
-      await dependencies.orderRepository.updateOrderByReference(orderReference, {
-        paymentStatus: PAYMENT_STATUS.FAILED,
-        orderStatus: ORDER_STATUS.FAILED,
-        failedAt: new Date(),
-      }).catch(() => null);
-      await releaseReservedInventory(reservedItems, dependencies);
+      const failedOrder = reservationCommitted
+        ? await dependencies.orderRepository.updateOrderByPaymentReferenceAndStatus(
+          paymentReference,
+          [PAYMENT_STATUS.PENDING, PAYMENT_STATUS.INITIALIZED],
+          {
+            paymentStatus: PAYMENT_STATUS.FAILED,
+            orderStatus: ORDER_STATUS.FAILED,
+            failedAt: new Date(),
+          }
+        ).catch(() => null)
+        : null;
+      if (!transactionUsed || failedOrder) await releaseReservedInventory(reservedItems, dependencies);
     }
 
     if (error?.checkoutResult) return error.checkoutResult;
@@ -577,7 +616,6 @@ export async function markOrderPaidFromProvider(paymentReference, providerPayloa
 
     if (order.paymentStatus === PAYMENT_STATUS.PAID) {
       const tickets = await dependencies.ticketRepository.findTickets({ order: order._id }, { limit: 500, session });
-      notificationContext = { order, tickets };
       return { order: mapOrderResponse(order), tickets: tickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true })), reused: true };
     }
 
@@ -644,13 +682,27 @@ export async function verifyPayment(customerId, reference, dependencies = defaul
   const verification = await dependencies.paystackService.verifyTransaction(reference);
 
   if (!verification?.status) {
+    logger.warn(`[payment.verify] paymentReference=${reference}: ${verification?.message || "Paystack verification failed"}`);
     return {
       error: verification?.configured === false ? "Payment service is not configured" : "Payment provider is unavailable",
       statusCode: providerFailureStatus(verification),
     };
   }
 
-  if (verification?.data?.status !== "success") {
+  const providerOutcome = paystackService.classifyTransactionStatus(verification?.data?.status);
+  if (
+    providerOutcome === paystackService.PAYSTACK_TRANSACTION_OUTCOME.PENDING ||
+    providerOutcome === paystackService.PAYSTACK_TRANSACTION_OUTCOME.UNKNOWN
+  ) {
+    return {
+      order: mapOrderResponse(currentOrder),
+      verified: false,
+      pending: true,
+      providerStatus: verification?.data?.status || "unknown",
+    };
+  }
+
+  if (providerOutcome === paystackService.PAYSTACK_TRANSACTION_OUTCOME.FAILED) {
     const order = await dependencies.orderRepository.updateOrderByPaymentReferenceAndStatus(
       reference,
       [PAYMENT_STATUS.PENDING, PAYMENT_STATUS.INITIALIZED],
@@ -670,7 +722,12 @@ export async function verifyPayment(customerId, reference, dependencies = defaul
       );
     }
 
-    return { order: mapOrderResponse(order || currentOrder), verified: false };
+    return {
+      order: mapOrderResponse(order || currentOrder),
+      verified: false,
+      pending: false,
+      providerStatus: verification.data.status,
+    };
   }
 
   return markOrderPaidFromProvider(reference, verification.data, dependencies);

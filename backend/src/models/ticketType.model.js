@@ -1,5 +1,9 @@
 import mongoose from "mongoose";
-import { DEFAULT_CURRENCY, TICKET_TYPE_STATUS } from "../constants/ticketing.constants.js";
+import {
+  DEFAULT_CURRENCY,
+  SUPPORTED_PAYMENT_CURRENCIES,
+  TICKET_TYPE_STATUS,
+} from "../constants/ticketing.constants.js";
 
 const ticketTypeSchema = new mongoose.Schema(
   {
@@ -33,6 +37,7 @@ const ticketTypeSchema = new mongoose.Schema(
     currency: {
       type: String,
       default: DEFAULT_CURRENCY,
+      enum: SUPPORTED_PAYMENT_CURRENCIES,
       uppercase: true,
       trim: true,
       maxlength: 3,

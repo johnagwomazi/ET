@@ -59,7 +59,6 @@ const envConfig = {
     password: process.env.SUPER_ADMIN_PASSWORD || "",
   },
   paystackSecretKey: process.env.PAYSTACK_SECRET_KEY || "",
-  paystackWebhookSecret: process.env.PAYSTACK_WEBHOOK_SECRET || "",
   paystackTimeoutMs: toNumber(process.env.PAYSTACK_TIMEOUT_MS, 10000),
 };
 
@@ -89,7 +88,6 @@ export function validateEnvironment(config = envConfig) {
     if (config.jwtRefreshSecret.length < 32) errors.push("JWT_REFRESH_SECRET must contain at least 32 characters in production");
     if (!config.cookieSecure) errors.push("COOKIE_SECURE must be true in production");
     if (!config.paystackSecretKey) errors.push("PAYSTACK_SECRET_KEY is required in production");
-    if (!config.paystackWebhookSecret) errors.push("PAYSTACK_WEBHOOK_SECRET is required in production");
     if (!config.cloudinary.cloudName || !config.cloudinary.apiKey || !config.cloudinary.apiSecret) errors.push("Cloudinary configuration is required in production");
     if (!config.smtp.host || !config.smtp.user || !config.smtp.pass || !config.smtp.from) errors.push("SMTP configuration is required in production");
   }
