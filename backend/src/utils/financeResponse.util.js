@@ -23,12 +23,13 @@ function mapRequester(value) {
 export function mapPayoutDestination(payoutDetails = {}) {
   return {
     configured: Boolean(payoutDetails.recipientCode),
+    verified: Boolean(payoutDetails.recipientCode),
     accountName: payoutDetails.accountName || "",
     accountNumberMasked: payoutDetails.accountNumberLast4 ? `******${payoutDetails.accountNumberLast4}` : "",
-    bankCode: payoutDetails.bankCode || "",
     bankName: payoutDetails.bankName || "",
     currency: payoutDetails.currency || "NGN",
     updatedAt: payoutDetails.updatedAt || null,
+    verifiedAt: payoutDetails.verifiedAt || null,
   };
 }
 
@@ -74,8 +75,6 @@ export function mapFinanceWithdrawal(withdrawalDocument) {
     currency: withdrawal.currency || "NGN",
     status: withdrawal.status,
     transferStatus: withdrawal.transferStatus || "NOT_STARTED",
-    transferReference: withdrawal.transferReference || "",
-    providerTransferCode: withdrawal.providerTransferCode || "",
     payoutDestination: withdrawal.payoutDestination || null,
     rejectionReason: withdrawal.rejectionReason || "",
     failureReason: withdrawal.failureReason || "",

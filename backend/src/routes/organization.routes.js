@@ -27,6 +27,7 @@ import envConfig from "../config/env.config.js";
 import {
   organizationWithdrawalListQuerySchema,
   payoutDetailsUpdateSchema,
+  payoutAccountResolveSchema,
   withdrawalCreateSchema as financeWithdrawalCreateSchema,
 } from "../validators/finance.validator.js";
 import {
@@ -152,6 +153,22 @@ organizationRouter.get(
   requireOrganizationRole(USER_ROLES.ADMIN),
   requireOrganizationPermission(ORGANIZATION_PERMISSIONS.SETTINGS_VIEW),
   financeController.getOrganizationFinanceSummary
+);
+
+organizationRouter.get(
+  "/me/finance/banks",
+  requireOrganizationRole(USER_ROLES.ADMIN),
+  requireOrganizationPermission(ORGANIZATION_PERMISSIONS.SETTINGS_VIEW),
+  financeController.getOrganizationPayoutBanks
+);
+
+organizationRouter.post(
+  "/me/finance/payout-details/resolve",
+  financeMutationLimiter,
+  requireOrganizationRole(USER_ROLES.ADMIN),
+  requireOrganizationPermission(ORGANIZATION_PERMISSIONS.SETTINGS_UPDATE),
+  validate(payoutAccountResolveSchema),
+  financeController.resolveOrganizationPayoutAccount
 );
 
 organizationRouter.put(

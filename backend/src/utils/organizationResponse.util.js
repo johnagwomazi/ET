@@ -18,7 +18,10 @@ export function mapOrganizationResponse(organizationDocument) {
     ? organizationDocument.toObject()
     : organizationDocument;
 
-  return sanitizeOrganizationPrimaryAdmin(organization);
+  const response = { ...organization };
+  delete response.payoutDetails;
+  delete response.financeLock;
+  return sanitizeOrganizationPrimaryAdmin(response);
 }
 
 export function mapOrganizationProfileResponse(organizationDocument) {

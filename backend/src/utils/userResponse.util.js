@@ -12,7 +12,10 @@ function sanitizePopulatedOrganization(organization) {
     delete organization.primaryAdmin.deletedReason;
   }
 
-  return organization;
+  const response = { ...organization };
+  delete response.payoutDetails;
+  delete response.financeLock;
+  return response;
 }
 
 export function mapUserResponse(userDocument) {
@@ -29,7 +32,7 @@ export function mapUserResponse(userDocument) {
   delete user.previousAccountStatus;
 
   if (user.organization && typeof user.organization === "object") {
-    sanitizePopulatedOrganization(user.organization);
+    user.organization = sanitizePopulatedOrganization(user.organization);
   }
 
   return user;

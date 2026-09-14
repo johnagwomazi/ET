@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Banknote, RefreshCw } from "lucide-react";
+import { ArrowUpRight, Banknote, RefreshCw } from "lucide-react";
 import Button from "../ui/Button";
 import Card from "../ui/Card";
 import Input from "../ui/Input";
@@ -8,6 +9,7 @@ import EmptyState from "../common/EmptyState";
 import ErrorState from "../common/ErrorState";
 import StatCard from "../dashboard/StatCard";
 import { formatMoney, formatNumber } from "../../utils/formatters";
+import { ROUTE_PATHS } from "../../routes/routePaths";
 import * as ticketingService from "../../services/ticketing.service";
 
 function EventFinancialPanel({ event, canView = false }) {
@@ -16,11 +18,7 @@ function EventFinancialPanel({ event, canView = false }) {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [refundForm, setRefundForm] = useState({ orderReference: "", amount: "", reason: "" });
-  const [withdrawalAmount, setWithdrawalAmount] = useState("");
-  const [withdrawalHistory, setWithdrawalHistory] = useState([]);
-  const [withdrawalBalance, setWithdrawalBalance] = useState(null);
   const [isSubmittingRefund, setIsSubmittingRefund] = useState(false);
-  const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false);
 
   async function loadSummary() {
     if (!eventId || !canView) {
@@ -31,13 +29,8 @@ function EventFinancialPanel({ event, canView = false }) {
     setError(null);
 
     try {
-      const [response, withdrawalResponse] = await Promise.all([
-        ticketingService.getOrganizationEventFinancialSummary(eventId),
-        ticketingService.getOrganizationWithdrawals({ page: 1, limit: 5 }),
-      ]);
+      const response = await ticketingService.getOrganizationEventFinancialSummary(eventId);
       setSummary(response?.summary || null);
-      setWithdrawalHistory(withdrawalResponse?.withdrawals || []);
-      setWithdrawalBalance(withdrawalResponse?.balance || null);
     } catch (loadError) {
       setError(loadError.message || "Unable to load event financials");
     } finally {
@@ -68,22 +61,6 @@ function EventFinancialPanel({ event, canView = false }) {
     }
   }
 
-  async function submitWithdrawal(event) {
-    event.preventDefault();
-    setIsSubmittingWithdrawal(true);
-
-    try {
-      await ticketingService.requestWithdrawal({ amount: Number(withdrawalAmount) });
-      toast.success("Withdrawal requested");
-      setWithdrawalAmount("");
-      await loadSummary();
-    } catch (withdrawalError) {
-      toast.error(withdrawalError.message || "Withdrawal request failed");
-    } finally {
-      setIsSubmittingWithdrawal(false);
-    }
-  }
-
   if (!canView) {
     return null;
   }
@@ -93,7 +70,6 @@ function EventFinancialPanel({ event, canView = false }) {
     { label: "Remaining", value: formatNumber(summary?.ticketsRemaining || 0) },
     { label: "Gross sales", value: formatMoney(summary?.grossSales || 0) },
     { label: "Net revenue", value: formatMoney(summary?.netRevenue || 0) },
-    { label: "Available balance", value: formatMoney(withdrawalBalance?.availableBalance || 0) },
   ];
 
   return (
@@ -110,7 +86,7 @@ function EventFinancialPanel({ event, canView = false }) {
       <div className="mt-5 space-y-5">
         {error ? <ErrorState title="Financials unavailable" message={error} onRetry={loadSummary} /> : null}
         {!error && !summary && !isLoading ? <EmptyState title="No sales data yet" message="Financial data appears after ticket sales are recorded." /> : null}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {cards.map((card) => <StatCard key={card.label} icon={Banknote} label={card.label} value={card.value} loading={isLoading && !summary} />)}
         </div>
 
@@ -123,30 +99,15 @@ function EventFinancialPanel({ event, canView = false }) {
             <Button type="submit" isLoading={isSubmittingRefund} loadingText="Submitting...">Submit refund</Button>
           </form>
 
-          <form onSubmit={submitWithdrawal} className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-            <h4 className="font-semibold text-white">Request withdrawal</h4>
-            <Input label="Amount" type="number" min="1" value={withdrawalAmount} onChange={(event) => setWithdrawalAmount(event.target.value)} />
-            <p className="text-sm leading-6 text-slate-400">Super Admin review is required before any Paystack transfer can be executed.</p>
-            <Button type="submit" isLoading={isSubmittingWithdrawal} loadingText="Requesting...">Request withdrawal</Button>
-          </form>
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-          <h4 className="font-semibold text-white">Recent withdrawals</h4>
-          <div className="mt-4 space-y-3">
-            {withdrawalHistory.length > 0 ? (
-              withdrawalHistory.map((withdrawal) => (
-                <div key={withdrawal.id} className="flex flex-col gap-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-white">{withdrawal.reference}</p>
-                    <p className="text-sm text-slate-400">{formatMoney(withdrawal.amount, withdrawal.currency)}</p>
-                  </div>
-                  <span className="text-xs uppercase tracking-[0.16em] text-slate-500">{withdrawal.status}</span>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-slate-400">No withdrawal requests yet.</p>
-            )}
+          <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+            <h4 className="font-semibold text-white">Organization withdrawals</h4>
+            <p className="text-sm leading-6 text-slate-400">
+              Configure the verified payout account, review the organization balance, and submit requests from Finance.
+            </p>
+            <Button as={Link} to={ROUTE_PATHS.ORGANIZATION_FINANCE}>
+              <ArrowUpRight className="h-4 w-4" />
+              Open Finance
+            </Button>
           </div>
         </div>
       </div>

@@ -56,6 +56,7 @@ const payoutDetailsSchema = new mongoose.Schema(
     bankName: { type: String, default: "", trim: true },
     currency: { type: String, default: "NGN", uppercase: true, trim: true },
     recipientCode: { type: String, default: "", trim: true, select: false },
+    verifiedAt: { type: Date, default: null },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedAt: { type: Date, default: null },
   },

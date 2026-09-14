@@ -7,6 +7,7 @@ import Card from "../../components/ui/Card";
 import ErrorState from "../../components/common/ErrorState";
 import FilterSelect from "../../components/dashboard/FilterSelect";
 import Pagination from "../../components/dashboard/Pagination";
+import StatusBadge from "../../components/dashboard/StatusBadge";
 import SectionHeader from "../../components/dashboard/SectionHeader";
 import FinancePageSkeleton from "../../components/finance/FinancePageSkeleton";
 import FinanceSummary from "../../components/finance/FinanceSummary";
@@ -86,7 +87,8 @@ function OrganizationFinancePage() {
     setIsSubmitting(true);
     setSubmissionError("");
     try {
-      await financeService.updateOrganizationPayoutDetails(payload);
+      const response = await financeService.updateOrganizationPayoutDetails(payload);
+      setSummary((current) => ({ ...current, payoutDestination: response.payoutDestination }));
       setPayoutOpen(false);
       toast.success("Payout account verified successfully");
       refresh();
@@ -140,7 +142,10 @@ function OrganizationFinancePage() {
           <div className="flex items-start gap-3">
             <Landmark className="mt-0.5 h-5 w-5 text-app-300" />
             <div>
-              <h3 className="font-semibold text-white">Payout account</h3>
+              <div className="flex flex-wrap items-center gap-3">
+                <h3 className="font-semibold text-white">Payout account</h3>
+                {payout.configured ? <StatusBadge status="VERIFIED" label="Verified" tone="success" /> : null}
+              </div>
               {payout.configured ? (
                 <p className="mt-1 text-sm text-slate-400">
                   {payout.accountName} | {payout.bankName || "Verified bank"} | {payout.accountNumberMasked}
@@ -158,7 +163,7 @@ function OrganizationFinancePage() {
             }}
           >
             <Settings2 className="h-4 w-4" />
-            {payout.configured ? "Change payout account" : "Configure payout account"}
+            {payout.configured ? "Change bank account" : "Add bank account"}
           </Button>
         </div>
       </section>
@@ -167,7 +172,7 @@ function OrganizationFinancePage() {
         <SectionHeader
           eyebrow="Withdrawal history"
           title="Requests and transfers"
-          description="Pending requests reserve balance immediately. Completion is shown only after provider confirmation."
+          description="Pending requests reserve balance immediately. Completion is shown once the bank transfer is confirmed."
         />
         <div className="max-w-xs">
           <FilterSelect
@@ -205,6 +210,7 @@ function OrganizationFinancePage() {
         submissionError={submissionError}
         onClose={() => setPayoutOpen(false)}
         onSubmit={submitPayoutDetails}
+        onChange={() => setSubmissionError("")}
       />
       <WithdrawalDetailsDrawer
         open={Boolean(selectedWithdrawal)}

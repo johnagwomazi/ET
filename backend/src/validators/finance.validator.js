@@ -16,12 +16,16 @@ export const withdrawalCreateSchema = z
   })
   .strict();
 
-export const payoutDetailsUpdateSchema = z
+export const payoutAccountResolveSchema = z
   .object({
     accountNumber: z.string().trim().regex(/^\d{10}$/, "Account number must contain exactly 10 digits"),
     bankCode: z.string().trim().regex(/^\d{3,10}$/, "Invalid bank code"),
   })
   .strict();
+
+export const payoutDetailsUpdateSchema = payoutAccountResolveSchema.extend({
+  confirmationToken: z.string().min(1, "Resolve and confirm the account before saving").max(2000),
+}).strict();
 
 export const withdrawalRejectSchema = z
   .object({ reason: z.string().trim().min(1, "Reason is required").max(500) })

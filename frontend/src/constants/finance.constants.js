@@ -9,9 +9,9 @@ export const WITHDRAWAL_STATUS = {
 
 export const WITHDRAWAL_STATUS_META = {
   PENDING: { label: "Pending", tone: "warning", description: "Waiting for Super Admin review" },
-  APPROVED: { label: "Approved", tone: "info", description: "Approved and awaiting provider processing" },
-  PROCESSING: { label: "Processing", tone: "info", description: "Transfer processing with the provider" },
-  PAID: { label: "Completed", tone: "success", description: "Transfer completed by the provider" },
+  APPROVED: { label: "Approved", tone: "info", description: "Approved and awaiting transfer processing" },
+  PROCESSING: { label: "Processing", tone: "info", description: "Bank transfer is processing" },
+  PAID: { label: "Completed", tone: "success", description: "Bank transfer confirmed" },
   REJECTED: { label: "Rejected", tone: "danger", description: "Request declined during review" },
   FAILED: { label: "Failed", tone: "danger", description: "Transfer could not be completed" },
 };
@@ -19,7 +19,7 @@ export const WITHDRAWAL_STATUS_META = {
 export const TRANSFER_STATUS_META = {
   NOT_STARTED: { label: "Not started", tone: "neutral" },
   PROCESSING: { label: "Processing", tone: "info" },
-  OTP: { label: "Awaiting provider authorization", tone: "warning" },
+  OTP: { label: "Awaiting transfer authorization", tone: "warning" },
   SUCCESS: { label: "Completed", tone: "success" },
   FAILED: { label: "Failed", tone: "danger" },
   REVERSED: { label: "Reversed", tone: "danger" },

@@ -1,5 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import jwt from "jsonwebtoken";
+import envConfig from "../src/config/env.config.js";
+import { mapUserResponse } from "../src/utils/userResponse.util.js";
+import { mapOrganizationResponse } from "../src/utils/organizationResponse.util.js";
+envConfig.jwtAccessSecret ||= "phase7-test-confirmation-secret";
 
 import { USER_ROLES } from "../src/constants/roles.constants.js";
 import { WITHDRAWAL_STATUS } from "../src/constants/ticketing.constants.js";
@@ -7,6 +12,8 @@ import * as financeService from "../src/services/finance.service.js";
 import * as ticketingService from "../src/services/ticketing.service.js";
 import {
   payoutDetailsUpdateSchema,
+  payoutAccountResolveSchema,
+  withdrawalApproveSchema,
   platformWithdrawalListQuerySchema,
   withdrawalCreateSchema,
   withdrawalRejectSchema,
@@ -61,6 +68,8 @@ function createDependencies(options = {}) {
       currency: "NGN",
       status: WITHDRAWAL_STATUS.PENDING,
       transferStatus: "NOT_STARTED",
+      providerRecipientCode: "RCP_phase7",
+      payoutDestination: { bankName: "Test Bank", accountName: "Acme Events Ltd", accountNumberLast4: "6789" },
       createdAt: new Date("2026-09-04T10:00:00.000Z"),
       ...withdrawal,
     })),
@@ -149,6 +158,7 @@ function createDependencies(options = {}) {
     },
     paystackService: {
       isConfigured() { return options.paystackConfigured !== false; },
+      async getSupportedBanks() { return { status: true, data: [{ name: "Test Bank", code: "058" }] }; },
       async resolveAccountNumber() {
         return { status: true, data: { account_name: "Acme Events Ltd", account_number: "0123456789" } };
       },
@@ -196,7 +206,8 @@ test("Phase 7 validators reject unsafe money, payout, filter, and review payload
   assert.equal(withdrawalCreateSchema.safeParse({ amount: 0 }).success, false);
   assert.equal(withdrawalCreateSchema.safeParse({ amount: 1.001 }).success, false);
   assert.equal(withdrawalCreateSchema.safeParse({ amount: 100, availableBalance: 1000 }).success, false);
-  assert.equal(payoutDetailsUpdateSchema.safeParse({ accountNumber: "0123456789", bankCode: "058" }).success, true);
+  assert.equal(payoutAccountResolveSchema.safeParse({ accountNumber: "0123456789", bankCode: "058" }).success, true);
+  assert.equal(payoutDetailsUpdateSchema.safeParse({ accountNumber: "0123456789", bankCode: "058" }).success, false);
   assert.equal(payoutDetailsUpdateSchema.safeParse({ accountNumber: "123", bankCode: "$where" }).success, false);
   assert.equal(withdrawalRejectSchema.safeParse({ reason: "" }).success, false);
   assert.equal(platformWithdrawalListQuerySchema.safeParse({ organizationId: { $ne: null } }).success, false);
@@ -255,10 +266,13 @@ test("only an active organization Admin can access organization finance", async 
 
 test("payout details are provider-verified and only a masked account is returned", async () => {
   const { dependencies, state } = createDependencies({ payoutConfigured: false });
+  const resolution = await financeService.resolveOrganizationPayoutAccount(
+    ids.organization, ids.admin, { accountNumber: "0123456789", bankCode: "058" }, dependencies
+  );
   const result = await financeService.updateOrganizationPayoutDetails(
     ids.organization,
     ids.admin,
-    { accountNumber: "0123456789", bankCode: "058" },
+    { accountNumber: "0123456789", bankCode: "058", confirmationToken: resolution.confirmationToken },
     dependencies
   );
   assert.equal(result.payoutDestination.accountNumberMasked, "******6789");
@@ -427,6 +441,156 @@ test("a provider reversal releases a previously completed withdrawal", async () 
   assert.equal(summary.availableBalance, 900);
 });
 
+async function createConfirmedPayoutPayload(dependencies, payload = {}) {
+  const account = {
+    accountNumber: payload.accountNumber || "0123456789",
+    bankCode: payload.bankCode || "058",
+  };
+  const resolution = await financeService.resolveOrganizationPayoutAccount(
+    ids.organization,
+    ids.admin,
+    account,
+    dependencies
+  );
+  assert.equal(resolution.error, undefined);
+  return { ...account, confirmationToken: resolution.confirmationToken };
+}
+
+test("payout bank lookup and account resolution require an organization Admin", async () => {
+  for (const actorId of [ids.manager, ids.customer, ids.superAdmin]) {
+    const { dependencies } = createDependencies();
+    dependencies.paystackService.getSupportedBanks = async () => assert.fail("Provider must not be called");
+    assert.equal(
+      (await financeService.getOrganizationPayoutBanks(ids.organization, actorId, dependencies)).statusCode,
+      403
+    );
+    assert.equal(
+      (await financeService.resolveOrganizationPayoutAccount(
+        ids.organization,
+        actorId,
+        { accountNumber: "0123456789", bankCode: "058" },
+        dependencies
+      )).statusCode,
+      403
+    );
+  }
+});
+
+test("resolution returns a provider name without saving or transferring", async () => {
+  const { dependencies, state } = createDependencies({ payoutConfigured: false });
+  dependencies.paystackService.createTransferRecipient = async () => assert.fail("Resolution must not create a recipient");
+  const result = await financeService.resolveOrganizationPayoutAccount(
+    ids.organization,
+    ids.admin,
+    { accountNumber: "0123456789", bankCode: "058" },
+    dependencies
+  );
+  assert.equal(result.accountName, "Acme Events Ltd");
+  assert.equal(result.bankName, "Test Bank");
+  assert.equal(result.accountNumberMasked, "******6789");
+  assert.ok(result.confirmationToken);
+  assert.equal(result.accountNumber, undefined);
+  assert.equal(state.organization.payoutDetails.recipientCode, undefined);
+  assert.equal(state.transferCount, 0);
+  assert.throws(() => jwt.verify(result.confirmationToken, envConfig.jwtAccessSecret));
+});
+
+test("saving payout details requires confirmation bound to the exact account", async () => {
+  const { dependencies, state } = createDependencies({ payoutConfigured: false });
+  const confirmed = await createConfirmedPayoutPayload(dependencies);
+  const forged = await financeService.updateOrganizationPayoutDetails(
+    ids.organization,
+    ids.admin,
+    { ...confirmed, confirmationToken: "not-a-valid-confirmation" },
+    dependencies
+  );
+  const changed = await financeService.updateOrganizationPayoutDetails(
+    ids.organization,
+    ids.admin,
+    { ...confirmed, accountNumber: "9876543210" },
+    dependencies
+  );
+  assert.equal(forged.statusCode, 400);
+  assert.equal(changed.statusCode, 400);
+  assert.equal(state.organization.payoutDetails.recipientCode, undefined);
+});
+
+test("changing payout details affects future requests while old requests keep their destination", async () => {
+  const { dependencies, state } = createDependencies();
+  const original = await financeService.requestWithdrawal(
+    ids.organization,
+    ids.admin,
+    { amount: 100, currency: "NGN" },
+    dependencies
+  );
+  dependencies.paystackService.getSupportedBanks = async () => ({
+    status: true,
+    data: [{ name: "New Bank", code: "044" }],
+  });
+  dependencies.paystackService.resolveAccountNumber = async () => ({
+    status: true,
+    data: { account_name: "NEW COMPANY", account_number: "9876543210" },
+  });
+  dependencies.paystackService.createTransferRecipient = async () => ({
+    status: true,
+    data: { recipient_code: "RCP_new", currency: "NGN", details: {} },
+  });
+  const confirmed = await createConfirmedPayoutPayload(dependencies, {
+    accountNumber: "9876543210",
+    bankCode: "044",
+  });
+  const saved = await financeService.updateOrganizationPayoutDetails(
+    ids.organization,
+    ids.admin,
+    confirmed,
+    dependencies
+  );
+  await financeService.requestWithdrawal(ids.organization, ids.admin, { amount: 200, currency: "NGN" }, dependencies);
+  assert.equal(saved.payoutDestination.accountName, "NEW COMPANY");
+  assert.equal(saved.payoutDestination.accountNumberMasked, "******3210");
+  assert.equal(saved.payoutDestination.bankCode, undefined);
+  assert.equal(saved.payoutDestination.recipientCode, undefined);
+  assert.equal(state.withdrawals[0].providerRecipientCode, "RCP_phase7");
+  assert.equal(state.withdrawals[1].providerRecipientCode, "RCP_new");
+  const review = await financeService.getPlatformWithdrawalDetails(
+    original.withdrawal.id,
+    ids.superAdmin,
+    dependencies
+  );
+  assert.equal(review.payoutDestination.bankName, "Test Bank");
+  assert.equal(review.payoutDestination.accountNumberLast4, "6789");
+});
+
+test("frontend payout authority is rejected and uncertain transfers remain reserved", async () => {
+  assert.equal(withdrawalCreateSchema.safeParse({ amount: 100, recipientCode: "RCP_other" }).success, false);
+  assert.equal(withdrawalApproveSchema.safeParse({ recipientCode: "RCP_other" }).success, false);
+  assert.equal(withdrawalApproveSchema.safeParse({ amount: 999 }).success, false);
+  const { dependencies, state } = createDependencies({ withdrawals: [{ amount: 400, amountMinor: 40_000 }] });
+  dependencies.paystackService.initiateTransfer = async () => {
+    state.transferCount += 1;
+    return { configured: true, status: false, indeterminate: true, message: "Provider timed out" };
+  };
+  const first = await financeService.approveWithdrawal(ids.withdrawal, ids.superAdmin, {}, dependencies);
+  const second = await financeService.approveWithdrawal(ids.withdrawal, ids.superAdmin, {}, dependencies);
+  const summary = await financeService.getOrganizationFinanceSummary(ids.organization, ids.admin, dependencies);
+  assert.equal(first.withdrawal.status, WITHDRAWAL_STATUS.PROCESSING);
+  assert.equal(first.withdrawal.transferStatus, "UNKNOWN");
+  assert.equal(second.idempotent, true);
+  assert.equal(state.transferCount, 1);
+  assert.equal(summary.availableBalance, 500);
+});
+
+test("general organization responses do not expose payout details", () => {
+  const organization = {
+    _id: ids.organization,
+    payoutDetails: { recipientCode: "RCP_secret", bankCode: "058", accountName: "Private" },
+    financeLock: { token: "private" },
+  };
+  assert.equal(mapOrganizationResponse(organization).payoutDetails, undefined);
+  assert.equal(mapOrganizationResponse(organization).financeLock, undefined);
+  assert.equal(mapUserResponse({ organization }).organization.payoutDetails, undefined);
+});
+
 test("withdrawal indexes cover organization status, queue ordering, requester, and unique transfer references", () => {
   const indexes = Withdrawal.schema.indexes();
   assert.ok(indexes.some(([fields]) => fields.organization === 1 && fields.status === 1 && fields.createdAt === -1));
@@ -440,6 +604,8 @@ test("withdrawal indexes cover organization status, queue ordering, requester, a
 test("all Phase 7 routes are registered under protected organization and Super Admin routers", () => {
   const paths = (router) => router.stack.filter((layer) => layer.route).map((layer) => layer.route.path);
   assert.ok(paths(organizationRoutes).includes("/me/finance/summary"));
+  assert.ok(paths(organizationRoutes).includes("/me/finance/banks"));
+  assert.ok(paths(organizationRoutes).includes("/me/finance/payout-details/resolve"));
   assert.ok(paths(organizationRoutes).includes("/me/finance/payout-details"));
   assert.ok(paths(organizationRoutes).includes("/me/withdrawals"));
   assert.ok(paths(adminRoutes).includes("/withdrawals/:withdrawalId"));

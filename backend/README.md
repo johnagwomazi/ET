@@ -115,6 +115,7 @@ SMTP configuration. `GET /api/health` returns HTTP 200 only after MongoDB is con
 - `JWT_ACCESS_EXPIRES_IN` and `JWT_REFRESH_EXPIRES_IN`: normally `15m` and `7d`.
 - `COOKIE_HTTP_ONLY=true`, `COOKIE_SECURE=true`, and `COOKIE_SAME_SITE=none` for a separately hosted HTTPS frontend.
 - `PAYSTACK_SECRET_KEY`: backend-only API key used for Paystack requests and webhook HMAC verification.
+- `PAYSTACK_MODE`: `test` or `live`. Render defaults to `test`; switching to live requires this value and the secret-key prefix to agree.
 - `PAYSTACK_TIMEOUT_MS`: provider request timeout between 1000 and 60000 milliseconds.
 - Ticket payments currently support `NGN` only. Paystack initialization receives the server-authoritative order currency.
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
@@ -140,6 +141,21 @@ https://YOUR_BACKEND_HOST/api/payments/paystack/webhook
 Keep Paystack in test mode for deployment verification. A real test transaction must confirm that the provider amount,
 currency, and reference exactly match the stored order before switching the backend key and Paystack dashboard webhook
 configuration to live mode.
+
+### Organization payouts
+
+Phase 7 uses the same backend Paystack integration and webhook as ticket checkout. Organization Admins configure one
+verified Nigerian bank destination, request withdrawals against backend-calculated available revenue, and wait for
+Super Admin review. The browser never supplies transfer recipients or transfer amounts during approval.
+
+- `GET /api/organizations/me/finance/banks` returns active Nigerian NUBAN bank names and selection codes.
+- `POST /api/organizations/me/finance/payout-details/resolve` resolves the provider account name without saving it.
+- `PUT /api/organizations/me/finance/payout-details` confirms the resolved name and stores a private transfer recipient.
+- `POST /api/organizations/me/withdrawals` snapshots the masked destination and reserves the requested balance.
+- `PATCH /api/admin/withdrawals/:withdrawalId/approve` uses that request's private recipient snapshot.
+
+Transfer success, failure, and reversal continue through `/api/payments/paystack/webhook`. An approval remains
+`PROCESSING` until the provider response or a signed webhook confirms its final state.
 
 Checkout sends an explicit callback to `${FRONTEND_URL}/payment/confirmation`. For local webhook testing, expose the
 backend webhook through a public HTTPS tunnel; Paystack cannot deliver webhooks directly to `localhost`.

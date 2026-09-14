@@ -14,7 +14,6 @@ import {
   TICKET_STATUS,
   TICKET_TYPE_STATUS,
   TICKET_VALIDATION_OUTCOME,
-  WITHDRAWAL_STATUS,
 } from "../constants/ticketing.constants.js";
 import * as authRepository from "../repositories/auth.repository.js";
 import * as eventAttendanceRepository from "../repositories/eventAttendance.repository.js";
@@ -25,7 +24,6 @@ import * as paymentEventRepository from "../repositories/paymentEvent.repository
 import * as refundRepository from "../repositories/refund.repository.js";
 import * as ticketRepository from "../repositories/ticket.repository.js";
 import * as ticketTypeRepository from "../repositories/ticketType.repository.js";
-import * as withdrawalRepository from "../repositories/withdrawal.repository.js";
 import * as paystackService from "./paystack.service.js";
 import * as notificationService from "./notification.service.js";
 import * as analyticsService from "./analytics.service.js";
@@ -40,7 +38,6 @@ import {
   mapRefundResponse,
   mapTicketResponse,
   mapTicketTypeResponse,
-  mapWithdrawalResponse,
 } from "../utils/ticketingResponse.util.js";
 import { mapEventAttendanceResponse } from "../utils/eventAttendanceResponse.util.js";
 
@@ -54,7 +51,6 @@ const defaultDependencies = {
   refundRepository,
   ticketRepository,
   ticketTypeRepository,
-  withdrawalRepository,
   paystackService,
   notificationService,
   mongoose,
@@ -1360,167 +1356,6 @@ export async function getEventFinancialSummary(organizationId, actorUserId, even
       ticketTypes: result.ticketTypes,
     },
   };
-}
-
-export async function requestWithdrawal(organizationId, actorUserId, payload, dependencies = defaultDependencies) {
-  const balance = await getOrganizationWithdrawalBalance(organizationId, actorUserId, dependencies);
-
-  if (balance.error) {
-    return balance;
-  }
-
-  const availableBalance = balance.availableBalance;
-
-  if (payload.amount > availableBalance) {
-    return { error: "Withdrawal amount exceeds available balance", statusCode: HTTP_STATUS.BAD_REQUEST };
-  }
-
-  const withdrawal = await dependencies.withdrawalRepository.createWithdrawal({
-    reference: createReference("wd"),
-    organization: organizationId,
-    requestedBy: actorUserId,
-    amount: payload.amount,
-    status: WITHDRAWAL_STATUS.PENDING,
-  });
-
-  return { withdrawal: mapWithdrawalResponse(withdrawal), availableBalance: availableBalance - payload.amount };
-}
-
-export async function getOrganizationWithdrawalBalance(organizationId, actorUserId, dependencies = defaultDependencies) {
-  const actorContext = await getOrganizationActorContext(organizationId, actorUserId, dependencies);
-
-  if (actorContext.error) {
-    return actorContext;
-  }
-
-  const financial = await dependencies.orderRepository.getOrganizationFinancialAggregation(organizationId);
-  const committedWithdrawals = await dependencies.withdrawalRepository.sumWithdrawals(organizationId, [
-    WITHDRAWAL_STATUS.PENDING,
-    WITHDRAWAL_STATUS.APPROVED,
-    WITHDRAWAL_STATUS.PROCESSING,
-    WITHDRAWAL_STATUS.PAID,
-  ]);
-  const availableBalance = Math.max(0, Number(financial.grossSales || 0) - Number(financial.refundedAmount || 0) - committedWithdrawals);
-
-  return {
-    grossSales: Number(financial.grossSales || 0),
-    refundedAmount: Number(financial.refundedAmount || 0),
-    committedWithdrawals,
-    availableBalance,
-  };
-}
-
-function buildWithdrawalFilter(query = {}, organizationId = null) {
-  const filter = {};
-
-  if (organizationId) {
-    filter.organization = organizationId;
-  }
-
-  if (query.status) {
-    filter.status = query.status;
-  }
-
-  return filter;
-}
-
-export async function getOrganizationWithdrawals(organizationId, actorUserId, query = {}, dependencies = defaultDependencies) {
-  const actorContext = await getOrganizationActorContext(organizationId, actorUserId, dependencies);
-
-  if (actorContext.error) {
-    return actorContext;
-  }
-
-  const pagination = buildPaginationOptions(query, { page: 1, limit: 20, sortBy: "createdAt", sortOrder: -1 });
-  const filter = buildWithdrawalFilter(query, organizationId);
-  const [withdrawals, totalItems, balance] = await Promise.all([
-    dependencies.withdrawalRepository.findWithdrawals(filter, pagination),
-    dependencies.withdrawalRepository.countWithdrawals(filter),
-    getOrganizationWithdrawalBalance(organizationId, actorUserId, dependencies),
-  ]);
-
-  return {
-    withdrawals: withdrawals.map(mapWithdrawalResponse),
-    balance,
-    pagination: buildPaginationMeta(totalItems, pagination),
-  };
-}
-
-export async function getPlatformWithdrawals(query = {}, dependencies = defaultDependencies) {
-  const pagination = buildPaginationOptions(query, { page: 1, limit: 20, sortBy: "createdAt", sortOrder: -1 });
-  const filter = buildWithdrawalFilter(query);
-  const [withdrawals, totalItems] = await Promise.all([
-    dependencies.withdrawalRepository.findWithdrawals(filter, pagination),
-    dependencies.withdrawalRepository.countWithdrawals(filter),
-  ]);
-
-  return {
-    withdrawals: withdrawals.map(mapWithdrawalResponse),
-    pagination: buildPaginationMeta(totalItems, pagination),
-  };
-}
-
-export async function reviewWithdrawal(withdrawalId, reviewerId, action, payload = {}, dependencies = defaultDependencies) {
-  const withdrawal = await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId);
-
-  if (!withdrawal) {
-    return { error: "Withdrawal not found", statusCode: HTTP_STATUS.NOT_FOUND };
-  }
-
-  if (withdrawal.status !== WITHDRAWAL_STATUS.PENDING) {
-    return { error: "Withdrawal has already been reviewed", statusCode: HTTP_STATUS.CONFLICT };
-  }
-
-  if (action === "reject") {
-    const rejected = await dependencies.withdrawalRepository.updateWithdrawalById(withdrawalId, {
-      status: WITHDRAWAL_STATUS.REJECTED,
-      reviewedBy: reviewerId,
-      reviewedAt: new Date(),
-      failureReason: payload.reason,
-    });
-
-    return { withdrawal: mapWithdrawalResponse(rejected) };
-  }
-
-  const approved = await dependencies.withdrawalRepository.updateWithdrawalById(withdrawalId, {
-    status: WITHDRAWAL_STATUS.APPROVED,
-    reviewedBy: reviewerId,
-    reviewedAt: new Date(),
-  });
-
-  if (!payload.recipientCode) {
-    return { withdrawal: mapWithdrawalResponse(approved) };
-  }
-
-  const transferReference = createReference("trf");
-  const transfer = await dependencies.paystackService.initiateTransfer?.({
-    amount: withdrawal.amount,
-    recipient: payload.recipientCode,
-    reason: payload.reason || `Withdrawal ${withdrawal.reference}`,
-    reference: transferReference,
-  });
-
-  if (transfer?.status) {
-    const paid = await dependencies.withdrawalRepository.updateWithdrawalById(withdrawalId, {
-      status: WITHDRAWAL_STATUS.PAID,
-      transferReference: transfer.data?.reference || transferReference,
-      paidAt: new Date(),
-    });
-
-    return { withdrawal: mapWithdrawalResponse(paid), transfer: transfer.data || null };
-  }
-
-  if (transfer?.configured) {
-    const failed = await dependencies.withdrawalRepository.updateWithdrawalById(withdrawalId, {
-      status: WITHDRAWAL_STATUS.FAILED,
-      transferReference,
-      failureReason: transfer.message || "Transfer provider request failed",
-    });
-
-    return { withdrawal: mapWithdrawalResponse(failed), transfer: null };
-  }
-
-  return { withdrawal: mapWithdrawalResponse(approved), transfer: null };
 }
 
 export function buildOrderSearchFilter(query = {}) {

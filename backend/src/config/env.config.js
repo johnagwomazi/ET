@@ -59,6 +59,7 @@ const envConfig = {
     password: process.env.SUPER_ADMIN_PASSWORD || "",
   },
   paystackSecretKey: process.env.PAYSTACK_SECRET_KEY || "",
+  paystackMode: (process.env.PAYSTACK_MODE || "test").toLowerCase(),
   paystackTimeoutMs: toNumber(process.env.PAYSTACK_TIMEOUT_MS, 10000),
 };
 
@@ -82,6 +83,14 @@ export function validateEnvironment(config = envConfig) {
   if (!["lax", "strict", "none"].includes(config.cookieSameSite)) errors.push("COOKIE_SAME_SITE must be lax, strict, or none");
   if (config.cookieSameSite === "none" && !config.cookieSecure) errors.push("COOKIE_SECURE must be true when COOKIE_SAME_SITE is none");
   if (!Number.isFinite(config.paystackTimeoutMs) || config.paystackTimeoutMs < 1000 || config.paystackTimeoutMs > 60000) errors.push("PAYSTACK_TIMEOUT_MS must be between 1000 and 60000");
+  const paystackMode = config.paystackMode || "test";
+  if (!["test", "live"].includes(paystackMode)) errors.push("PAYSTACK_MODE must be test or live");
+  if (config.paystackSecretKey && paystackMode === "test" && !config.paystackSecretKey.startsWith("sk_test_")) {
+    errors.push("PAYSTACK_SECRET_KEY must be a test key when PAYSTACK_MODE is test");
+  }
+  if (config.paystackSecretKey && paystackMode === "live" && !config.paystackSecretKey.startsWith("sk_live_")) {
+    errors.push("PAYSTACK_SECRET_KEY must be a live key when PAYSTACK_MODE is live");
+  }
 
   if (production) {
     if (config.jwtAccessSecret.length < 32) errors.push("JWT_ACCESS_SECRET must contain at least 32 characters in production");

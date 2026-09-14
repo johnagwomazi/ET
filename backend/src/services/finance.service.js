@@ -1,4 +1,7 @@
 import crypto from "node:crypto";
+import jwt from "jsonwebtoken";
+import envConfig from "../config/env.config.js";
+import { payoutAccountResolveSchema, payoutDetailsUpdateSchema } from "../validators/finance.validator.js";
 import { ACCOUNT_STATUS } from "../constants/accountStatus.constants.js";
 import {
   FINANCE_LOCK_DURATION_MS,
@@ -151,7 +154,7 @@ function transferReference(withdrawal) {
 function buildWithdrawalFilter(query = {}, organizationId = null) {
   const filter = {};
   if (organizationId) filter.organization = organizationId;
-  if (query.organizationId) filter.organization = query.organizationId;
+  if (!organizationId && query.organizationId) filter.organization = query.organizationId;
   if (query.status) filter.status = query.status;
   if (query.startDate || query.endDate) {
     const dateRange = {};
@@ -172,55 +175,160 @@ export async function getOrganizationFinanceSummary(organizationId, actorUserId,
   };
 }
 
-export async function updateOrganizationPayoutDetails(organizationId, actorUserId, payload, dependencies = defaultDependencies) {
+async function loadSupportedBanks(dependencies) {
+  try {
+    const result = await dependencies.paystackService.getSupportedBanks();
+    if (!result?.status || !Array.isArray(result.data) || !result.data.length) {
+      return serviceError("Banks are temporarily unavailable. Please try again.", HTTP_STATUS.SERVICE_UNAVAILABLE);
+    }
+    return { banks: result.data.map(({ name, code }) => ({ name, code })) };
+  } catch (error) {
+    return serviceError("Banks are temporarily unavailable. Please try again.", HTTP_STATUS.SERVICE_UNAVAILABLE);
+  }
+}
+
+export async function getOrganizationPayoutBanks(organizationId, actorUserId, dependencies = defaultDependencies) {
   const context = await requireOrganizationAdmin(organizationId, actorUserId, dependencies);
   if (context.error) return context;
-  if (dependencies.paystackService.isConfigured && !dependencies.paystackService.isConfigured()) {
-    return serviceError("Paystack is not configured", HTTP_STATUS.SERVICE_UNAVAILABLE);
-  }
+  return loadSupportedBanks(dependencies);
+}
+
+async function resolvePayoutAccount(payload, dependencies) {
+  const supported = await loadSupportedBanks(dependencies);
+  if (supported.error) return supported;
+  const bank = supported.banks.find((item) => item.code === payload.bankCode);
+  if (!bank) return serviceError("Select a supported bank", HTTP_STATUS.BAD_REQUEST);
 
   let resolved;
   try {
-    resolved = await dependencies.paystackService.resolveAccountNumber({
-      accountNumber: payload.accountNumber,
-      bankCode: payload.bankCode,
-    });
+    resolved = await dependencies.paystackService.resolveAccountNumber(payload);
   } catch (error) {
-    return serviceError("Payout account verification is temporarily unavailable", HTTP_STATUS.SERVICE_UNAVAILABLE);
+    return serviceError("Account verification is temporarily unavailable. Please try again.", HTTP_STATUS.SERVICE_UNAVAILABLE);
   }
-  if (!resolved?.status || !resolved.data?.account_name) {
-    return serviceError(resolved?.message || "Unable to verify payout account", HTTP_STATUS.BAD_REQUEST);
+  if (!resolved?.status) {
+    const unavailable = resolved?.indeterminate || resolved?.configured === false ||
+      [401, 403, 429].includes(resolved?.httpStatus);
+    return serviceError(
+      unavailable ? "Account verification is temporarily unavailable. Please try again." : "Unable to verify this account. Check the bank and account number.",
+      unavailable ? HTTP_STATUS.SERVICE_UNAVAILABLE : HTTP_STATUS.BAD_REQUEST
+    );
+  }
+  if (typeof resolved.data?.account_name !== "string" || !resolved.data.account_name.trim() ||
+      resolved.data.account_number !== payload.accountNumber) {
+    return serviceError("The bank account could not be verified. Please try again.", HTTP_STATUS.BAD_REQUEST);
+  }
+  return { bank, accountName: resolved.data.account_name.trim() };
+}
+
+function payoutConfirmationSecret() {
+  return crypto.createHmac("sha256", envConfig.jwtAccessSecret).update("payout-account-confirmation").digest();
+}
+
+function payoutAccountDigest(payload) {
+  return crypto.createHmac("sha256", envConfig.jwtAccessSecret)
+    .update(`${payload.bankCode}:${payload.accountNumber}`).digest("hex");
+}
+
+export async function resolveOrganizationPayoutAccount(organizationId, actorUserId, payload, dependencies = defaultDependencies) {
+  const context = await requireOrganizationAdmin(organizationId, actorUserId, dependencies);
+  if (context.error) return context;
+  const validation = payoutAccountResolveSchema.safeParse(payload);
+  if (!validation.success) return serviceError(validation.error.issues[0].message, HTTP_STATUS.BAD_REQUEST);
+  const account = await resolvePayoutAccount(validation.data, dependencies);
+  if (account.error) return account;
+
+  // Bind confirmation to this administrator, organization, account and provider-resolved name.
+  const confirmationToken = jwt.sign({
+    organizationId: getDocumentId(organizationId),
+    accountDigest: payoutAccountDigest(validation.data),
+    accountName: account.accountName,
+  }, payoutConfirmationSecret(), {
+    algorithm: "HS256",
+    audience: "payout-account-confirmation",
+    subject: getDocumentId(actorUserId),
+    expiresIn: "10m",
+  });
+  return {
+    accountName: account.accountName,
+    bankName: account.bank.name,
+    accountNumberMasked: `******${validation.data.accountNumber.slice(-4)}`,
+    confirmationToken,
+  };
+}
+
+export async function updateOrganizationPayoutDetails(organizationId, actorUserId, payload, dependencies = defaultDependencies) {
+  const context = await requireOrganizationAdmin(organizationId, actorUserId, dependencies);
+  if (context.error) return context;
+  const validation = payoutDetailsUpdateSchema.safeParse(payload);
+  if (!validation.success) return serviceError(validation.error.issues[0].message, HTTP_STATUS.BAD_REQUEST);
+  payload = validation.data;
+
+  let confirmation;
+  try {
+    confirmation = jwt.verify(payload.confirmationToken, payoutConfirmationSecret(), {
+      algorithms: ["HS256"],
+      audience: "payout-account-confirmation",
+      subject: getDocumentId(actorUserId),
+    });
+    if (confirmation.organizationId !== getDocumentId(organizationId) ||
+        confirmation.accountDigest !== payoutAccountDigest(payload)) {
+      return serviceError("Account details changed. Verify the account again.", HTTP_STATUS.BAD_REQUEST);
+    }
+  } catch (error) {
+    return serviceError("Account confirmation expired or is invalid. Verify the account again.", HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const account = await resolvePayoutAccount(payload, dependencies);
+  if (account.error) return account;
+  if (account.accountName !== confirmation.accountName) {
+    return serviceError("The resolved account name changed. Verify and confirm the account again.", HTTP_STATUS.CONFLICT);
   }
 
   let recipient;
   try {
     recipient = await dependencies.paystackService.createTransferRecipient({
-      name: resolved.data.account_name,
+      name: account.accountName,
       accountNumber: payload.accountNumber,
       bankCode: payload.bankCode,
       currency: DEFAULT_CURRENCY,
       description: `Payout recipient for ${context.organization.organizationName}`,
     });
   } catch (error) {
-    return serviceError("Payout recipient setup is temporarily unavailable", HTTP_STATUS.SERVICE_UNAVAILABLE);
+    return serviceError("Unable to save the payout account right now. Please try again.", HTTP_STATUS.SERVICE_UNAVAILABLE);
   }
-  if (!recipient?.status || !recipient.data?.recipient_code) {
-    return serviceError(recipient?.message || "Unable to create payout recipient", HTTP_STATUS.BAD_REQUEST);
+  if (!recipient?.status || !recipient.data?.recipient_code || recipient.data.active === false) {
+    return serviceError("Unable to save the payout account right now. Please try again.", HTTP_STATUS.SERVICE_UNAVAILABLE);
   }
-
   const details = recipient.data.details || {};
-  const updated = await dependencies.organizationRepository.updateOrganizationPayoutDetails(organizationId, {
-    accountName: details.account_name || resolved.data.account_name,
-    accountNumberLast4: payload.accountNumber.slice(-4),
-    bankCode: details.bank_code || payload.bankCode,
-    bankName: details.bank_name || "",
-    currency: recipient.data.currency || DEFAULT_CURRENCY,
-    recipientCode: recipient.data.recipient_code,
-    updatedBy: actorUserId,
-    updatedAt: new Date(),
-  });
+  if ((details.bank_code && details.bank_code !== payload.bankCode) ||
+      (details.account_number && details.account_number !== payload.accountNumber) ||
+      (recipient.data.currency && recipient.data.currency !== DEFAULT_CURRENCY)) {
+    return serviceError("The payout account could not be confirmed. Please try again.", HTTP_STATUS.CONFLICT);
+  }
 
-  return { payoutDestination: mapPayoutDestination(updated.payoutDetails) };
+  // Keep provider calls outside the short finance lock; replace the destination atomically.
+  const lock = await acquireFinanceLock(organizationId, dependencies);
+  if (lock.error) return lock;
+  try {
+    const current = await requireOrganizationAdmin(organizationId, actorUserId, dependencies);
+    if (current.error) return current;
+    const now = new Date();
+    const updated = await dependencies.organizationRepository.updateOrganizationPayoutDetails(organizationId, {
+      accountName: account.accountName,
+      accountNumberLast4: payload.accountNumber.slice(-4),
+      bankCode: payload.bankCode,
+      bankName: account.bank.name,
+      currency: DEFAULT_CURRENCY,
+      recipientCode: recipient.data.recipient_code,
+      verifiedAt: now,
+      updatedBy: actorUserId,
+      updatedAt: now,
+    });
+    if (!updated) return serviceError("Organization payout eligibility changed", HTTP_STATUS.CONFLICT);
+    return { payoutDestination: mapPayoutDestination(updated.payoutDetails) };
+  } finally {
+    await releaseFinanceLock(organizationId, lock.token, dependencies);
+  }
 }
 
 export async function requestWithdrawal(organizationId, actorUserId, payload, dependencies = defaultDependencies) {
@@ -320,15 +428,14 @@ export async function getPlatformWithdrawalDetails(withdrawalId, actorUserId, de
   const withdrawal = await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId);
   if (!withdrawal) return serviceError("Withdrawal not found", HTTP_STATUS.NOT_FOUND);
   const organizationId = getDocumentId(withdrawal.organization);
-  const [organization, position, recent] = await Promise.all([
-    dependencies.organizationRepository.findOrganizationWithPayoutDetailsById(organizationId),
+  const [position, recent] = await Promise.all([
     calculateOrganizationFinancialPosition(organizationId, dependencies),
     dependencies.withdrawalRepository.findWithdrawals({ organization: organizationId }, { limit: 5 }),
   ]);
   return {
     withdrawal: mapFinanceWithdrawal(withdrawal),
     financialSummary: mapFinancialPosition(position),
-    payoutDestination: mapPayoutDestination(organization?.payoutDetails),
+    payoutDestination: mapFinanceWithdrawal(withdrawal).payoutDestination,
     recentWithdrawals: recent.map(mapFinanceWithdrawal),
   };
 }
@@ -408,7 +515,7 @@ export async function approveWithdrawal(withdrawalId, reviewerId, payload = {}, 
     }
     const organization = lock.organization || await dependencies.organizationRepository.findOrganizationWithPayoutDetailsById(organizationId);
     if (!isActiveOrganization(organization)) return serviceError("Organization is not eligible for withdrawal", HTTP_STATUS.CONFLICT);
-    if (!hasPayoutDestination(organization)) return serviceError("Organization payout details are missing", HTTP_STATUS.BAD_REQUEST);
+    if (!withdrawal.providerRecipientCode) return serviceError("This request has no saved payout destination. Reject it and ask the organization to submit a new request.", HTTP_STATUS.CONFLICT);
     const position = await calculateOrganizationFinancialPosition(organizationId, dependencies);
     const obligationsMinor = position.completedWithdrawalsMinor + position.reservedWithdrawalsMinor;
     if (obligationsMinor > position.netRevenueMinor) {
@@ -424,7 +531,7 @@ export async function approveWithdrawal(withdrawalId, reviewerId, payload = {}, 
         status: WITHDRAWAL_STATUS.PROCESSING,
         transferStatus: WITHDRAWAL_PROVIDER_STATUS.PROCESSING,
         transferReference: reference,
-        providerRecipientCode: withdrawal.providerRecipientCode || organization.payoutDetails.recipientCode,
+        providerRecipientCode: withdrawal.providerRecipientCode,
         reviewedBy: reviewerId,
         reviewedAt: now,
         approvedAt: now,
@@ -452,6 +559,7 @@ export async function approveWithdrawal(withdrawalId, reviewerId, payload = {}, 
       reason: payload.reason || `Withdrawal ${withdrawal.reference}`,
       reference: withdrawal.transferReference,
     });
+    if (transfer?.indeterminate) throw new Error("Transfer outcome is unknown");
     if (!transfer?.status) {
       const failed = await dependencies.withdrawalRepository.updateWithdrawalByStatus(
         withdrawalId,
@@ -463,7 +571,7 @@ export async function approveWithdrawal(withdrawalId, reviewerId, payload = {}, 
         }
       );
       await notifyWithdrawal(failed, "status_changed", dependencies);
-      return { withdrawal: mapFinanceWithdrawal(failed) };
+      return { withdrawal: mapFinanceWithdrawal(failed || await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId)) };
     }
     const updated = await applyProviderTransferState(withdrawal, transfer.data, dependencies);
     await notifyWithdrawal(updated, "status_changed", dependencies);
@@ -478,7 +586,7 @@ export async function approveWithdrawal(withdrawalId, reviewerId, payload = {}, 
       }
     );
     await notifyWithdrawal(unknown, "status_changed", dependencies);
-    return { withdrawal: mapFinanceWithdrawal(unknown), reconciliationRequired: true };
+    return { withdrawal: mapFinanceWithdrawal(unknown || await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId)), reconciliationRequired: true };
   }
 }
 

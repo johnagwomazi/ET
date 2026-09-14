@@ -28,7 +28,7 @@ function DrawerSkeleton() {
 
 function WithdrawalDetailsDrawer({ open, data, isLoading = false, error, onClose, footer }) {
   const withdrawal = data?.withdrawal || data;
-  const payout = data?.payoutDestination || withdrawal?.payoutDestination;
+  const payout = withdrawal?.payoutDestination;
   const statusMeta = WITHDRAWAL_STATUS_META[withdrawal?.status];
   const requester = withdrawal?.requester;
   const reviewer = withdrawal?.reviewer;
@@ -66,10 +66,9 @@ function WithdrawalDetailsDrawer({ open, data, isLoading = false, error, onClose
             {withdrawal.reviewedAt ? <DetailRow label="Reviewed" value={formatDateTime(withdrawal.reviewedAt)} icon={CalendarClock} /> : null}
             {reviewer ? <DetailRow label="Reviewed by" value={`${reviewer.firstName} ${reviewer.lastName}`.trim() || reviewer.email} icon={UserRound} /> : null}
             {withdrawal.completedAt ? <DetailRow label="Completed" value={formatDateTime(withdrawal.completedAt)} icon={CalendarClock} /> : null}
-            {withdrawal.transferReference ? <DetailRow label="Transfer reference" value={withdrawal.transferReference} icon={CreditCard} /> : null}
             {withdrawal.transferStatus && withdrawal.transferStatus !== "NOT_STARTED" ? (
               <DetailRow
-                label="Provider status"
+                label="Transfer status"
                 value={(
                   <StatusBadge
                     status={withdrawal.transferStatus}

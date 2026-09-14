@@ -183,11 +183,11 @@ function WithdrawalsPage() {
     <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
       {activeWithdrawal.status === WITHDRAWAL_STATUS.PENDING ? (
         <>
-          <Button variant="danger" onClick={() => openAction("reject")} disabled={isMutating || isDetailLoading}>
+          <Button variant="danger" onClick={() => openAction("reject")} disabled={isMutating || isDetailLoading || Boolean(detailError)}>
             <X className="h-4 w-4" />
             Reject
           </Button>
-          <Button onClick={() => openAction("approve")} disabled={isMutating || isDetailLoading}>
+          <Button onClick={() => openAction("approve")} disabled={isMutating || isDetailLoading || Boolean(detailError)}>
             <Check className="h-4 w-4" />
             Approve Withdrawal
           </Button>
@@ -259,7 +259,7 @@ function WithdrawalsPage() {
       <ConfirmationDialog
         open={action?.type === "approve"}
         title="Approve withdrawal"
-        message={action?.withdrawal ? `Approve ${formatMoney(action.withdrawal.amount, action.withdrawal.currency)} for ${action.withdrawal.organizationDetails?.name || "this organization"}? This will begin the Paystack transfer.` : ""}
+        message={action?.withdrawal ? `Approve ${formatMoney(action.withdrawal.amount, action.withdrawal.currency)} for ${action.withdrawal.organizationDetails?.name || "this organization"}? This will begin the bank transfer to the saved destination.` : ""}
         confirmText="Approve Withdrawal"
         isLoading={isMutating}
         onCancel={() => setAction(null)}

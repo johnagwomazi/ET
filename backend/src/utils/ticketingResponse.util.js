@@ -195,27 +195,3 @@ export function mapRefundResponse(refundDocument) {
     createdAt: refund.createdAt || null,
   };
 }
-
-export function mapWithdrawalResponse(withdrawalDocument) {
-  if (!withdrawalDocument) {
-    return null;
-  }
-
-  const withdrawal = typeof withdrawalDocument.toObject === "function" ? withdrawalDocument.toObject() : withdrawalDocument;
-
-  return {
-    id: getDocumentId(withdrawal),
-    reference: withdrawal.reference,
-    organization: getDocumentId(withdrawal.organization),
-    requestedBy: getDocumentId(withdrawal.requestedBy),
-    reviewedBy: getDocumentId(withdrawal.reviewedBy),
-    amount: Number(withdrawal.amount || 0),
-    currency: withdrawal.currency || "NGN",
-    status: withdrawal.status,
-    transferReference: withdrawal.transferReference || "",
-    failureReason: withdrawal.failureReason || "",
-    reviewedAt: withdrawal.reviewedAt || null,
-    paidAt: withdrawal.paidAt || null,
-    createdAt: withdrawal.createdAt || null,
-  };
-}

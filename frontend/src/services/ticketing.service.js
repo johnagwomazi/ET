@@ -57,36 +57,6 @@ export async function createOrderRefund(orderReference, payload) {
   return unwrapResponse(response);
 }
 
-export async function requestWithdrawal(payload) {
-  const response = await post("/organizations/me/withdrawals", payload);
-  return unwrapResponse(response);
-}
-
-export async function getOrganizationWithdrawals(query = {}) {
-  const response = await get(`/organizations/me/withdrawals${buildQueryString(query)}`);
-  return unwrapResponse(response);
-}
-
-export async function getOrganizationWithdrawalBalance() {
-  const response = await get("/organizations/me/withdrawals/balance");
-  return unwrapResponse(response);
-}
-
-export async function getPlatformWithdrawals(query = {}) {
-  const response = await get(`/admin/withdrawals${buildQueryString(query)}`);
-  return unwrapResponse(response);
-}
-
-export async function approveWithdrawal(withdrawalId, payload = {}) {
-  const response = await patch(`/admin/withdrawals/${withdrawalId}/approve`, payload);
-  return unwrapResponse(response);
-}
-
-export async function rejectWithdrawal(withdrawalId, payload) {
-  const response = await patch(`/admin/withdrawals/${withdrawalId}/reject`, payload);
-  return unwrapResponse(response);
-}
-
 export async function validateManagerTicket(eventId, payload) {
   const response = await post(`/manager/events/${eventId}/tickets/validate`, payload);
   return unwrapResponse(response);

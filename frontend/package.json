@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build --configLoader native",
+    "test:e2e": "playwright test",
     "preview": "vite preview --configLoader native"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",

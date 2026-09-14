@@ -6,6 +6,14 @@ export async function getOrganizationFinanceSummary(options = {}) {
   return unwrapResponse(await get("/organizations/me/finance/summary", options));
 }
 
+export async function getOrganizationPayoutBanks(options = {}) {
+  return unwrapResponse(await get("/organizations/me/finance/banks", options));
+}
+
+export async function resolveOrganizationPayoutAccount(payload, options = {}) {
+  return unwrapResponse(await post("/organizations/me/finance/payout-details/resolve", payload, options));
+}
+
 export async function updateOrganizationPayoutDetails(payload, options = {}) {
   return unwrapResponse(await put("/organizations/me/finance/payout-details", payload, options));
 }

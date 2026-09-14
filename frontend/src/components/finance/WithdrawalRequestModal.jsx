@@ -11,6 +11,7 @@ function WithdrawalRequestModal({ open, summary = {}, isSubmitting, submissionEr
   const availableBalance = Number(summary.availableBalance || 0);
   const numericAmount = Number(amount);
   const remainingBalance = useMemo(() => {
+    if (!summary.payoutDestination?.configured) return "Add a verified bank account before requesting a withdrawal";
     if (!amount || !Number.isFinite(numericAmount)) return availableBalance;
     return Math.max(0, availableBalance - numericAmount);
   }, [amount, availableBalance, numericAmount]);
@@ -47,6 +48,16 @@ function WithdrawalRequestModal({ open, summary = {}, isSubmitting, submissionEr
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Available Balance</p>
           <p className="mt-2 text-2xl font-semibold text-white">{formatMoney(availableBalance, summary.currency)}</p>
         </div>
+        <div className="border border-slate-800 bg-slate-950/60 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Withdraw to</p>
+          {summary.payoutDestination?.configured ? (
+            <div className="mt-2 space-y-1 break-words text-sm">
+              <p className="font-semibold text-white">{summary.payoutDestination.bankName}</p>
+              <p className="text-slate-300">{summary.payoutDestination.accountName}</p>
+              <p className="text-slate-400">{summary.payoutDestination.accountNumberMasked}</p>
+            </div>
+          ) : <p role="alert" className="mt-2 text-sm text-amber-200">Add a verified bank account in Finance before requesting a withdrawal.</p>}
+        </div>
         <Input
           autoFocus
           label="Withdrawal amount"
@@ -70,7 +81,7 @@ function WithdrawalRequestModal({ open, summary = {}, isSubmitting, submissionEr
         {submissionError ? <p role="alert" className="border border-rose-500/25 bg-rose-500/10 p-3 text-sm text-rose-200">{submissionError}</p> : null}
         <div className="flex flex-col-reverse gap-3 border-t border-slate-800 pt-4 sm:flex-row sm:justify-end">
           <Button variant="ghost" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
-          <Button type="submit" isLoading={isSubmitting} loadingText="Requesting...">
+          <Button type="submit" disabled={!summary.payoutDestination?.configured} isLoading={isSubmitting} loadingText="Requesting...">
             <ArrowUpRight className="h-4 w-4" />
             Submit request
           </Button>

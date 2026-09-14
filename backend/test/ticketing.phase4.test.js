@@ -6,7 +6,6 @@ import {
   refundCreateSchema,
   ticketTypeCreateSchema,
   ticketValidationSchema,
-  withdrawalCreateSchema,
 } from "../src/validators/ticketing.validator.js";
 import {
   ORDER_STATUS,
@@ -459,7 +458,6 @@ test("ticketing validators enforce ticket, checkout, refund, withdrawal, and val
   assert.equal(ticketValidationSchema.safeParse({ reference: "tkt_123", token: "a".repeat(32) }).success, false);
   assert.equal(ticketTypeCreateSchema.safeParse({ name: "USD", price: 1000, quantity: 20, currency: "USD" }).success, false);
   assert.equal(refundCreateSchema.safeParse({ reason: "Event canceled" }).success, true);
-  assert.equal(withdrawalCreateSchema.safeParse({ amount: 1000 }).success, true);
 });
 
 test("checkout creates server-priced orders and reserves ticket inventory", async () => {
@@ -1062,75 +1060,6 @@ test("concurrent refunds cannot reserve more than the order balance", async () =
   assert.equal(results.filter((result) => result.refund?.status === "SUCCEEDED").length, 1);
   assert.equal(results.filter((result) => [400, 409].includes(result.statusCode)).length, 1);
   assert.equal(state.order.refundedAmount, 3000);
-});
-
-test("withdrawals are limited by backend-calculated available balance", async () => {
-  const { dependencies } = createDependencies();
-  const valid = await ticketingService.requestWithdrawal(
-    ids.organization,
-    ids.admin,
-    { amount: 1000 },
-    dependencies
-  );
-  const excessive = await ticketingService.requestWithdrawal(
-    ids.organization,
-    ids.admin,
-    { amount: 10000 },
-    dependencies
-  );
-
-  assert.equal(valid.withdrawal.amount, 1000);
-  assert.equal(excessive.statusCode, 400);
-});
-
-test("withdrawal balance and history are returned from backend financial data", async () => {
-  const { dependencies } = createDependencies();
-  const balance = await ticketingService.getOrganizationWithdrawalBalance(ids.organization, ids.admin, dependencies);
-  const history = await ticketingService.getOrganizationWithdrawals(ids.organization, ids.admin, {}, dependencies);
-  const platform = await ticketingService.getPlatformWithdrawals({ status: "PENDING" }, dependencies);
-
-  assert.equal(balance.availableBalance, 3500);
-  assert.equal(history.withdrawals.length, 1);
-  assert.equal(history.balance.availableBalance, 3500);
-  assert.equal(platform.withdrawals.length, 1);
-});
-
-test("withdrawal approval can record a Paystack transfer result", async () => {
-  const { dependencies } = createDependencies({
-    withdrawalRepository: {
-      async findWithdrawalById() {
-        return {
-          _id: "64b64b64b64b64b64b64b650",
-          reference: "wd_test",
-          organization: ids.organization,
-          requestedBy: ids.admin,
-          amount: 1000,
-          status: "PENDING",
-        };
-      },
-      async updateWithdrawalById(withdrawalId, data) {
-        return {
-          _id: withdrawalId,
-          reference: "wd_test",
-          organization: ids.organization,
-          requestedBy: ids.admin,
-          amount: 1000,
-          ...data,
-        };
-      },
-    },
-  });
-
-  const result = await ticketingService.reviewWithdrawal(
-    "64b64b64b64b64b64b64b650",
-    ids.admin,
-    "approve",
-    { recipientCode: "RCP_test" },
-    dependencies
-  );
-
-  assert.equal(result.withdrawal.status, "PAID");
-  assert.equal(result.withdrawal.transferReference, "provider_transfer");
 });
 
 test("Paystack webhook processing is idempotent for duplicate provider events", async () => {

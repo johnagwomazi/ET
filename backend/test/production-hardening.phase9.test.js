@@ -50,6 +50,21 @@ test("production environment validation fails closed on unsafe configuration", (
   assert.throws(() => validateEnvironment(productionConfig({ paystackSecretKey: "" })), /PAYSTACK_SECRET_KEY/);
 });
 
+test("Paystack mode must explicitly match the configured secret key", () => {
+  assert.throws(
+    () => validateEnvironment(productionConfig({ paystackMode: "test", paystackSecretKey: "sk_live_placeholder" })),
+    /test key/
+  );
+  assert.throws(
+    () => validateEnvironment(productionConfig({ paystackMode: "live", paystackSecretKey: "sk_test_placeholder" })),
+    /live key/
+  );
+  assert.equal(
+    validateEnvironment(productionConfig({ paystackMode: "test", paystackSecretKey: "sk_test_placeholder" })),
+    true
+  );
+});
+
 test("private and dynamic endpoints are no-store while public event reads are briefly cacheable", () => {
   assert.match(runCacheMiddleware("GET", "/api/events")["Cache-Control"], /^public/);
   assert.match(runCacheMiddleware("GET", "/api/events/64b64b64b64b64b64b64b001")["Cache-Control"], /^public/);
