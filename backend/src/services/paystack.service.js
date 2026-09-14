@@ -5,11 +5,8 @@ const PAYSTACK_BASE_URL = "https://api.paystack.co";
 const SUCCESSFUL_TRANSACTION_STATUSES = new Set(["success"]);
 const NON_FINAL_TRANSACTION_STATUSES = new Set(["pending", "ongoing", "processing", "queued"]);
 const FINAL_FAILURE_TRANSACTION_STATUSES = new Set(["abandoned", "failed", "reversed"]);
-<<<<<<< HEAD
 let bankCache = null;
 let bankListRequest = null;
-=======
->>>>>>> c64907a103062cd0317cf35bb24989f580cdacd6
 
 export const PAYSTACK_TRANSACTION_OUTCOME = Object.freeze({
   SUCCESS: "SUCCESS",

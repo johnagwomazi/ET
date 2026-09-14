@@ -48,7 +48,6 @@ test("production environment validation fails closed on unsafe configuration", (
     /JWT_ACCESS_SECRET|COOKIE_SECURE/
   );
   assert.throws(() => validateEnvironment(productionConfig({ paystackSecretKey: "" })), /PAYSTACK_SECRET_KEY/);
-<<<<<<< HEAD
 });
 
 test("Paystack mode must explicitly match the configured secret key", () => {
@@ -64,8 +63,6 @@ test("Paystack mode must explicitly match the configured secret key", () => {
     validateEnvironment(productionConfig({ paystackMode: "test", paystackSecretKey: "sk_test_placeholder" })),
     true
   );
-=======
->>>>>>> c64907a103062cd0317cf35bb24989f580cdacd6
 });
 
 test("private and dynamic endpoints are no-store while public event reads are briefly cacheable", () => {

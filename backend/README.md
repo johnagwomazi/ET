@@ -115,10 +115,7 @@ SMTP configuration. `GET /api/health` returns HTTP 200 only after MongoDB is con
 - `JWT_ACCESS_EXPIRES_IN` and `JWT_REFRESH_EXPIRES_IN`: normally `15m` and `7d`.
 - `COOKIE_HTTP_ONLY=true`, `COOKIE_SECURE=true`, and `COOKIE_SAME_SITE=none` for a separately hosted HTTPS frontend.
 - `PAYSTACK_SECRET_KEY`: backend-only API key used for Paystack requests and webhook HMAC verification.
-<<<<<<< HEAD
 - `PAYSTACK_MODE`: `test` or `live`. Render defaults to `test`; switching to live requires this value and the secret-key prefix to agree.
-=======
->>>>>>> c64907a103062cd0317cf35bb24989f580cdacd6
 - `PAYSTACK_TIMEOUT_MS`: provider request timeout between 1000 and 60000 milliseconds.
 - Ticket payments currently support `NGN` only. Paystack initialization receives the server-authoritative order currency.
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
@@ -145,7 +142,6 @@ Keep Paystack in test mode for deployment verification. A real test transaction 
 currency, and reference exactly match the stored order before switching the backend key and Paystack dashboard webhook
 configuration to live mode.
 
-<<<<<<< HEAD
 ### Organization payouts
 
 Phase 7 uses the same backend Paystack integration and webhook as ticket checkout. Organization Admins configure one
@@ -161,8 +157,6 @@ Super Admin review. The browser never supplies transfer recipients or transfer a
 Transfer success, failure, and reversal continue through `/api/payments/paystack/webhook`. An approval remains
 `PROCESSING` until the provider response or a signed webhook confirms its final state.
 
-=======
->>>>>>> c64907a103062cd0317cf35bb24989f580cdacd6
 Checkout sends an explicit callback to `${FRONTEND_URL}/payment/confirmation`. For local webhook testing, expose the
 backend webhook through a public HTTPS tunnel; Paystack cannot deliver webhooks directly to `localhost`.
 
