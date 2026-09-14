@@ -32,8 +32,11 @@ services:
         value: none
       - key: PAYSTACK_SECRET_KEY
         sync: false
+<<<<<<< HEAD
       - key: PAYSTACK_MODE
         value: test
+=======
+>>>>>>> c64907a103062cd0317cf35bb24989f580cdacd6
       - key: PAYSTACK_TIMEOUT_MS
         value: "10000"
       - key: CLOUDINARY_CLOUD_NAME

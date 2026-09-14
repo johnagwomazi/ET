@@ -59,7 +59,10 @@ const envConfig = {
     password: process.env.SUPER_ADMIN_PASSWORD || "",
   },
   paystackSecretKey: process.env.PAYSTACK_SECRET_KEY || "",
+<<<<<<< HEAD
   paystackMode: (process.env.PAYSTACK_MODE || "test").toLowerCase(),
+=======
+>>>>>>> c64907a103062cd0317cf35bb24989f580cdacd6
   paystackTimeoutMs: toNumber(process.env.PAYSTACK_TIMEOUT_MS, 10000),
 };
 
