@@ -106,119 +106,180 @@ function OrganizationFinancePage() {
   const canRequest = payout.configured && Number(summary?.availableBalance || 0) > 0;
 
   return (
-    <div className="space-y-6">
-      <SectionHeader
-        eyebrow="Organization finance"
-        title="Finance and withdrawals"
-        description="Review withdrawable revenue, submit payout requests, and track every request through completion."
-        actions={[
-          { label: "Analytics", icon: BarChart3, as: Link, to: ROUTE_PATHS.ORGANIZATION_ANALYTICS, variant: "ghost" },
-          { label: "Refresh", icon: RefreshCw, onClick: refresh, isLoading, loadingText: "Refreshing..." },
-          {
-            label: "Request Withdrawal",
-            icon: ArrowUpRight,
-            variant: "primary",
-            onClick: () => {
-              setSubmissionError("");
-              setRequestOpen(true);
-            },
-            disabled: !canRequest,
+  <div className="min-w-0 space-y-4 overflow-x-hidden sm:space-y-6">
+    <SectionHeader
+      eyebrow="Organization finance"
+      title="Finance and withdrawals"
+      description="Review withdrawable revenue, submit payout requests, and track every request through completion."
+      actions={[
+        {
+          label: "Analytics",
+          icon: BarChart3,
+          as: Link,
+          to: ROUTE_PATHS.ORGANIZATION_ANALYTICS,
+          variant: "ghost",
+        },
+        {
+          label: "Refresh",
+          icon: RefreshCw,
+          onClick: refresh,
+          isLoading,
+          loadingText: "Refreshing...",
+        },
+        {
+          label: "Request Withdrawal",
+          icon: ArrowUpRight,
+          variant: "primary",
+          onClick: () => {
+            setSubmissionError("");
+            setRequestOpen(true);
           },
-        ]}
-      />
+          disabled: !canRequest,
+        },
+      ]}
+    />
 
-      {error ? <Card className="border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-200">The latest refresh failed. Previously loaded finance information remains visible.</Card> : null}
+    {error ? (
+      <Card className="min-w-0 break-words border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-200 sm:p-4 sm:text-sm">
+        The latest refresh failed. Previously loaded finance information remains visible.
+      </Card>
+    ) : null}
 
+    <div className="min-w-0">
       <FinanceSummary summary={summary || {}} loading={isLoading} />
+    </div>
 
-      {Number(summary?.balanceDeficit || 0) > 0 ? (
-        <Card className="border-rose-500/25 bg-rose-500/10 p-4 text-sm leading-6 text-rose-100">
-          Refunds have reduced current revenue below existing withdrawal commitments. New withdrawal requests are unavailable until the balance recovers.
-        </Card>
-      ) : null}
+    {Number(summary?.balanceDeficit || 0) > 0 ? (
+      <Card className="min-w-0 break-words border-rose-500/25 bg-rose-500/10 p-3 text-xs leading-5 text-rose-100 sm:p-4 sm:text-sm sm:leading-6">
+        Refunds have reduced current revenue below existing withdrawal
+        commitments. New withdrawal requests are unavailable until the balance
+        recovers.
+      </Card>
+    ) : null}
 
-      <section className="border-y border-slate-800 py-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <Landmark className="mt-0.5 h-5 w-5 text-app-300" />
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <h3 className="font-semibold text-white">Payout account</h3>
-                {payout.configured ? <StatusBadge status="VERIFIED" label="Verified" tone="success" /> : null}
-              </div>
+    <section className="min-w-0 border-y border-slate-800 py-4 sm:py-5">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
+          <Landmark className="mt-0.5 h-4 w-4 shrink-0 text-app-300 sm:h-5 sm:w-5" />
+
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+              <h3 className="text-sm font-semibold text-white sm:text-base">
+                Payout account
+              </h3>
+
               {payout.configured ? (
-                <p className="mt-1 text-sm text-slate-400">
-                  {payout.accountName} | {payout.bankName || "Verified bank"} | {payout.accountNumberMasked}
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-amber-200">Configure and verify a bank account before requesting a withdrawal.</p>
-              )}
+                <StatusBadge
+                  status="VERIFIED"
+                  label="Verified"
+                  tone="success"
+                />
+              ) : null}
             </div>
+
+            {payout.configured ? (
+              <div className="mt-1.5 min-w-0 text-xs text-slate-400 sm:text-sm">
+                <p className="break-words font-medium text-slate-300">
+                  {payout.accountName}
+                </p>
+
+                <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                  <span className="break-words">
+                    {payout.bankName || "Verified bank"}
+                  </span>
+
+                  <span className="text-slate-600">•</span>
+
+                  <span className="whitespace-nowrap">
+                    {payout.accountNumberMasked}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-1 break-words text-xs leading-5 text-amber-200 sm:text-sm">
+                Configure and verify a bank account before requesting a
+                withdrawal.
+              </p>
+            )}
           </div>
+        </div>
+
+        <div className="w-full sm:w-auto">
           <Button
             variant="secondary"
+            className="w-full justify-center text-xs sm:w-auto sm:text-sm"
             onClick={() => {
               setSubmissionError("");
               setPayoutOpen(true);
             }}
           >
-            <Settings2 className="h-4 w-4" />
+            <Settings2 className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
             {payout.configured ? "Change bank account" : "Add bank account"}
           </Button>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <section className="space-y-4">
-        <SectionHeader
-          eyebrow="Withdrawal history"
-          title="Requests and transfers"
-          description="Pending requests reserve balance immediately. Completion is shown once the bank transfer is confirmed."
+    <section className="min-w-0 space-y-3 sm:space-y-4">
+      <SectionHeader
+        eyebrow="Withdrawal history"
+        title="Requests and transfers"
+        description="Pending requests reserve balance immediately. Completion is shown once the bank transfer is confirmed."
+      />
+
+      <div className="w-full min-w-0 sm:max-w-xs">
+        <FilterSelect
+          label="Status"
+          value={status}
+          options={WITHDRAWAL_STATUS_OPTIONS}
+          onChange={(event) => {
+            setPage(1);
+            setStatus(event.target.value);
+          }}
         />
-        <div className="max-w-xs">
-          <FilterSelect
-            label="Status"
-            value={status}
-            options={WITHDRAWAL_STATUS_OPTIONS}
-            onChange={(event) => {
-              setPage(1);
-              setStatus(event.target.value);
-            }}
-          />
-        </div>
+      </div>
+
+      <div className="min-w-0">
         <WithdrawalList
           withdrawals={withdrawals}
           isLoading={isLoading && withdrawals.length === 0}
           onView={setSelectedWithdrawal}
           emptyMessage="No withdrawal requests yet."
         />
-        {pagination.totalPages > 1 ? (
-          <Pagination {...pagination} onPageChange={setPage} />
-        ) : null}
-      </section>
+      </div>
 
-      <WithdrawalRequestModal
-        open={requestOpen}
-        summary={summary || {}}
-        isSubmitting={isSubmitting}
-        submissionError={submissionError}
-        onClose={() => setRequestOpen(false)}
-        onSubmit={submitWithdrawal}
-      />
-      <PayoutDetailsModal
-        open={payoutOpen}
-        isSubmitting={isSubmitting}
-        submissionError={submissionError}
-        onClose={() => setPayoutOpen(false)}
-        onSubmit={submitPayoutDetails}
-        onChange={() => setSubmissionError("")}
-      />
-      <WithdrawalDetailsDrawer
-        open={Boolean(selectedWithdrawal)}
-        data={selectedWithdrawal}
-        onClose={() => setSelectedWithdrawal(null)}
-      />
-    </div>
-  );
+      {pagination.totalPages > 1 ? (
+        <div className="min-w-0 overflow-x-auto">
+          <Pagination {...pagination} onPageChange={setPage} />
+        </div>
+      ) : null}
+    </section>
+
+    <WithdrawalRequestModal
+      open={requestOpen}
+      summary={summary || {}}
+      isSubmitting={isSubmitting}
+      submissionError={submissionError}
+      onClose={() => setRequestOpen(false)}
+      onSubmit={submitWithdrawal}
+    />
+
+    <PayoutDetailsModal
+      open={payoutOpen}
+      isSubmitting={isSubmitting}
+      submissionError={submissionError}
+      onClose={() => setPayoutOpen(false)}
+      onSubmit={submitPayoutDetails}
+      onChange={() => setSubmissionError("")}
+    />
+
+    <WithdrawalDetailsDrawer
+      open={Boolean(selectedWithdrawal)}
+      data={selectedWithdrawal}
+      onClose={() => setSelectedWithdrawal(null)}
+    />
+  </div>
+);
 }
 
 export default OrganizationFinancePage;

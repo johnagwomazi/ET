@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import * as authService from "../services/auth.service";
-import { clearStoredAccessToken } from "../utils/authToken";
+import { clearStoredAccessToken, storeAccessToken } from "../utils/authToken";
 import { useNotificationStore } from "./useNotificationStore";
 
 let initializeSessionPromise = null;
@@ -64,7 +64,6 @@ export const useSessionStore = create((set, get) => ({
     }
 
     set({ isLoading: true });
-    clearStoredAccessToken();
 
     initializeSessionPromise = (async () => {
       const response = await authService.getCurrentUser();
@@ -111,6 +110,7 @@ export const useSessionStore = create((set, get) => ({
 
     try {
       const response = await authService.login(credentials);
+      storeAccessToken(response?.accessToken);
 
       const currentUserResponse = await authService.getCurrentUser();
       const user = currentUserResponse?.user || null;
@@ -137,6 +137,7 @@ export const useSessionStore = create((set, get) => ({
 
     try {
       const response = await authService.adminLogin(credentials);
+      storeAccessToken(response?.accessToken);
 
       const currentUserResponse = await authService.getCurrentUser();
       const user = currentUserResponse?.user || null;

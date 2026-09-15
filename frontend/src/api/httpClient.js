@@ -1,4 +1,5 @@
 import { API_URL } from "../constants/app.constants";
+import { getStoredAccessToken } from "../utils/authToken";
 
 const inFlightGetRequests = new Map();
 
@@ -42,6 +43,11 @@ export async function request(method, path, options = {}) {
     const requestHeaders = {
       ...headers,
     };
+    const accessToken = getStoredAccessToken();
+
+    if (accessToken && !requestHeaders.Authorization) {
+      requestHeaders.Authorization = `Bearer ${accessToken}`;
+    }
 
     if (!isFormData && body !== undefined) {
       requestHeaders["Content-Type"] = "application/json";
