@@ -12,8 +12,8 @@ const Input = forwardRef(function Input(
   const describedBy = [ariaDescribedBy, helperId, errorId].filter(Boolean).join(" ") || undefined;
 
   return (
-    <label className="block space-y-2">
-      {label ? <span className="text-sm font-medium text-slate-200">{label}</span> : null}
+    <label className="block min-w-0 space-y-1.5 sm:space-y-2">
+      {label ? <span className="text-xs font-medium text-slate-200 sm:text-sm">{label}</span> : null}
 
       <input
         ref={ref}
@@ -22,7 +22,7 @@ const Input = forwardRef(function Input(
         aria-invalid={Boolean(error)}
         aria-describedby={describedBy}
         className={classNames(
-          "h-11 w-full rounded-xl border border-slate-800 bg-slate-900 px-4 text-sm text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-app-500 focus:ring-2 focus:ring-app-500/20",
+          "h-10 min-w-0 w-full rounded-xl border border-slate-800 bg-slate-900 px-3 text-[13px] text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-app-500 focus:ring-2 focus:ring-app-500/20 sm:h-11 sm:px-4 sm:text-sm",
           error && "border-rose-500 focus:border-rose-500 focus:ring-rose-500/20",
           className
         )}

@@ -3,7 +3,7 @@ import { classNames } from "../../utils/classNames";
 import Spinner from "./Spinner";
 
 const baseClasses =
-  "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-app-400 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition focus:outline-none focus:ring-2 focus:ring-app-400 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:cursor-not-allowed disabled:opacity-60 sm:gap-2 sm:px-4 sm:text-sm";
 
 const variantClasses = {
   primary: "bg-app-500 text-white hover:bg-app-600",
@@ -14,8 +14,8 @@ const variantClasses = {
 
 const sizeClasses = {
   sm: "h-9 px-3 text-xs",
-  md: "h-11 px-4 text-sm",
-  lg: "h-12 px-6 text-base",
+  md: "h-10 px-3 text-xs sm:h-11 sm:px-4 sm:text-sm",
+  lg: "h-11 px-4 text-sm sm:h-12 sm:px-6 sm:text-base",
 };
 
 const Button = forwardRef(function Button(

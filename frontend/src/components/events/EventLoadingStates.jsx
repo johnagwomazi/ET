@@ -14,9 +14,9 @@ function EventTableSkeleton({ showFilterCard = true, showSummaryCards = true }) 
       </div>
 
       {showSummaryCards ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-1 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
-            <Card key={`event-summary-skeleton-${index}`} className="border-slate-800/70 bg-slate-950/85 p-5">
+            <Card key={`event-summary-skeleton-${index}`} className="border-slate-800/70 bg-slate-950/85 p-2.5 sm:p-5">
               <div className="space-y-3">
                 <Skeleton className="h-3 w-24 rounded-full" />
                 <Skeleton className="h-8 w-28 rounded-xl" />

@@ -363,7 +363,7 @@ function EventsPage({ scope = "organization" }) {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <SectionHeader
         eyebrow={isManager ? "Manager workspace" : "Organization management"}
         title="Events"
@@ -393,7 +393,7 @@ function EventsPage({ scope = "organization" }) {
         ]}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-1 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map((card) => (
           <StatCard
             key={card.label}

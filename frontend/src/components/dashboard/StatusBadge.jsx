@@ -29,7 +29,7 @@ function StatusBadge({ status, label, tone, className }) {
   return (
     <span
       className={classNames(
-        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em]",
+        "inline-flex max-w-full items-center break-words rounded-full px-2 py-1 text-[10px] font-semibold uppercase leading-4 tracking-[0.1em] sm:px-2.5 sm:text-xs sm:tracking-[0.14em]",
         toneClass,
         className
       )}

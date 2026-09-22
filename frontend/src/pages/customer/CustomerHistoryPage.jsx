@@ -12,6 +12,7 @@ import StatusBadge from "../../components/dashboard/StatusBadge";
 import { ROUTE_PATHS } from "../../routes/routePaths";
 import * as ticketingService from "../../services/ticketing.service";
 import { formatDateTime, formatMoney } from "../../utils/formatters";
+import { getEventImageUrl } from "../../utils/eventImage";
 
 const HISTORY_FILTERS = [
   { value: "", label: "All" },
@@ -34,8 +35,8 @@ function HistoryCard({ record }) {
     <Card className="overflow-hidden border-slate-800/70 bg-slate-950/85 p-0">
       <div className="grid sm:grid-cols-[160px_1fr]">
         <div className="aspect-[16/9] bg-slate-900 sm:aspect-auto sm:min-h-48">
-          {event?.banner?.url ? (
-            <img src={event.banner.url} alt={event.eventName || "Event banner"} className="h-full w-full object-cover" />
+          {getEventImageUrl(event) ? (
+            <img src={getEventImageUrl(event)} alt={event.eventName || "Event banner"} className="block h-full w-full object-cover" loading="lazy" decoding="async" />
           ) : (
             <div className="flex h-full min-h-36 items-center justify-center"><Ticket className="h-9 w-9 text-slate-600" /></div>
           )}
@@ -103,11 +104,11 @@ function CustomerHistoryPage() {
 
   return (
     <main className="py-10 sm:py-14">
-      <PageContainer className="space-y-8">
+      <PageContainer className="space-y-5 sm:space-y-8">
         <header className="flex flex-col gap-4 border-b border-slate-800 pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase text-app-300">Customer account</p>
-            <h1 className="text-3xl font-semibold text-white">History</h1>
+            <h1 className="text-xl font-semibold text-white sm:text-3xl">History</h1>
             <p className="max-w-2xl text-sm leading-6 text-slate-400">Review attended, completed, cancelled, and refunded event activity.</p>
           </div>
           <Button variant="secondary" onClick={() => loadHistory(page, status)} isLoading={isLoading} loadingText="Refreshing...">Refresh</Button>

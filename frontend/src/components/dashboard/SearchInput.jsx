@@ -13,7 +13,7 @@ function SearchInput({ label = "Search", value, onChange, placeholder = "Search.
           value={value}
           onChange={onChange}
           placeholder={placeholder}
-          className="h-11 w-full rounded-xl border border-slate-800 bg-slate-900 pl-11 pr-4 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-app-500 focus:ring-2 focus:ring-app-500/20"
+          className="h-10 min-w-0 w-full rounded-xl border border-slate-800 bg-slate-900 pl-9 pr-3 text-[13px] text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-app-500 focus:ring-2 focus:ring-app-500/20 sm:h-11 sm:pl-11 sm:pr-4 sm:text-sm"
         />
       </div>
     </label>

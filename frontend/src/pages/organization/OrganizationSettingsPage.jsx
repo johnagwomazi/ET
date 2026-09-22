@@ -163,7 +163,7 @@ function OrganizationSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <SectionHeader
         eyebrow="Organization management"
         title="Organization Settings"
@@ -231,12 +231,12 @@ function OrganizationSettingsPage() {
               <p className="text-sm leading-6 text-slate-400">
                 These settings control how the organization appears and communicates across the platform.
               </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 sm:rounded-2xl sm:p-4">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Last updated</p>
                   <p className="mt-2 text-sm text-slate-200">{lastUpdated}</p>
                 </div>
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 sm:rounded-2xl sm:p-4">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Editing</p>
                   <p className="mt-2 text-sm text-slate-200">{canEdit ? "Enabled" : "Read only"}</p>
                 </div>

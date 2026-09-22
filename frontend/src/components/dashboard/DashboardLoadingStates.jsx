@@ -16,14 +16,14 @@ function SectionHeaderSkeleton() {
 
 function StatCardSkeleton() {
   return (
-    <Card className="border-slate-800/70 bg-slate-950/85 p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-3">
-          <Skeleton className="h-3 w-28 rounded-full" />
-          <Skeleton className="h-9 w-28 rounded-xl" />
-          <Skeleton className="h-4 w-36 rounded-full" />
+    <Card className="border-slate-800/70 bg-slate-950/85 p-2.5 sm:p-5">
+      <div className="flex min-w-0 items-start justify-between gap-2 sm:gap-4">
+        <div className="min-w-0 space-y-2 sm:space-y-3">
+          <Skeleton className="h-3 w-full max-w-20 rounded-full sm:max-w-28" />
+          <Skeleton className="h-6 w-full max-w-20 rounded-xl sm:h-9 sm:max-w-28" />
+          <Skeleton className="h-4 w-full max-w-24 rounded-full sm:max-w-36" />
         </div>
-        <Skeleton className="h-12 w-12 rounded-2xl" />
+        <Skeleton className="h-7 w-7 shrink-0 rounded-lg sm:h-12 sm:w-12 sm:rounded-2xl" />
       </div>
     </Card>
   );
@@ -65,7 +65,7 @@ export function SuperAdminDashboardSkeleton() {
     <div className="space-y-6" aria-busy="true" aria-label="Loading super admin dashboard">
       <SectionHeaderSkeleton />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-1 sm:gap-4 md:grid-cols-2 xl:grid-cols-5">
         {Array.from({ length: 5 }).map((_, index) => (
           <StatCardSkeleton key={`super-admin-stat-skeleton-${index}`} />
         ))}
@@ -183,7 +183,7 @@ export function OrganizationDashboardSkeleton() {
 
       <TopSummaryCardSkeleton />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-5">
         {Array.from({ length: 5 }).map((_, index) => (
           <StatCardSkeleton key={`organization-stat-skeleton-${index}`} />
         ))}

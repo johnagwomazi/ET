@@ -7,6 +7,7 @@ import { Skeleton } from "../common/Skeleton";
 import { formatDate } from "../../utils/formatters";
 import { classNames } from "../../utils/classNames";
 import { ROUTE_PATHS } from "../../routes/routePaths";
+import { getEventImageUrl } from "../../utils/eventImage";
 
 function formatEventTime(value) {
   if (!value) {
@@ -32,6 +33,7 @@ function getVenueLabel(event) {
 function PublicEventCard({ event, className, spotlight = false }) {
   const [imageFailed, setImageFailed] = useState(false);
   const eventHref = ROUTE_PATHS.PUBLIC_EVENT_DETAILS.replace(":eventId", event?.id || "");
+  const imageUrl = getEventImageUrl(event);
 
   return (
     <Card
@@ -42,13 +44,14 @@ function PublicEventCard({ event, className, spotlight = false }) {
     >
       <Link to={eventHref} className="flex h-full flex-col focus:outline-none">
         <div className="relative aspect-[16/10] overflow-hidden bg-slate-950">
-          {event?.banner?.url && !imageFailed ? (
+          {imageUrl && !imageFailed ? (
             <img
-              src={event.banner.url}
+              src={imageUrl}
               alt={event.eventName || "Event banner"}
-              className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+              className="block h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
               onError={() => setImageFailed(true)}
               loading="lazy"
+              decoding="async"
             />
           ) : (
             <div className="flex h-full items-center justify-center bg-slate-900">

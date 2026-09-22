@@ -48,11 +48,11 @@ function WithdrawalDetailsDrawer({ open, data, isLoading = false, error, onClose
       ) : null}
       {!isLoading && !error && withdrawal ? (
         <div className="space-y-6">
-          <section className="border border-slate-800 bg-slate-950/70 p-5">
+          <section className="min-w-0 border border-slate-800 bg-slate-950/70 p-3 sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Amount</p>
-                <p className="mt-2 text-3xl font-semibold text-white">{formatMoney(withdrawal.amount, withdrawal.currency)}</p>
+                <p className="mt-2 [overflow-wrap:anywhere] text-xl font-semibold text-white sm:text-3xl">{formatMoney(withdrawal.amount, withdrawal.currency)}</p>
               </div>
               <StatusBadge status={withdrawal.status} label={statusMeta?.label} tone={statusMeta?.tone} />
             </div>
@@ -104,14 +104,14 @@ function WithdrawalDetailsDrawer({ open, data, isLoading = false, error, onClose
           {data?.financialSummary ? (
             <section className="border-t border-slate-800 pt-5">
               <h4 className="text-sm font-semibold text-white">Current financial context</h4>
-              <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:gap-3">
                 <div className="border border-slate-800 bg-slate-950/50 p-3">
                   <p className="text-xs text-slate-500">Available</p>
-                  <p className="mt-1 font-semibold text-white">{formatMoney(data.financialSummary.availableBalance, data.financialSummary.currency)}</p>
+                  <p className="mt-1 [overflow-wrap:anywhere] text-sm font-semibold text-white sm:text-base">{formatMoney(data.financialSummary.availableBalance, data.financialSummary.currency)}</p>
                 </div>
                 <div className="border border-slate-800 bg-slate-950/50 p-3">
                   <p className="text-xs text-slate-500">Net revenue</p>
-                  <p className="mt-1 font-semibold text-white">{formatMoney(data.financialSummary.netRevenue, data.financialSummary.currency)}</p>
+                  <p className="mt-1 [overflow-wrap:anywhere] text-sm font-semibold text-white sm:text-base">{formatMoney(data.financialSummary.netRevenue, data.financialSummary.currency)}</p>
                 </div>
               </div>
             </section>

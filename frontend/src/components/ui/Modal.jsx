@@ -15,7 +15,7 @@ function Modal({ open, title, children, onClose, footer, className }) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center app-overlay p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center app-overlay p-3 sm:p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose?.();
@@ -29,20 +29,20 @@ function Modal({ open, title, children, onClose, footer, className }) {
         aria-modal="true"
         aria-labelledby={titleId}
         className={classNames(
-          "flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-soft",
+          "flex max-h-[calc(100dvh-1.5rem)] min-w-0 w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-soft sm:max-h-[85vh] sm:rounded-2xl",
           className
         )}
       >
-        <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-          <h2 id={titleId} className="text-lg font-semibold text-slate-100">{title}</h2>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3 sm:px-5 sm:py-4">
+          <h2 id={titleId} className="min-w-0 break-words text-base font-semibold text-slate-100 sm:text-lg">{title}</h2>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close modal">
             <X className="h-4 w-4" />
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 text-sm text-slate-300">{children}</div>
+        <div className="min-w-0 flex-1 overflow-y-auto px-4 py-3 text-[13px] text-slate-300 sm:px-5 sm:py-4 sm:text-sm">{children}</div>
 
-        {footer ? <div className="border-t border-slate-800 px-5 py-4">{footer}</div> : null}
+        {footer ? <div className="border-t border-slate-800 px-4 py-3 sm:px-5 sm:py-4">{footer}</div> : null}
       </div>
     </div>,
     document.body

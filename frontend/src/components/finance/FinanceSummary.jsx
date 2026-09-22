@@ -36,11 +36,10 @@ function FinanceSummary({ summary = {}, loading = false }) {
   ];
 
   return (
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Finance summary">
+    <section className="grid min-w-0 grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-4" aria-label="Finance summary">
       {metrics.map((metric) => <StatCard key={metric.label} {...metric} loading={loading} />)}
     </section>
   );
 }
 
 export default FinanceSummary;
-

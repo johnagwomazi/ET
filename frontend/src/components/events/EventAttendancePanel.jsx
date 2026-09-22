@@ -186,26 +186,26 @@ function AttendanceCard({ attendance, compact = false }) {
 
 function AttendanceSummary({ isLoading, totalAttendees, attendancePercentage, lastSyncedAt }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      <Card className="border-slate-800/70 bg-slate-950/85 p-4">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+      <Card className="border-slate-800/70 bg-slate-950/85 p-2.5 sm:p-4">
         <div className="flex items-center gap-3">
           <Users className="h-5 w-5 text-app-300" />
           <div>
             <p className="text-xs text-slate-500">Checked in</p>
-            {isLoading ? <Skeleton className="mt-2 h-7 w-14" /> : <p className="mt-1 text-2xl font-semibold text-white">{formatNumber(totalAttendees)}</p>}
+            {isLoading ? <Skeleton className="mt-2 h-7 w-14" /> : <p className="mt-1 text-lg font-semibold text-white sm:text-2xl">{formatNumber(totalAttendees)}</p>}
           </div>
         </div>
       </Card>
-      <Card className="border-slate-800/70 bg-slate-950/85 p-4">
+      <Card className="border-slate-800/70 bg-slate-950/85 p-2.5 sm:p-4">
         <div className="flex items-center gap-3">
           <TicketCheck className="h-5 w-5 text-emerald-300" />
           <div>
             <p className="text-xs text-slate-500">Capacity used</p>
-            {isLoading ? <Skeleton className="mt-2 h-7 w-16" /> : <p className="mt-1 text-2xl font-semibold text-white">{attendancePercentage}%</p>}
+            {isLoading ? <Skeleton className="mt-2 h-7 w-16" /> : <p className="mt-1 text-lg font-semibold text-white sm:text-2xl">{attendancePercentage}%</p>}
           </div>
         </div>
       </Card>
-      <Card className="border-slate-800/70 bg-slate-950/85 p-4">
+      <Card className="col-span-2 border-slate-800/70 bg-slate-950/85 p-2.5 sm:col-span-1 sm:p-4">
         <div className="flex items-center gap-3">
           <Clock3 className="h-5 w-5 text-amber-300" />
           <div className="min-w-0 flex-1">

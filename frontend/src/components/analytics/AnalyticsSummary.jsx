@@ -67,13 +67,13 @@ function AnalyticsSummary({ summary = {}, loading = false, grossLabel = "Gross s
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-3">
         {cards.map((card) => <StatCard key={card.label} {...card} loading={loading} />)}
       </div>
 
       {!loading ? (
         <Card className="border-slate-800/70 bg-slate-950/85 p-4">
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             <div>
               <dt className="text-xs font-semibold uppercase text-slate-500">Ticket-linked check-ins</dt>
               <dd className="mt-1 text-lg font-semibold text-white">{formatNumber(summary.ticketLinkedAttendance || 0)}</dd>

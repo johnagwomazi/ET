@@ -222,7 +222,7 @@ function HomePage() {
                 </span>
 
                 <div className="space-y-4">
-                  <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
+                  <h1 className="max-w-xl text-3xl font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
                     Discover your next event.
                   </h1>
                   <p className="max-w-xl text-base leading-7 text-slate-300 sm:text-lg">

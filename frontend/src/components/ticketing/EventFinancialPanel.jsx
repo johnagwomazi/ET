@@ -86,7 +86,7 @@ function EventFinancialPanel({ event, canView = false }) {
       <div className="mt-5 space-y-5">
         {error ? <ErrorState title="Financials unavailable" message={error} onRetry={loadSummary} /> : null}
         {!error && !summary && !isLoading ? <EmptyState title="No sales data yet" message="Financial data appears after ticket sales are recorded." /> : null}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-1 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
           {cards.map((card) => <StatCard key={card.label} icon={Banknote} label={card.label} value={card.value} loading={isLoading && !summary} />)}
         </div>
 

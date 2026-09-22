@@ -23,6 +23,7 @@ import { getPublicEventById } from "../../services/publicEvent.service";
 import { formatDate, formatDateTime, formatNumber } from "../../utils/formatters";
 import PublicTicketSelectionPanel from "../../components/ticketing/PublicTicketSelectionPanel";
 import { getSafeExternalUrl } from "../../utils/externalUrl";
+import { getEventImageUrl } from "../../utils/eventImage";
 
 function formatTime(value) {
   if (!value) {
@@ -317,14 +318,15 @@ function PublicEventDetailsPage() {
         <PageContainer className="space-y-6">
           <Card className="overflow-hidden p-0">
             <div className="relative overflow-hidden bg-slate-950">
-              <div className="aspect-[21/9] w-full bg-slate-950 sm:aspect-[16/7]">
-                {event.banner?.url && !bannerFailed ? (
+              <div className="aspect-[4/3] w-full bg-slate-950 sm:aspect-[16/7]">
+                {getEventImageUrl(event) && !bannerFailed ? (
                   <img
-                    src={event.banner.url}
+                    src={getEventImageUrl(event)}
                     alt={event.eventName || "Event banner"}
-                    className="h-full w-full object-cover"
+                    className="block h-full w-full object-cover"
                     onError={() => setBannerFailed(true)}
                     loading="eager"
+                    decoding="async"
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center bg-slate-900">
@@ -336,9 +338,9 @@ function PublicEventDetailsPage() {
                 )}
               </div>
 
-              <div className="absolute inset-0 bg-black/35" />
+              <div className="absolute inset-0 bg-black/20 sm:bg-black/35" />
 
-              <div className="absolute inset-x-0 bottom-0 p-6 sm:p-8">
+              <div className="absolute inset-x-0 bottom-0 p-3 sm:p-8">
                 <div className="max-w-4xl space-y-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={event.status} />
@@ -350,7 +352,7 @@ function PublicEventDetailsPage() {
                   </div>
 
                   <div className="space-y-3">
-                    <h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-5xl">
+                    <h1 className="max-w-3xl text-xl font-semibold tracking-tight text-white sm:text-4xl lg:text-5xl">
                       {event.eventName || "Untitled event"}
                     </h1>
                     <p className="max-w-3xl text-sm leading-6 text-slate-200 sm:text-base">

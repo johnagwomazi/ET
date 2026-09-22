@@ -88,12 +88,12 @@ function WithdrawalList({ withdrawals = [], isLoading = false, showOrganization 
         )) : null}
         {!isLoading && !withdrawals.length ? <Card className="p-5">{emptyState}</Card> : null}
         {!isLoading ? withdrawals.map((withdrawal) => (
-          <Card key={withdrawal.id} className="border-slate-800/70 bg-slate-950/85 p-4">
-            <div className="flex items-start justify-between gap-3">
+          <Card key={withdrawal.id} className="border-slate-800/70 bg-slate-950/85 p-3 sm:p-4">
+            <div className="flex min-w-0 items-start justify-between gap-2 sm:gap-3">
               <div className="min-w-0">
                 {showOrganization ? <p className="truncate font-semibold text-white">{getOrganizationName(withdrawal)}</p> : null}
                 {showOrganization ? <p className="mt-1 truncate text-xs text-slate-400">{getRequesterName(withdrawal)}</p> : null}
-                <p className="mt-1 truncate font-mono text-xs text-slate-500">{withdrawal.reference}</p>
+                <p className="mt-1 break-all font-mono text-[11px] text-slate-500 sm:text-xs">{withdrawal.reference}</p>
               </div>
               <StatusBadge
                 status={withdrawal.status}
@@ -101,14 +101,14 @@ function WithdrawalList({ withdrawals = [], isLoading = false, showOrganization 
                 tone={WITHDRAWAL_STATUS_META[withdrawal.status]?.tone}
               />
             </div>
-            <p className="mt-5 text-2xl font-semibold text-white">{formatMoney(withdrawal.amount, withdrawal.currency)}</p>
-            <p className="mt-1 text-sm text-slate-500">{formatDateTime(withdrawal.requestedAt || withdrawal.createdAt)}</p>
+            <p className="mt-3 [overflow-wrap:anywhere] text-lg font-semibold text-white sm:mt-5 sm:text-2xl">{formatMoney(withdrawal.amount, withdrawal.currency)}</p>
+            <p className="mt-1 text-xs text-slate-500 sm:text-sm">{formatDateTime(withdrawal.requestedAt || withdrawal.createdAt)}</p>
             {(withdrawal.rejectionReason || withdrawal.failureReason) ? (
-              <p className="mt-3 line-clamp-2 text-sm text-rose-300">{withdrawal.rejectionReason || withdrawal.failureReason}</p>
+              <p className="mt-2 break-words text-xs text-rose-300 sm:mt-3 sm:line-clamp-2 sm:text-sm">{withdrawal.rejectionReason || withdrawal.failureReason}</p>
             ) : (
-              <p className="mt-3 text-sm text-slate-400">{WITHDRAWAL_STATUS_META[withdrawal.status]?.description}</p>
+              <p className="mt-2 break-words text-xs text-slate-400 sm:mt-3 sm:text-sm">{WITHDRAWAL_STATUS_META[withdrawal.status]?.description}</p>
             )}
-            <Button className="mt-4 w-full" variant="secondary" onClick={() => onView(withdrawal)}>
+            <Button className="mt-3 w-full sm:mt-4" variant="secondary" onClick={() => onView(withdrawal)}>
               <Eye className="h-4 w-4" />
               View details
             </Button>

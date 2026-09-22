@@ -18,6 +18,7 @@ import { formatDateTime, formatNumber } from "../../utils/formatters";
 import * as eventService from "../../services/event.service";
 import { useOrganizationPermissions } from "../../hooks/useOrganizationPermissions";
 import { ORGANIZATION_PERMISSIONS } from "../../constants/organizationPermissions.constants";
+import { getEventImageUrl } from "../../utils/eventImage";
 
 function getListRoute(scope) {
   return scope === "manager" ? ROUTE_PATHS.MANAGER_EVENTS : ROUTE_PATHS.ORGANIZATION_EVENTS;
@@ -213,11 +214,12 @@ function EventDetailsPage({ scope = "organization" }) {
 
         <Card className="border-slate-800/70 bg-slate-950/85 p-4 sm:p-5">
           <div className="flex items-start gap-4">
-            {event.banner?.url ? (
+            {getEventImageUrl(event) ? (
               <img
-                src={event.banner.url}
+                src={getEventImageUrl(event)}
                 alt={event.eventName || "Event banner"}
-                className="h-20 w-20 shrink-0 rounded-lg object-cover sm:h-24 sm:w-24"
+                className="block h-20 w-20 shrink-0 rounded-lg object-cover sm:h-24 sm:w-24"
+                decoding="async"
               />
             ) : null}
             <div className="min-w-0 flex-1">
@@ -300,7 +302,7 @@ function EventDetailsPage({ scope = "organization" }) {
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-300">
                 {event.category || (isManager ? "Assigned event" : "Organization event")}
               </p>
-              <h2 className="text-3xl font-semibold text-white">{event.eventName || "Untitled event"}</h2>
+              <h2 className="break-words text-xl font-semibold text-white sm:text-3xl">{event.eventName || "Untitled event"}</h2>
               <p className="max-w-3xl text-sm leading-7 text-slate-400">
                 {event.description || "No description has been added for this event yet."}
               </p>
@@ -316,9 +318,9 @@ function EventDetailsPage({ scope = "organization" }) {
               </span>
             </div>
 
-            {event.banner?.url ? (
-              <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-950/70">
-                <img src={event.banner.url} alt={event.eventName || "Event banner"} className="h-64 w-full object-cover" />
+            {getEventImageUrl(event) ? (
+              <div className="aspect-[4/3] overflow-hidden rounded-xl border border-slate-800 bg-slate-950/70 sm:aspect-auto sm:rounded-3xl">
+                <img src={getEventImageUrl(event)} alt={event.eventName || "Event banner"} className="block h-full w-full object-cover sm:h-64" decoding="async" />
               </div>
             ) : (
               <div className="rounded-3xl border border-dashed border-slate-800 bg-slate-950/70 p-6 text-sm text-slate-400">

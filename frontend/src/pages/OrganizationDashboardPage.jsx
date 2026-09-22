@@ -172,7 +172,7 @@ function OrganizationDashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <SectionHeader
         eyebrow="Organization overview"
         title="Dashboard"
@@ -202,7 +202,7 @@ function OrganizationDashboardPage() {
                 <p className="text-sm text-slate-400">
                   {getGreeting()}, {getDisplayName(currentUser)}
                 </p>
-                <h2 className="truncate text-2xl font-semibold text-white">
+                <h2 className="truncate text-xl font-semibold text-white sm:text-2xl">
                   {organization?.name || organization?.organizationName || "Your organization"}
                 </h2>
                 <p className="max-w-2xl text-sm leading-6 text-slate-400">
@@ -222,16 +222,16 @@ function OrganizationDashboardPage() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[20rem]">
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:min-w-[20rem]">
+            <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 sm:rounded-2xl sm:p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Organization status</p>
               <div className="mt-2">
                 <StatusBadge status={organization?.status} />
               </div>
             </div>
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+            <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 sm:rounded-2xl sm:p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Members</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{formatNumber(stats.totalMembers || 0)}</p>
+              <p className="mt-2 text-lg font-semibold text-white sm:text-2xl">{formatNumber(stats.totalMembers || 0)}</p>
             </div>
           </div>
         </div>
@@ -251,7 +251,7 @@ function OrganizationDashboardPage() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-1 sm:gap-4 md:grid-cols-2 xl:grid-cols-5">
         {statCards.map((card) => (
           <StatCard
             key={card.label}

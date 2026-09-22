@@ -12,6 +12,7 @@ import { Skeleton } from "../../components/common/Skeleton";
 import { formatDateTime, formatMoney } from "../../utils/formatters";
 import { ROUTE_PATHS } from "../../routes/routePaths";
 import * as ticketingService from "../../services/ticketing.service";
+import { getEventImageUrl } from "../../utils/eventImage";
 
 const INACTIVE_EVENT_STATUSES = new Set(["CANCELED", "COMPLETED"]);
 
@@ -33,8 +34,8 @@ function TicketCard({ ticket, active }) {
     <Card className="overflow-hidden border-slate-800/70 bg-slate-950/85 p-0">
       <div className="grid sm:grid-cols-[180px_1fr]">
         <div className="aspect-[16/9] bg-slate-900 sm:aspect-auto sm:min-h-56">
-          {event?.banner?.url ? (
-            <img src={event.banner.url} alt={event.eventName || "Event banner"} className="h-full w-full object-cover" />
+          {getEventImageUrl(event) ? (
+            <img src={getEventImageUrl(event)} alt={event.eventName || "Event banner"} className="block h-full w-full object-cover" loading="lazy" decoding="async" />
           ) : (
             <div className="flex h-full min-h-40 items-center justify-center"><Ticket className="h-10 w-10 text-slate-600" /></div>
           )}
@@ -128,11 +129,11 @@ function CustomerTicketsPage() {
 
   return (
     <main className="py-10 sm:py-14">
-      <PageContainer className="space-y-8">
+      <PageContainer className="space-y-5 sm:space-y-8">
         <header className="flex flex-col gap-4 border-b border-slate-800 pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase text-app-300">Customer account</p>
-            <h1 className="text-3xl font-semibold text-white">My Tickets</h1>
+            <h1 className="text-xl font-semibold text-white sm:text-3xl">My Tickets</h1>
             <p className="max-w-2xl text-sm leading-6 text-slate-400">Access every ticket issued to your account and distinguish usable tickets from past activity.</p>
           </div>
           <Button variant="secondary" onClick={() => loadTickets(page)} isLoading={isLoading} loadingText="Refreshing...">Refresh</Button>
@@ -145,7 +146,7 @@ function CustomerTicketsPage() {
         ) : !error && tickets.length === 0 ? (
           <EmptyState title="No tickets yet" message="Browse Events to find your next experience." />
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-5 sm:space-y-8">
             <TicketSection title={`Active Tickets (${activeTickets.length})`} description="Valid tickets for events that have not been completed or cancelled." tickets={activeTickets} active />
             <TicketSection title={`Past / Inactive Tickets (${inactiveTickets.length})`} description="Used, cancelled, refunded, or event-completed tickets." tickets={inactiveTickets} active={false} />
           </div>

@@ -154,7 +154,7 @@ function OrganizationProfilePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <SectionHeader
         eyebrow="Organization management"
         title="Organization Profile"
@@ -258,9 +258,9 @@ function OrganizationProfilePage() {
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 {summaryCards.map((card) => (
-                  <div key={card.label} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                  <div key={card.label} className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 sm:rounded-2xl sm:p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{card.label}</p>
                     <div className="mt-2 text-sm text-slate-200">{card.value}</div>
                   </div>

@@ -7,7 +7,7 @@ function FilterSelect({ label, value, onChange, options = [], className }) {
       <select
         value={value}
         onChange={onChange}
-        className="h-11 w-full rounded-xl border border-slate-800 bg-slate-900 px-4 text-sm text-slate-100 outline-none transition focus:border-app-500 focus:ring-2 focus:ring-app-500/20"
+        className="h-10 min-w-0 w-full rounded-xl border border-slate-800 bg-slate-900 px-3 text-[13px] text-slate-100 outline-none transition focus:border-app-500 focus:ring-2 focus:ring-app-500/20 sm:h-11 sm:px-4 sm:text-sm"
       >
         {options.map((option) => (
           <option key={option.value || "all"} value={option.value || ""}>

@@ -3,15 +3,15 @@ import { classNames } from "../../utils/classNames";
 
 function SectionHeader({ eyebrow, title, description, actions, className }) {
   return (
-    <div className={classNames("flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between", className)}>
+    <div className={classNames("flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4", className)}>
       <div className="space-y-1">
-        {eyebrow ? <p className="text-xs font-semibold uppercase tracking-[0.2em] text-app-300">{eyebrow}</p> : null}
-        <h2 className="text-xl font-semibold text-white">{title}</h2>
-        {description ? <p className="max-w-2xl text-sm leading-6 text-slate-400">{description}</p> : null}
+        {eyebrow ? <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-app-300 sm:text-xs sm:tracking-[0.2em]">{eyebrow}</p> : null}
+        <h2 className="break-words text-lg font-semibold text-white sm:text-xl">{title}</h2>
+        {description ? <p className="max-w-2xl text-xs leading-5 text-slate-400 sm:text-sm sm:leading-6">{description}</p> : null}
       </div>
 
       {actions ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {actions.map((action) => {
             const Icon = action.icon;
 

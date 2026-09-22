@@ -46,7 +46,7 @@ function WithdrawalRequestModal({ open, summary = {}, isSubmitting, submissionEr
       <form className="space-y-5" onSubmit={handleSubmit}>
         <div className="border border-slate-800 bg-slate-950/60 p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Available Balance</p>
-          <p className="mt-2 text-2xl font-semibold text-white">{formatMoney(availableBalance, summary.currency)}</p>
+          <p className="mt-2 [overflow-wrap:anywhere] text-xl font-semibold text-white sm:text-2xl">{formatMoney(availableBalance, summary.currency)}</p>
         </div>
         <div className="border border-slate-800 bg-slate-950/60 p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Withdraw to</p>
@@ -75,7 +75,7 @@ function WithdrawalRequestModal({ open, summary = {}, isSubmitting, submissionEr
         />
         {amount && !fieldError ? (
           <p className="text-sm text-slate-400">
-            Balance after request: <span className="font-semibold text-slate-200">{formatMoney(remainingBalance, summary.currency)}</span>
+            Balance after request: <span className="[overflow-wrap:anywhere] font-semibold text-slate-200">{formatMoney(remainingBalance, summary.currency)}</span>
           </p>
         ) : null}
         {submissionError ? <p role="alert" className="border border-rose-500/25 bg-rose-500/10 p-3 text-sm text-rose-200">{submissionError}</p> : null}

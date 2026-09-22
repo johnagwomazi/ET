@@ -106,7 +106,7 @@ function OrganizationFinancePage() {
   const canRequest = payout.configured && Number(summary?.availableBalance || 0) > 0;
 
   return (
-  <div className="min-w-0 space-y-4 overflow-x-hidden sm:space-y-6">
+  <div className="min-w-0 space-y-4 sm:space-y-6">
     <SectionHeader
       eyebrow="Organization finance"
       title="Finance and withdrawals"
@@ -249,7 +249,7 @@ function OrganizationFinancePage() {
       </div>
 
       {pagination.totalPages > 1 ? (
-        <div className="min-w-0 overflow-x-auto">
+        <div className="min-w-0">
           <Pagination {...pagination} onPageChange={setPage} />
         </div>
       ) : null}
@@ -283,4 +283,3 @@ function OrganizationFinancePage() {
 }
 
 export default OrganizationFinancePage;
-

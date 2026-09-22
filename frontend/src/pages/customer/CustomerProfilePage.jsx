@@ -62,11 +62,11 @@ function CustomerProfilePage() {
 
   return (
     <main className="py-10 sm:py-14">
-      <PageContainer className="space-y-8">
+      <PageContainer className="space-y-5 sm:space-y-8">
         <header className="flex flex-col gap-4 border-b border-slate-800 pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase text-app-300">Account</p>
-            <h1 className="text-3xl font-semibold text-white">My Profile</h1>
+            <h1 className="text-xl font-semibold text-white sm:text-3xl">My Profile</h1>
             <p className="max-w-2xl text-sm leading-6 text-slate-400">Review the personal information attached to your customer account.</p>
           </div>
           <Button variant="secondary" onClick={handleRefresh} isLoading={isRefreshing} loadingText="Refreshing...">Refresh</Button>
@@ -78,7 +78,7 @@ function CustomerProfilePage() {
           <ProfileInformationSkeleton />
         ) : (
           <Card className="border-slate-800/70 bg-slate-950/80">
-            <div className="space-y-8">
+            <div className="space-y-5 sm:space-y-8">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <Avatar name={fullName || currentUser?.email} size="lg" />
                 <div className="min-w-0">
