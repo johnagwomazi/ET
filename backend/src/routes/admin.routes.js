@@ -23,6 +23,7 @@ import {
 import {
   platformWithdrawalListQuerySchema,
   withdrawalApproveSchema,
+  withdrawalFinalizeSchema,
   withdrawalIdParamSchema,
   withdrawalRejectSchema,
 } from "../validators/finance.validator.js";
@@ -136,6 +137,21 @@ adminRouter.patch(
   validate(withdrawalIdParamSchema, "params"),
   validate(withdrawalApproveSchema),
   financeController.approveWithdrawal
+);
+
+adminRouter.post(
+  "/withdrawals/:withdrawalId/finalize",
+  financeMutationLimiter,
+  validate(withdrawalIdParamSchema, "params"),
+  validate(withdrawalFinalizeSchema),
+  financeController.finalizeWithdrawalTransfer
+);
+
+adminRouter.post(
+  "/withdrawals/:withdrawalId/request-otp",
+  financeMutationLimiter,
+  validate(withdrawalIdParamSchema, "params"),
+  financeController.requestWithdrawalOtp
 );
 
 adminRouter.patch(

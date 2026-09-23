@@ -115,6 +115,32 @@ export async function approveWithdrawal(req, res, next) {
   }
 }
 
+export async function finalizeWithdrawalTransfer(req, res, next) {
+  try {
+    return sendResult(
+      res,
+      await financeService.finalizeWithdrawalTransfer(req.params.withdrawalId, req.auth.userId, req.body.otp),
+      "Transfer finalization processed"
+    );
+  } catch (error) {
+    error.operation = "finance.controller.finalizeWithdrawalTransfer";
+    return next(error);
+  }
+}
+
+export async function requestWithdrawalOtp(req, res, next) {
+  try {
+    return sendResult(
+      res,
+      await financeService.requestWithdrawalOtp(req.params.withdrawalId, req.auth.userId),
+      "OTP request processed"
+    );
+  } catch (error) {
+    error.operation = "finance.controller.requestWithdrawalOtp";
+    return next(error);
+  }
+}
+
 export async function rejectWithdrawal(req, res, next) {
   try {
     return sendResult(
@@ -140,4 +166,3 @@ export async function reconcileWithdrawal(req, res, next) {
     return next(error);
   }
 }
-

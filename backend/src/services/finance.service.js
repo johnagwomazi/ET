@@ -443,7 +443,7 @@ export async function getPlatformWithdrawalDetails(withdrawalId, actorUserId, de
 function normalizeProviderStatus(status) {
   const value = String(status || "").toLowerCase();
   if (value === "success") return WITHDRAWAL_PROVIDER_STATUS.SUCCESS;
-  if (value === "failed") return WITHDRAWAL_PROVIDER_STATUS.FAILED;
+  if (["failed", "abandoned"].includes(value)) return WITHDRAWAL_PROVIDER_STATUS.FAILED;
   if (value === "reversed") return WITHDRAWAL_PROVIDER_STATUS.REVERSED;
   if (value === "otp") return WITHDRAWAL_PROVIDER_STATUS.OTP;
   if (["pending", "processing", "received"].includes(value)) return WITHDRAWAL_PROVIDER_STATUS.PROCESSING;
@@ -454,6 +454,14 @@ function providerFailureReason(providerData, fallback) {
   const value = providerData?.failureReason || providerData?.reason || providerData?.failures;
   if (!value) return fallback;
   return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+function transferResult(providerResponse, fallbackMessage) {
+  return {
+    providerAccepted: providerResponse?.status === true,
+    status: normalizeProviderStatus(providerResponse?.data?.status),
+    message: providerResponse?.message || fallbackMessage,
+  };
 }
 
 async function applyProviderTransferState(withdrawal, providerData, dependencies) {
@@ -571,11 +579,17 @@ export async function approveWithdrawal(withdrawalId, reviewerId, payload = {}, 
         }
       );
       await notifyWithdrawal(failed, "status_changed", dependencies);
-      return { withdrawal: mapFinanceWithdrawal(failed || await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId)) };
+      return {
+        withdrawal: mapFinanceWithdrawal(failed || await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId)),
+        transferResult: transferResult(transfer, "Transfer provider request failed"),
+      };
     }
     const updated = await applyProviderTransferState(withdrawal, transfer.data, dependencies);
     await notifyWithdrawal(updated, "status_changed", dependencies);
-    return { withdrawal: mapFinanceWithdrawal(updated) };
+    return {
+      withdrawal: mapFinanceWithdrawal(updated),
+      transferResult: transferResult(transfer, "Transfer request accepted by Paystack"),
+    };
   } catch (error) {
     const unknown = await dependencies.withdrawalRepository.updateWithdrawalByStatus(
       withdrawalId,
@@ -586,8 +600,220 @@ export async function approveWithdrawal(withdrawalId, reviewerId, payload = {}, 
       }
     );
     await notifyWithdrawal(unknown, "status_changed", dependencies);
-    return { withdrawal: mapFinanceWithdrawal(unknown || await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId)), reconciliationRequired: true };
+    return {
+      withdrawal: mapFinanceWithdrawal(unknown || await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId)),
+      reconciliationRequired: true,
+      transferResult: {
+        providerAccepted: false,
+        status: WITHDRAWAL_PROVIDER_STATUS.UNKNOWN,
+        message: "Transfer status is unknown; reconciliation is required",
+      },
+    };
   }
+}
+
+export async function requestWithdrawalOtp(withdrawalId, reviewerId, dependencies = defaultDependencies) {
+  const access = await requireSuperAdmin(reviewerId, dependencies);
+  if (access.error) return access;
+
+  let withdrawal = await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId);
+  if (!withdrawal) return serviceError("Withdrawal not found", HTTP_STATUS.NOT_FOUND);
+  if (withdrawal.status === WITHDRAWAL_STATUS.PAID) {
+    return {
+      withdrawal: mapFinanceWithdrawal(withdrawal),
+      idempotent: true,
+      otpRequested: false,
+      transferResult: {
+        providerAccepted: true,
+        status: WITHDRAWAL_PROVIDER_STATUS.SUCCESS,
+        message: "Paystack has already confirmed this transfer",
+      },
+    };
+  }
+  if (
+    withdrawal.status !== WITHDRAWAL_STATUS.PROCESSING ||
+    withdrawal.transferStatus !== WITHDRAWAL_PROVIDER_STATUS.OTP ||
+    !withdrawal.transferReference ||
+    !withdrawal.providerTransferCode
+  ) {
+    return serviceError("This transfer is not awaiting an OTP", HTTP_STATUS.CONFLICT);
+  }
+
+  let verification;
+  try {
+    verification = await dependencies.paystackService.verifyTransfer(withdrawal.transferReference);
+  } catch (error) {
+    return serviceError("Transfer verification is temporarily unavailable. No OTP was requested.", HTTP_STATUS.SERVICE_UNAVAILABLE);
+  }
+  if (!verification?.status) {
+    return serviceError(
+      verification?.message || "Unable to verify the transfer. No OTP was requested.",
+      HTTP_STATUS.SERVICE_UNAVAILABLE
+    );
+  }
+  if (
+    Number(verification.data?.amount) !== Number(withdrawal.amountMinor) ||
+    verification.data?.currency !== withdrawal.currency ||
+    verification.data?.reference !== withdrawal.transferReference ||
+    (verification.data?.transfer_code && verification.data.transfer_code !== withdrawal.providerTransferCode)
+  ) {
+    return serviceError("Provider transfer details do not match this withdrawal", HTTP_STATUS.CONFLICT);
+  }
+
+  const verifiedStatus = normalizeProviderStatus(verification.data?.status);
+  if (verifiedStatus !== WITHDRAWAL_PROVIDER_STATUS.OTP) {
+    if (verifiedStatus === WITHDRAWAL_PROVIDER_STATUS.UNKNOWN) {
+      return serviceError("Paystack did not confirm that this transfer is awaiting an OTP", HTTP_STATUS.CONFLICT);
+    }
+    const updated = await applyProviderTransferState(withdrawal, verification.data, dependencies);
+    await notifyWithdrawal(updated, "status_changed", dependencies);
+    const restartRequired = [WITHDRAWAL_PROVIDER_STATUS.FAILED, WITHDRAWAL_PROVIDER_STATUS.REVERSED].includes(verifiedStatus);
+    return {
+      withdrawal: mapFinanceWithdrawal(updated),
+      otpRequested: false,
+      restartRequired,
+      transferResult: {
+        ...transferResult(verification, "Paystack transfer status verified"),
+        status: verifiedStatus,
+        message: restartRequired
+          ? "Paystack reports that this transfer ended. It was not restarted to prevent a duplicate payout."
+          : verification?.message || "Paystack reports that this transfer is already processing. No OTP was requested.",
+      },
+    };
+  }
+
+  const claimed = await dependencies.withdrawalRepository.claimWithdrawalOtpFinalization(
+    withdrawalId,
+    { transferStatus: WITHDRAWAL_PROVIDER_STATUS.PROCESSING, failureReason: "" }
+  );
+  if (!claimed) {
+    const current = await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId);
+    return {
+      withdrawal: mapFinanceWithdrawal(current),
+      idempotent: true,
+      otpRequested: false,
+      transferResult: {
+        providerAccepted: true,
+        status: current?.transferStatus || WITHDRAWAL_PROVIDER_STATUS.UNKNOWN,
+        message: "The transfer state changed while requesting an OTP. No duplicate request was sent.",
+      },
+    };
+  }
+  withdrawal = claimed;
+
+  let resend;
+  try {
+    resend = await dependencies.paystackService.resendTransferOtp({
+      transferCode: withdrawal.providerTransferCode,
+    });
+  } catch (error) {
+    resend = { indeterminate: true };
+  }
+
+  const message = resend?.indeterminate
+    ? "The OTP request could not be confirmed. You can request another OTP."
+    : resend?.message || (resend?.status ? "Paystack sent a new OTP" : "Paystack could not send a new OTP");
+  const awaitingOtp = await dependencies.withdrawalRepository.updateWithdrawalByStatus(
+    withdrawalId,
+    [WITHDRAWAL_STATUS.PROCESSING],
+    {
+      transferStatus: WITHDRAWAL_PROVIDER_STATUS.OTP,
+      failureReason: resend?.status ? "" : message,
+    }
+  );
+  return {
+    withdrawal: mapFinanceWithdrawal(awaitingOtp || await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId)),
+    otpRequested: resend?.status === true,
+    transferResult: {
+      providerAccepted: resend?.status === true,
+      status: WITHDRAWAL_PROVIDER_STATUS.OTP,
+      message,
+    },
+  };
+}
+
+export async function finalizeWithdrawalTransfer(withdrawalId, reviewerId, otp, dependencies = defaultDependencies) {
+  const access = await requireSuperAdmin(reviewerId, dependencies);
+  if (access.error) return access;
+
+  let withdrawal = await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId);
+  if (!withdrawal) return serviceError("Withdrawal not found", HTTP_STATUS.NOT_FOUND);
+  if (withdrawal.status === WITHDRAWAL_STATUS.PAID) {
+    return { withdrawal: mapFinanceWithdrawal(withdrawal), idempotent: true };
+  }
+  if (
+    withdrawal.status !== WITHDRAWAL_STATUS.PROCESSING ||
+    withdrawal.transferStatus !== WITHDRAWAL_PROVIDER_STATUS.OTP ||
+    !withdrawal.providerTransferCode
+  ) {
+    return serviceError("This transfer is not awaiting an OTP", HTTP_STATUS.CONFLICT);
+  }
+
+  const claimed = await dependencies.withdrawalRepository.claimWithdrawalOtpFinalization(
+    withdrawalId,
+    { transferStatus: WITHDRAWAL_PROVIDER_STATUS.PROCESSING, failureReason: "" }
+  );
+  if (!claimed) {
+    const current = await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId);
+    if (current?.status === WITHDRAWAL_STATUS.PAID || current?.transferStatus !== WITHDRAWAL_PROVIDER_STATUS.OTP) {
+      return { withdrawal: mapFinanceWithdrawal(current), idempotent: true };
+    }
+    return serviceError("Transfer authorization is already in progress", HTTP_STATUS.CONFLICT);
+  }
+  withdrawal = claimed;
+
+  let finalized;
+  try {
+    finalized = await dependencies.paystackService.finalizeTransfer({
+      transferCode: withdrawal.providerTransferCode,
+      otp,
+    });
+  } catch (error) {
+    finalized = { indeterminate: true };
+  }
+
+  if (finalized?.indeterminate) {
+    const unknown = await dependencies.withdrawalRepository.updateWithdrawalByStatus(
+      withdrawalId,
+      [WITHDRAWAL_STATUS.PROCESSING],
+      {
+        transferStatus: WITHDRAWAL_PROVIDER_STATUS.UNKNOWN,
+        failureReason: "Transfer status is unknown; reconciliation is required",
+      }
+    );
+    return {
+      withdrawal: mapFinanceWithdrawal(unknown || await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId)),
+      reconciliationRequired: true,
+      transferResult: {
+        providerAccepted: false,
+        status: WITHDRAWAL_PROVIDER_STATUS.UNKNOWN,
+        message: "Transfer status is unknown; reconciliation is required",
+      },
+    };
+  }
+
+  if (!finalized?.status) {
+    const failureMessage = finalized?.message || "The OTP is invalid or expired. Request a new OTP and try again.";
+    const awaitingOtp = await dependencies.withdrawalRepository.updateWithdrawalByStatus(
+      withdrawalId,
+      [WITHDRAWAL_STATUS.PROCESSING],
+      {
+        transferStatus: WITHDRAWAL_PROVIDER_STATUS.OTP,
+        failureReason: failureMessage,
+      }
+    );
+    return {
+      withdrawal: mapFinanceWithdrawal(awaitingOtp || await dependencies.withdrawalRepository.findWithdrawalById(withdrawalId)),
+      transferResult: transferResult(finalized, failureMessage),
+    };
+  }
+
+  const updated = await applyProviderTransferState(withdrawal, finalized.data, dependencies);
+  await notifyWithdrawal(updated, "status_changed", dependencies);
+  return {
+    withdrawal: mapFinanceWithdrawal(updated),
+    transferResult: transferResult(finalized, "Transfer authorization submitted to Paystack"),
+  };
 }
 
 export async function rejectWithdrawal(withdrawalId, reviewerId, reason, dependencies = defaultDependencies) {
@@ -640,7 +866,10 @@ export async function reconcileWithdrawal(withdrawalId, reviewerId, dependencies
   }
   const updated = await applyProviderTransferState(withdrawal, verification.data, dependencies);
   await notifyWithdrawal(updated, "status_changed", dependencies);
-  return { withdrawal: mapFinanceWithdrawal(updated) };
+  return {
+    withdrawal: mapFinanceWithdrawal(updated),
+    transferResult: transferResult(verification, "Transfer status refreshed from Paystack"),
+  };
 }
 
 export async function handleTransferWebhook(event, providerData, dependencies = defaultDependencies) {

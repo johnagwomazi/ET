@@ -106,3 +106,22 @@ export async function updateWithdrawalByStatus(withdrawalId, expectedStatuses, u
     options
   );
 }
+
+export async function claimWithdrawalOtpFinalization(withdrawalId, updateData, options = {}) {
+  return applySession(
+    Withdrawal.findOneAndUpdate(
+      {
+        _id: withdrawalId,
+        status: "PROCESSING",
+        transferStatus: "OTP",
+      },
+      updateData,
+      { new: true, runValidators: true }
+    )
+      .select("+providerRecipientCode")
+      .populate("organization")
+      .populate("requestedBy")
+      .populate("reviewedBy"),
+    options
+  );
+}

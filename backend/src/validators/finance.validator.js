@@ -35,6 +35,10 @@ export const withdrawalApproveSchema = z
   .object({ reason: z.string().trim().max(500).optional() })
   .strict();
 
+export const withdrawalFinalizeSchema = z
+  .object({ otp: z.string().trim().regex(/^\d{4,10}$/, "Enter the Paystack OTP") })
+  .strict();
+
 const withdrawalQueryShape = {
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),

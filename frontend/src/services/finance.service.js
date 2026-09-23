@@ -38,6 +38,14 @@ export async function approveWithdrawal(withdrawalId, payload = {}, options = {}
   return unwrapResponse(await patch(`/admin/withdrawals/${withdrawalId}/approve`, payload, options));
 }
 
+export async function finalizeWithdrawalTransfer(withdrawalId, payload, options = {}) {
+  return unwrapResponse(await post(`/admin/withdrawals/${withdrawalId}/finalize`, payload, options));
+}
+
+export async function requestWithdrawalOtp(withdrawalId, options = {}) {
+  return unwrapResponse(await post(`/admin/withdrawals/${withdrawalId}/request-otp`, {}, options));
+}
+
 export async function rejectWithdrawal(withdrawalId, payload, options = {}) {
   return unwrapResponse(await patch(`/admin/withdrawals/${withdrawalId}/reject`, payload, options));
 }
@@ -45,4 +53,3 @@ export async function rejectWithdrawal(withdrawalId, payload, options = {}) {
 export async function reconcileWithdrawal(withdrawalId, options = {}) {
   return unwrapResponse(await post(`/admin/withdrawals/${withdrawalId}/reconcile`, {}, options));
 }
-

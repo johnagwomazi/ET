@@ -39,6 +39,9 @@ function WithdrawalsPage() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [action, setAction] = useState(null);
   const [isMutating, setIsMutating] = useState(false);
+  const [isRequestingOtp, setIsRequestingOtp] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [transferResult, setTransferResult] = useState(null);
   const detailControllerRef = useRef(null);
   const dateRangeError = filters.startDate && filters.endDate && filters.startDate > filters.endDate
     ? "Start date must be before or equal to end date"
@@ -105,6 +108,8 @@ function WithdrawalsPage() {
     detailControllerRef.current = controller;
     setDrawerOpen(true);
     setDetails({ withdrawal });
+    setOtp("");
+    setTransferResult(null);
     setDetailError("");
     setIsDetailLoading(true);
     try {
@@ -121,6 +126,8 @@ function WithdrawalsPage() {
     detailControllerRef.current?.abort();
     setDrawerOpen(false);
     setAction(null);
+    setOtp("");
+    setTransferResult(null);
   }
 
   function openAction(type) {
@@ -145,17 +152,79 @@ function WithdrawalsPage() {
       }
       const nextWithdrawal = response?.withdrawal;
       setDetails((current) => ({ ...(current || {}), withdrawal: nextWithdrawal || withdrawal }));
+      setTransferResult(response?.transferResult || null);
       setAction(null);
       refresh();
-      toast.success(
-        action.type === "approve"
-          ? `Withdrawal is ${WITHDRAWAL_STATUS_META[nextWithdrawal?.status]?.label?.toLowerCase() || "being processed"}`
-          : "Withdrawal rejected"
-      );
+      const resultMessage = response?.transferResult?.message;
+      if (action.type === "approve" && response?.transferResult?.providerAccepted === false) {
+        toast.error(resultMessage || "Paystack did not accept the transfer");
+      } else {
+        toast.success(
+          action.type === "approve"
+            ? resultMessage || `Withdrawal is ${WITHDRAWAL_STATUS_META[nextWithdrawal?.status]?.label?.toLowerCase() || "being processed"}`
+            : "Withdrawal rejected"
+        );
+      }
     } catch (mutationError) {
       toast.error(mutationError.message || "Withdrawal action could not be completed");
     } finally {
       setIsMutating(false);
+    }
+  }
+
+  async function finalizeTransfer() {
+    const withdrawal = details?.withdrawal;
+    const normalizedOtp = otp.trim();
+    if (!withdrawal) return;
+    if (!/^\d{4,10}$/.test(normalizedOtp)) {
+      toast.error("Enter the Paystack OTP");
+      return;
+    }
+
+    setIsMutating(true);
+    try {
+      const response = await financeService.finalizeWithdrawalTransfer(withdrawal.id, { otp: normalizedOtp });
+      const nextWithdrawal = response?.withdrawal || withdrawal;
+      setDetails((current) => ({ ...(current || {}), withdrawal: nextWithdrawal }));
+      setTransferResult(response?.transferResult || null);
+      if (nextWithdrawal.transferStatus !== "OTP") setOtp("");
+      refresh();
+
+      const resultMessage = response?.transferResult?.message;
+      if (response?.transferResult?.providerAccepted === false) {
+        toast.error(resultMessage || "Paystack did not accept the OTP");
+      } else {
+        toast.success(resultMessage || `Transfer is ${WITHDRAWAL_STATUS_META[nextWithdrawal.status]?.label?.toLowerCase() || "being processed"}`);
+      }
+    } catch (finalizeError) {
+      toast.error(finalizeError.message || "Transfer authorization could not be completed");
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function requestOtp() {
+    const withdrawal = details?.withdrawal;
+    if (!withdrawal) return;
+
+    setIsRequestingOtp(true);
+    try {
+      const response = await financeService.requestWithdrawalOtp(withdrawal.id);
+      const nextWithdrawal = response?.withdrawal || withdrawal;
+      setDetails((current) => ({ ...(current || {}), withdrawal: nextWithdrawal }));
+      setTransferResult(response?.transferResult || null);
+      refresh();
+
+      const resultMessage = response?.transferResult?.message;
+      if (response?.transferResult?.providerAccepted === false) {
+        toast.error(resultMessage || "Paystack could not send a new OTP");
+      } else {
+        toast.success(resultMessage || "Paystack sent a new OTP");
+      }
+    } catch (requestError) {
+      toast.error(requestError.message || "A new OTP could not be requested");
+    } finally {
+      setIsRequestingOtp(false);
     }
   }
 
@@ -166,8 +235,9 @@ function WithdrawalsPage() {
     try {
       const response = await financeService.reconcileWithdrawal(withdrawal.id);
       setDetails((current) => ({ ...(current || {}), withdrawal: response?.withdrawal || withdrawal }));
+      setTransferResult(response?.transferResult || null);
       refresh();
-      toast.success(`Transfer status refreshed: ${WITHDRAWAL_STATUS_META[response?.withdrawal?.status]?.label || "updated"}`);
+      toast.success(response?.transferResult?.message || `Transfer status refreshed: ${WITHDRAWAL_STATUS_META[response?.withdrawal?.status]?.label || "updated"}`);
     } catch (reconcileError) {
       toast.error(reconcileError.message || "Transfer status could not be refreshed");
     } finally {
@@ -180,25 +250,58 @@ function WithdrawalsPage() {
 
   const activeWithdrawal = details?.withdrawal;
   const drawerFooter = activeWithdrawal ? (
-    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-      {activeWithdrawal.status === WITHDRAWAL_STATUS.PENDING ? (
-        <>
-          <Button variant="danger" onClick={() => openAction("reject")} disabled={isMutating || isDetailLoading || Boolean(detailError)}>
-            <X className="h-4 w-4" />
-            Reject
-          </Button>
-          <Button onClick={() => openAction("approve")} disabled={isMutating || isDetailLoading || Boolean(detailError)}>
-            <Check className="h-4 w-4" />
-            Approve Withdrawal
-          </Button>
-        </>
+    <div className="w-full space-y-3">
+      {transferResult?.message ? (
+        <div className={`border px-3 py-2 text-sm ${transferResult.providerAccepted === false ? "border-rose-500/25 bg-rose-500/10 text-rose-200" : "border-emerald-500/25 bg-emerald-500/10 text-emerald-200"}`} role="status">
+          {transferResult.message}
+        </div>
       ) : null}
-      {activeWithdrawal.status === WITHDRAWAL_STATUS.PROCESSING ? (
-        <Button onClick={reconcile} isLoading={isMutating} loadingText="Checking...">
-          <RotateCcw className="h-4 w-4" />
-          Refresh Status
-        </Button>
-      ) : null}
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        {activeWithdrawal.status === WITHDRAWAL_STATUS.PENDING ? (
+          <>
+            <Button variant="danger" onClick={() => openAction("reject")} disabled={isMutating || isDetailLoading || Boolean(detailError)}>
+              <X className="h-4 w-4" />
+              Reject
+            </Button>
+            <Button onClick={() => openAction("approve")} disabled={isMutating || isDetailLoading || Boolean(detailError)}>
+              <Check className="h-4 w-4" />
+              Approve Withdrawal
+            </Button>
+          </>
+        ) : null}
+        {activeWithdrawal.status === WITHDRAWAL_STATUS.PROCESSING && activeWithdrawal.transferStatus === "OTP" ? (
+          <div className="grid w-full gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+            <Input
+              label="Paystack OTP"
+              value={otp}
+              onChange={(event) => setOtp(event.target.value.replace(/\D/g, ""))}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={10}
+              placeholder="Enter OTP"
+              disabled={isMutating || isRequestingOtp}
+            />
+            <Button
+              variant="secondary"
+              onClick={requestOtp}
+              isLoading={isRequestingOtp}
+              loadingText="Requesting..."
+              disabled={isMutating}
+            >
+              Request OTP
+            </Button>
+            <Button onClick={finalizeTransfer} isLoading={isMutating} loadingText="Submitting..." disabled={isRequestingOtp}>
+              Submit OTP
+            </Button>
+          </div>
+        ) : null}
+        {activeWithdrawal.status === WITHDRAWAL_STATUS.PROCESSING && activeWithdrawal.transferStatus !== "OTP" ? (
+          <Button onClick={reconcile} isLoading={isMutating} loadingText="Checking...">
+            <RotateCcw className="h-4 w-4" />
+            Refresh Status
+          </Button>
+        ) : null}
+      </div>
     </div>
   ) : null;
 

@@ -132,6 +132,26 @@ export async function initiateTransfer({ amount, recipient, reason, reference })
   });
 }
 
+export async function finalizeTransfer({ transferCode, otp }) {
+  return paystackRequest("/transfer/finalize_transfer", {
+    method: "POST",
+    body: {
+      transfer_code: transferCode,
+      otp,
+    },
+  });
+}
+
+export async function resendTransferOtp({ transferCode }) {
+  return paystackRequest("/transfer/resend_otp", {
+    method: "POST",
+    body: {
+      transfer_code: transferCode,
+      reason: "resend_otp",
+    },
+  });
+}
+
 export async function resolveAccountNumber({ accountNumber, bankCode }) {
   const query = new URLSearchParams({ account_number: accountNumber, bank_code: bankCode });
   return paystackRequest(`/bank/resolve?${query.toString()}`);

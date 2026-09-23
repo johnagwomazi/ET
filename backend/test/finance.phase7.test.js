@@ -9,11 +9,13 @@ envConfig.jwtAccessSecret ||= "phase7-test-confirmation-secret";
 import { USER_ROLES } from "../src/constants/roles.constants.js";
 import { WITHDRAWAL_STATUS } from "../src/constants/ticketing.constants.js";
 import * as financeService from "../src/services/finance.service.js";
+import * as paystackProviderService from "../src/services/paystack.service.js";
 import * as ticketingService from "../src/services/ticketing.service.js";
 import {
   payoutDetailsUpdateSchema,
   payoutAccountResolveSchema,
   withdrawalApproveSchema,
+  withdrawalFinalizeSchema,
   platformWithdrawalListQuerySchema,
   withdrawalCreateSchema,
   withdrawalRejectSchema,
@@ -37,6 +39,9 @@ function createDependencies(options = {}) {
   const state = {
     lockToken: null,
     transferCount: 0,
+    finalizeCount: 0,
+    verifyCount: 0,
+    resendOtpCount: 0,
     revenue: options.revenue || {
       currency: "NGN",
       grossSalesMinor: 100_000,
@@ -155,6 +160,16 @@ function createDependencies(options = {}) {
         Object.assign(withdrawal, update, { updatedAt: new Date() });
         return withdrawal;
       },
+      async claimWithdrawalOtpFinalization(withdrawalId, update) {
+        const withdrawal = state.withdrawals.find((item) => item._id === withdrawalId);
+        if (
+          !withdrawal ||
+          withdrawal.status !== WITHDRAWAL_STATUS.PROCESSING ||
+          withdrawal.transferStatus !== "OTP"
+        ) return null;
+        Object.assign(withdrawal, update, { updatedAt: new Date() });
+        return withdrawal;
+      },
     },
     paystackService: {
       isConfigured() { return options.paystackConfigured !== false; },
@@ -180,10 +195,30 @@ function createDependencies(options = {}) {
         return {
           configured: true,
           status: true,
+          message: options.transferMessage || "Transfer has been queued",
           data: { status: options.transferStatus || "pending", transfer_code: "TRF_phase7" },
         };
       },
+      async finalizeTransfer() {
+        state.finalizeCount += 1;
+        if (options.finalizeThrows) throw new Error("timeout");
+        if (options.finalizeFails) return { configured: true, status: false, message: "Invalid OTP" };
+        return {
+          configured: true,
+          status: true,
+          message: options.finalizeMessage || "Transfer has been queued",
+          data: { status: options.finalizeStatus || "success", transfer_code: "TRF_phase7" },
+        };
+      },
+      async resendTransferOtp() {
+        state.resendOtpCount += 1;
+        if (options.resendDelay) await new Promise((resolve) => setTimeout(resolve, options.resendDelay));
+        if (options.resendThrows) throw new Error("timeout");
+        if (options.resendFails) return { configured: true, status: false, message: "OTP could not be resent" };
+        return { configured: true, status: true, message: options.resendMessage || "A new OTP has been sent" };
+      },
       async verifyTransfer(reference) {
+        state.verifyCount += 1;
         return {
           status: true,
           data: {
@@ -210,6 +245,8 @@ test("Phase 7 validators reject unsafe money, payout, filter, and review payload
   assert.equal(payoutDetailsUpdateSchema.safeParse({ accountNumber: "0123456789", bankCode: "058" }).success, false);
   assert.equal(payoutDetailsUpdateSchema.safeParse({ accountNumber: "123", bankCode: "$where" }).success, false);
   assert.equal(withdrawalRejectSchema.safeParse({ reason: "" }).success, false);
+  assert.equal(withdrawalFinalizeSchema.safeParse({ otp: "123456" }).success, true);
+  assert.equal(withdrawalFinalizeSchema.safeParse({ otp: "12ab56" }).success, false);
   assert.equal(platformWithdrawalListQuerySchema.safeParse({ organizationId: { $ne: null } }).success, false);
 });
 
@@ -319,6 +356,240 @@ test("duplicate concurrent approvals initiate exactly one provider transfer", as
   assert.equal(state.withdrawals[0].status, WITHDRAWAL_STATUS.PROCESSING);
   assert.ok(first.withdrawal || second.withdrawal);
   assert.ok(first.idempotent || second.idempotent);
+});
+
+test("an OTP transfer stays processing until finalization succeeds and cannot be paid twice", async () => {
+  const { dependencies, state } = createDependencies({
+    withdrawals: [{ _id: ids.withdrawal, amount: 400, amountMinor: 40_000 }],
+    transferStatus: "otp",
+    transferMessage: "Transfer requires OTP to continue",
+    finalizeStatus: "success",
+    finalizeMessage: "Transfer completed successfully",
+  });
+
+  const approval = await financeService.approveWithdrawal(ids.withdrawal, ids.superAdmin, {}, dependencies);
+  assert.equal(approval.withdrawal.status, WITHDRAWAL_STATUS.PROCESSING);
+  assert.equal(approval.withdrawal.transferStatus, "OTP");
+  assert.equal(approval.transferResult.message, "Transfer requires OTP to continue");
+  assert.equal(state.transferCount, 1);
+
+  const results = await Promise.all([
+    financeService.finalizeWithdrawalTransfer(ids.withdrawal, ids.superAdmin, "123456", dependencies),
+    financeService.finalizeWithdrawalTransfer(ids.withdrawal, ids.superAdmin, "123456", dependencies),
+  ]);
+  const finalized = results.find((result) => result.transferResult);
+  const repeated = results.find((result) => result !== finalized);
+  assert.equal(finalized.withdrawal.status, WITHDRAWAL_STATUS.PAID);
+  assert.equal(finalized.withdrawal.transferStatus, "SUCCESS");
+  assert.equal(finalized.transferResult.message, "Transfer completed successfully");
+  assert.ok(repeated.idempotent || repeated.statusCode === 409);
+  assert.equal(state.finalizeCount, 1);
+  assert.equal(state.transferCount, 1);
+});
+
+test("Paystack OTP finalization uses the transfer code without initiating another transfer", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = envConfig.paystackSecretKey;
+  let request;
+  envConfig.paystackSecretKey = "sk_test_phase7";
+  globalThis.fetch = async (url, options) => {
+    request = { url, options };
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return { status: true, message: "Transfer completed successfully", data: { status: "success" } };
+      },
+    };
+  };
+
+  try {
+    const response = await paystackProviderService.finalizeTransfer({
+      transferCode: "TRF_phase7",
+      otp: "123456",
+    });
+    assert.equal(response.status, true);
+    assert.equal(request.url, "https://api.paystack.co/transfer/finalize_transfer");
+    assert.equal(request.options.method, "POST");
+    assert.deepEqual(JSON.parse(request.options.body), {
+      transfer_code: "TRF_phase7",
+      otp: "123456",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    envConfig.paystackSecretKey = originalKey;
+  }
+});
+
+test("Paystack OTP resend uses the supported same-transfer endpoint and reason", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = envConfig.paystackSecretKey;
+  let request;
+  envConfig.paystackSecretKey = "sk_test_phase7";
+  globalThis.fetch = async (url, options) => {
+    request = { url, options };
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return { status: true, message: "A new OTP has been sent" };
+      },
+    };
+  };
+
+  try {
+    const response = await paystackProviderService.resendTransferOtp({ transferCode: "TRF_phase7" });
+    assert.equal(response.status, true);
+    assert.equal(request.url, "https://api.paystack.co/transfer/resend_otp");
+    assert.equal(request.options.method, "POST");
+    assert.deepEqual(JSON.parse(request.options.body), {
+      transfer_code: "TRF_phase7",
+      reason: "resend_otp",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    envConfig.paystackSecretKey = originalKey;
+  }
+});
+
+test("an invalid OTP can be resent and retried on the same transfer", async () => {
+  const { dependencies, state } = createDependencies({
+    withdrawals: [{ _id: ids.withdrawal, amount: 400, amountMinor: 40_000 }],
+    transferStatus: "otp",
+    finalizeFails: true,
+    verifyStatus: "otp",
+    resendMessage: "A new OTP has been sent",
+  });
+
+  await financeService.approveWithdrawal(ids.withdrawal, ids.superAdmin, {}, dependencies);
+  const invalid = await financeService.finalizeWithdrawalTransfer(
+    ids.withdrawal,
+    ids.superAdmin,
+    "111111",
+    dependencies
+  );
+  assert.equal(invalid.withdrawal.status, WITHDRAWAL_STATUS.PROCESSING);
+  assert.equal(invalid.withdrawal.transferStatus, "OTP");
+  assert.equal(invalid.transferResult.message, "Invalid OTP");
+
+  const resend = await financeService.requestWithdrawalOtp(ids.withdrawal, ids.superAdmin, dependencies);
+  assert.equal(resend.otpRequested, true);
+  assert.equal(resend.withdrawal.transferStatus, "OTP");
+  assert.equal(resend.transferResult.message, "A new OTP has been sent");
+  assert.equal(state.verifyCount, 1);
+  assert.equal(state.resendOtpCount, 1);
+  assert.equal(state.transferCount, 1);
+
+  dependencies.paystackService.finalizeTransfer = async () => {
+    state.finalizeCount += 1;
+    return {
+      status: true,
+      message: "Transfer completed successfully",
+      data: { status: "success", transfer_code: "TRF_phase7" },
+    };
+  };
+  const completed = await financeService.finalizeWithdrawalTransfer(
+    ids.withdrawal,
+    ids.superAdmin,
+    "222222",
+    dependencies
+  );
+  assert.equal(completed.withdrawal.status, WITHDRAWAL_STATUS.PAID);
+  assert.equal(state.transferCount, 1);
+});
+
+test("Request OTP verifies provider success and never resends or restarts a payout", async () => {
+  const { dependencies, state } = createDependencies({
+    withdrawals: [{ _id: ids.withdrawal, amount: 400, amountMinor: 40_000 }],
+    transferStatus: "otp",
+    verifyStatus: "success",
+  });
+
+  await financeService.approveWithdrawal(ids.withdrawal, ids.superAdmin, {}, dependencies);
+  const request = await financeService.requestWithdrawalOtp(ids.withdrawal, ids.superAdmin, dependencies);
+  const repeated = await financeService.requestWithdrawalOtp(ids.withdrawal, ids.superAdmin, dependencies);
+  assert.equal(request.withdrawal.status, WITHDRAWAL_STATUS.PAID);
+  assert.equal(request.otpRequested, false);
+  assert.equal(repeated.idempotent, true);
+  assert.equal(state.verifyCount, 1);
+  assert.equal(state.resendOtpCount, 0);
+  assert.equal(state.transferCount, 1);
+});
+
+test("Request OTP verifies a terminal transfer and does not restart it automatically", async () => {
+  const { dependencies, state } = createDependencies({
+    withdrawals: [{ _id: ids.withdrawal, amount: 400, amountMinor: 40_000 }],
+    transferStatus: "otp",
+    verifyStatus: "failed",
+  });
+
+  await financeService.approveWithdrawal(ids.withdrawal, ids.superAdmin, {}, dependencies);
+  const request = await financeService.requestWithdrawalOtp(ids.withdrawal, ids.superAdmin, dependencies);
+  assert.equal(request.withdrawal.status, WITHDRAWAL_STATUS.FAILED);
+  assert.equal(request.restartRequired, true);
+  assert.match(request.transferResult.message, /not restarted.*duplicate payout/i);
+  assert.equal(state.verifyCount, 1);
+  assert.equal(state.resendOtpCount, 0);
+  assert.equal(state.transferCount, 1);
+});
+
+test("concurrent Request OTP actions send only one Paystack resend", async () => {
+  const { dependencies, state } = createDependencies({
+    withdrawals: [{ _id: ids.withdrawal, amount: 400, amountMinor: 40_000 }],
+    transferStatus: "otp",
+    verifyStatus: "otp",
+    resendDelay: 30,
+  });
+
+  await financeService.approveWithdrawal(ids.withdrawal, ids.superAdmin, {}, dependencies);
+  await Promise.all([
+    financeService.requestWithdrawalOtp(ids.withdrawal, ids.superAdmin, dependencies),
+    financeService.requestWithdrawalOtp(ids.withdrawal, ids.superAdmin, dependencies),
+  ]);
+  assert.equal(state.resendOtpCount, 1);
+  assert.equal(state.transferCount, 1);
+});
+
+test("a non-OTP transfer reports immediate success without finalization or duplicate payout", async () => {
+  const { dependencies, state } = createDependencies({
+    withdrawals: [{ _id: ids.withdrawal, amount: 400, amountMinor: 40_000 }],
+    transferStatus: "success",
+    transferMessage: "Transfer completed successfully",
+  });
+
+  const approval = await financeService.approveWithdrawal(ids.withdrawal, ids.superAdmin, {}, dependencies);
+  const repeated = await financeService.approveWithdrawal(ids.withdrawal, ids.superAdmin, {}, dependencies);
+  assert.equal(approval.withdrawal.status, WITHDRAWAL_STATUS.PAID);
+  assert.equal(approval.withdrawal.transferStatus, "SUCCESS");
+  assert.equal(approval.transferResult.message, "Transfer completed successfully");
+  assert.equal(repeated.idempotent, true);
+  assert.equal(state.transferCount, 1);
+  assert.equal(state.finalizeCount, 0);
+});
+
+test("an accepted OTP leaves the withdrawal processing until Paystack later confirms success", async () => {
+  const { dependencies } = createDependencies({
+    withdrawals: [{ _id: ids.withdrawal, amount: 400, amountMinor: 40_000 }],
+    transferStatus: "otp",
+    finalizeStatus: "pending",
+    finalizeMessage: "Transfer has been queued",
+    verifyStatus: "success",
+  });
+
+  await financeService.approveWithdrawal(ids.withdrawal, ids.superAdmin, {}, dependencies);
+  const finalized = await financeService.finalizeWithdrawalTransfer(
+    ids.withdrawal,
+    ids.superAdmin,
+    "123456",
+    dependencies
+  );
+  assert.equal(finalized.withdrawal.status, WITHDRAWAL_STATUS.PROCESSING);
+  assert.equal(finalized.withdrawal.transferStatus, "PROCESSING");
+  assert.equal(finalized.transferResult.message, "Transfer has been queued");
+
+  const reconciled = await financeService.reconcileWithdrawal(ids.withdrawal, ids.superAdmin, dependencies);
+  assert.equal(reconciled.withdrawal.status, WITHDRAWAL_STATUS.PAID);
+  assert.equal(reconciled.withdrawal.transferStatus, "SUCCESS");
 });
 
 test("provider failure releases the reservation while timeout remains processing for reconciliation", async () => {
@@ -610,5 +881,7 @@ test("all Phase 7 routes are registered under protected organization and Super A
   assert.ok(paths(organizationRoutes).includes("/me/withdrawals"));
   assert.ok(paths(adminRoutes).includes("/withdrawals/:withdrawalId"));
   assert.ok(paths(adminRoutes).includes("/withdrawals/:withdrawalId/approve"));
+  assert.ok(paths(adminRoutes).includes("/withdrawals/:withdrawalId/finalize"));
+  assert.ok(paths(adminRoutes).includes("/withdrawals/:withdrawalId/request-otp"));
   assert.ok(paths(adminRoutes).includes("/withdrawals/:withdrawalId/reconcile"));
 });
