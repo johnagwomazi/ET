@@ -95,6 +95,56 @@ test("event banner upload rejects a non-HTTPS storage result", async () => {
   );
 });
 
+test("event banner upload reports invalid Cloudinary configuration safely", async () => {
+  const logCalls = [];
+  const cloudinaryClient = {
+    uploader: {
+      upload_stream(options, callback) {
+        return {
+          end() {
+            callback({
+              message: "Invalid cloud_name Root",
+              http_code: 401,
+            });
+          },
+        };
+      },
+    },
+  };
+
+  await assert.rejects(
+    storeEventBanner(
+      {
+        buffer: Buffer.from("image-data"),
+        mimetype: "image/jpeg",
+      },
+      {
+        cloudinaryClient,
+        logger: {
+          error(...args) {
+            logCalls.push(args);
+          },
+        },
+      }
+    ),
+    (error) => {
+      assert.equal(error.statusCode, 503);
+      assert.equal(error.message, "Image storage configuration is invalid");
+      return true;
+    }
+  );
+
+  assert.deepEqual(logCalls, [[
+    "[event-banner] Cloudinary upload failed",
+    {
+      provider: "cloudinary",
+      reason: "invalid-cloud-name",
+      httpCode: 401,
+      errorCode: null,
+    },
+  ]]);
+});
+
 test("event banner removal delegates Cloudinary cleanup", async () => {
   const calls = [];
   const cloudinaryClient = {

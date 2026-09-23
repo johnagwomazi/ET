@@ -10,7 +10,53 @@ const eventBannerDirectory = path.resolve(currentDirectory, "../../uploads/event
 const LOCAL_PUBLIC_ID_PREFIX = "local:event-banners/";
 const CLOUDINARY_FOLDER = "events/event-banners";
 
-async function uploadToCloudinary(file, cloudinaryClient) {
+function getCloudinaryUploadFailure(error) {
+  const message = String(error?.message || "");
+  const httpCode = Number(error?.http_code || error?.httpCode || 0) || null;
+  const errorCode = typeof error?.code === "string" ? error.code : null;
+
+  if (
+    httpCode === HTTP_STATUS.UNAUTHORIZED ||
+    /invalid cloud_name|unknown api key|invalid signature|authentication/i.test(message)
+  ) {
+    return {
+      clientMessage: "Image storage configuration is invalid",
+      statusCode: HTTP_STATUS.SERVICE_UNAVAILABLE,
+      logDetails: {
+        provider: "cloudinary",
+        reason: /invalid cloud_name/i.test(message) ? "invalid-cloud-name" : "authentication-failed",
+        httpCode,
+        errorCode,
+      },
+    };
+  }
+
+  if (httpCode === HTTP_STATUS.BAD_REQUEST) {
+    return {
+      clientMessage: "Image storage rejected the banner image",
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      logDetails: {
+        provider: "cloudinary",
+        reason: "image-rejected",
+        httpCode,
+        errorCode,
+      },
+    };
+  }
+
+  return {
+    clientMessage: "Image storage is temporarily unavailable",
+    statusCode: HTTP_STATUS.BAD_GATEWAY,
+    logDetails: {
+      provider: "cloudinary",
+      reason: "provider-unavailable",
+      httpCode,
+      errorCode,
+    },
+  };
+}
+
+async function uploadToCloudinary(file, cloudinaryClient, logger) {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinaryClient.uploader.upload_stream(
       {
@@ -20,7 +66,9 @@ async function uploadToCloudinary(file, cloudinaryClient) {
       },
       (error, result) => {
         if (error) {
-          reject(new AppError("Unable to upload the banner image", HTTP_STATUS.BAD_REQUEST));
+          const failure = getCloudinaryUploadFailure(error);
+          logger.error("[event-banner] Cloudinary upload failed", failure.logDetails);
+          reject(new AppError(failure.clientMessage, failure.statusCode));
           return;
         }
 
@@ -47,7 +95,7 @@ export async function storeEventBanner(file, options = {}) {
     : options.cloudinaryClient;
 
   if (cloudinaryClient) {
-    return uploadToCloudinary(file, cloudinaryClient);
+    return uploadToCloudinary(file, cloudinaryClient, options.logger || console);
   }
 
   throw new AppError("Banner image storage is not configured", HTTP_STATUS.SERVICE_UNAVAILABLE);
