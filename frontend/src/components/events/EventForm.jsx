@@ -20,6 +20,7 @@ import {
   getEventFormDefaultValues,
 } from "../../utils/eventFormUtils";
 import { formatDateTime } from "../../utils/formatters";
+import { getEventImageUrl } from "../../utils/eventImage";
 
 const fieldErrorToFieldMap = {
   "Event name is required": "eventName",
@@ -95,11 +96,12 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
 
   const bannerFiles = watch("bannerFile");
   const bannerFile = getEventBannerFile({ bannerFile: bannerFiles });
-  const [previewUrl, setPreviewUrl] = useState(initialEvent?.banner?.url || "");
+  const storedBannerUrl = getEventImageUrl(initialEvent);
+  const [previewUrl, setPreviewUrl] = useState(storedBannerUrl);
 
   useEffect(() => {
     if (!bannerFile) {
-      setPreviewUrl(initialEvent?.banner?.url || "");
+      setPreviewUrl(storedBannerUrl);
       return undefined;
     }
 
@@ -107,7 +109,7 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
     setPreviewUrl(objectUrl);
 
     return () => URL.revokeObjectURL(objectUrl);
-  }, [bannerFile, initialEvent?.banner?.url]);
+  }, [bannerFile, storedBannerUrl]);
 
   function navigateBack() {
     if (typeof onCancel === "function") {

@@ -9,10 +9,6 @@ function sendServiceError(res, errorResult) {
   );
 }
 
-function getRequestBaseUrl(req) {
-  return `${req.protocol}://${req.get("host")}`;
-}
-
 async function removeBannerQuietly(publicId) {
   if (!publicId) {
     return;
@@ -75,7 +71,7 @@ export async function createOrganizationEvent(req, res) {
 
   try {
     uploadedBanner = req.file
-      ? await eventBannerService.storeEventBanner(req.file, { baseUrl: getRequestBaseUrl(req) })
+      ? await eventBannerService.storeEventBanner(req.file)
       : null;
     const payload = uploadedBanner
       ? { ...req.body, banner: uploadedBanner }
@@ -119,9 +115,7 @@ export async function updateOrganizationEvent(req, res) {
       }
 
       previousBannerPublicId = currentResult.event?.banner?.publicId || null;
-      uploadedBanner = await eventBannerService.storeEventBanner(req.file, {
-        baseUrl: getRequestBaseUrl(req),
-      });
+      uploadedBanner = await eventBannerService.storeEventBanner(req.file);
     }
 
     const payload = uploadedBanner

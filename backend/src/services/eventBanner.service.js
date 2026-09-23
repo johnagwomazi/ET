@@ -1,9 +1,7 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { configureCloudinary } from "../config/cloudinary.config.js";
-import envConfig from "../config/env.config.js";
 import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
 import AppError from "../utils/appError.js";
 
@@ -11,15 +9,6 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const eventBannerDirectory = path.resolve(currentDirectory, "../../uploads/event-banners");
 const LOCAL_PUBLIC_ID_PREFIX = "local:event-banners/";
 const CLOUDINARY_FOLDER = "events/event-banners";
-const FILE_EXTENSION_BY_MIME_TYPE = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-};
-
-function normalizeBaseUrl(baseUrl) {
-  return typeof baseUrl === "string" ? baseUrl.replace(/\/$/, "") : "";
-}
 
 async function uploadToCloudinary(file, cloudinaryClient) {
   return new Promise((resolve, reject) => {
@@ -35,32 +24,17 @@ async function uploadToCloudinary(file, cloudinaryClient) {
           return;
         }
 
-        resolve({
-          url: result.secure_url,
-          publicId: result.public_id,
-        });
+        if (!result?.secure_url?.startsWith("https://") || !result?.public_id) {
+          reject(new AppError("Image storage returned an invalid banner URL", HTTP_STATUS.BAD_GATEWAY));
+          return;
+        }
+
+        resolve({ url: result.secure_url, publicId: result.public_id });
       }
     );
 
     uploadStream.end(file.buffer);
   });
-}
-
-async function uploadToLocalStorage(file, baseUrl) {
-  const extension = FILE_EXTENSION_BY_MIME_TYPE[file.mimetype];
-
-  if (!extension) {
-    throw new AppError("Unsupported banner image type", HTTP_STATUS.BAD_REQUEST);
-  }
-
-  const fileName = `${randomUUID()}${extension}`;
-  await mkdir(eventBannerDirectory, { recursive: true });
-  await writeFile(path.join(eventBannerDirectory, fileName), file.buffer, { flag: "wx" });
-
-  return {
-    url: `${normalizeBaseUrl(baseUrl)}/uploads/event-banners/${fileName}`,
-    publicId: `${LOCAL_PUBLIC_ID_PREFIX}${fileName}`,
-  };
 }
 
 export async function storeEventBanner(file, options = {}) {
@@ -76,13 +50,7 @@ export async function storeEventBanner(file, options = {}) {
     return uploadToCloudinary(file, cloudinaryClient);
   }
 
-  const nodeEnv = options.nodeEnv || envConfig.nodeEnv;
-
-  if (nodeEnv === "production") {
-    throw new AppError("Banner image storage is not configured", HTTP_STATUS.SERVICE_UNAVAILABLE);
-  }
-
-  return uploadToLocalStorage(file, options.baseUrl || "");
+  throw new AppError("Banner image storage is not configured", HTTP_STATUS.SERVICE_UNAVAILABLE);
 }
 
 function getLocalBannerPath(publicId) {

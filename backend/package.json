@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "migrate:event-banners": "node scripts/migrate-event-banners-to-cloudinary.js",
+    "migrate:event-banners:apply": "node scripts/migrate-event-banners-to-cloudinary.js --apply"
   },
   "keywords": [
     "events",

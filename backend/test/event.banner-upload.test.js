@@ -43,7 +43,7 @@ test("event banner upload stores Cloudinary URL and public id", async () => {
   assert.equal(uploadOptions.resource_type, "image");
 });
 
-test("event banner upload reports missing production storage configuration", async () => {
+test("event banner upload never falls back to local storage when Cloudinary is unavailable", async () => {
   await assert.rejects(
     storeEventBanner(
       {
@@ -52,12 +52,44 @@ test("event banner upload reports missing production storage configuration", asy
       },
       {
         cloudinaryClient: null,
-        nodeEnv: "production",
+        nodeEnv: "development",
       }
     ),
     (error) => {
       assert.equal(error.statusCode, 503);
       assert.equal(error.message, "Banner image storage is not configured");
+      return true;
+    }
+  );
+});
+
+test("event banner upload rejects a non-HTTPS storage result", async () => {
+  const cloudinaryClient = {
+    uploader: {
+      upload_stream(options, callback) {
+        return {
+          end() {
+            callback(null, {
+              secure_url: "http://res.cloudinary.com/example/event-banner.jpg",
+              public_id: "events/event-banners/banner_123",
+            });
+          },
+        };
+      },
+    },
+  };
+
+  await assert.rejects(
+    storeEventBanner(
+      {
+        buffer: Buffer.from("image-data"),
+        mimetype: "image/webp",
+      },
+      { cloudinaryClient }
+    ),
+    (error) => {
+      assert.equal(error.statusCode, 502);
+      assert.equal(error.message, "Image storage returned an invalid banner URL");
       return true;
     }
   );
