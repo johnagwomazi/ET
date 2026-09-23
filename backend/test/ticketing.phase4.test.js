@@ -489,9 +489,83 @@ test("checkout creates server-priced orders and reserves ticket inventory", asyn
   assert.equal(result.order.total, 5000);
   assert.equal(result.order.items[0].unitPrice, 2500);
   assert.equal(result.payment.authorizationUrl, "https://checkout.paystack.test");
+  assert.equal(result.payment.accessCode, "access_code");
+  assert.equal(state.order.metadata.accessCode, "access_code");
   assert.equal(initializationPayload.currency, "NGN");
   assert.equal(initializationPayload.callbackUrl, buildPaymentCallbackUrl());
   assert.equal(state.ticketType.soldQuantity, 4);
+});
+
+test("checkout reuses the same Paystack access code without initializing a duplicate transaction", async () => {
+  let initializationCalls = 0;
+  const { dependencies, state } = createDependencies({
+    paystackService: {
+      async initializeTransaction({ reference }) {
+        initializationCalls += 1;
+        return {
+          configured: true,
+          status: true,
+          data: {
+            authorization_url: "https://checkout.paystack.test",
+            access_code: "access_code_reused",
+            reference,
+          },
+        };
+      },
+    },
+  });
+  const payload = {
+    eventId: ids.event,
+    customerInfo: { name: "Ada Buyer", phone: "+2348012345678", email: "ada@example.com" },
+    items: [{ ticketTypeId: ids.ticketType, quantity: 1 }],
+    idempotencyKey: "checkout-inline-retry",
+  };
+
+  const firstResult = await ticketingService.createCheckoutOrder(ids.customer, payload, dependencies);
+  dependencies.orderRepository.findOrderByCustomerAndIdempotencyKey = async () => state.order;
+  const retryResult = await ticketingService.createCheckoutOrder(ids.customer, payload, dependencies);
+
+  assert.equal(firstResult.payment.reference, retryResult.payment.reference);
+  assert.equal(retryResult.payment.accessCode, "access_code_reused");
+  assert.equal(retryResult.payment.reused, true);
+  assert.equal(initializationCalls, 1);
+  assert.equal(state.ticketType.soldQuantity, 3);
+});
+
+test("checkout does not reopen Paystack for an already-paid idempotent order", async () => {
+  let initializationCalls = 0;
+  const { dependencies, state } = createDependencies({
+    paystackService: {
+      async initializeTransaction({ reference }) {
+        initializationCalls += 1;
+        return {
+          configured: true,
+          status: true,
+          data: {
+            authorization_url: "https://checkout.paystack.test",
+            access_code: "access_code_paid",
+            reference,
+          },
+        };
+      },
+    },
+  });
+  const payload = {
+    eventId: ids.event,
+    customerInfo: { name: "Ada Buyer", phone: "+2348012345678", email: "ada@example.com" },
+    items: [{ ticketTypeId: ids.ticketType, quantity: 1 }],
+    idempotencyKey: "checkout-already-paid",
+  };
+
+  await ticketingService.createCheckoutOrder(ids.customer, payload, dependencies);
+  state.order.paymentStatus = PAYMENT_STATUS.PAID;
+  dependencies.orderRepository.findOrderByCustomerAndIdempotencyKey = async () => state.order;
+  const retryResult = await ticketingService.createCheckoutOrder(ids.customer, payload, dependencies);
+
+  assert.equal(retryResult.payment.completed, true);
+  assert.equal(retryResult.payment.reused, true);
+  assert.equal(initializationCalls, 1);
+  assert.equal(state.ticketType.soldQuantity, 3);
 });
 
 test("checkout rejects unavailable inventory without trusting client totals", async () => {

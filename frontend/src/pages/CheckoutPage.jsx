@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { CreditCard, Ticket } from "lucide-react";
+import { CircleAlert, CreditCard, ShieldCheck, Ticket } from "lucide-react";
 import AuthCard from "../components/layout/AuthCard";
 import AuthHeader from "../components/layout/AuthHeader";
 import Button from "../components/ui/Button";
@@ -13,6 +13,10 @@ import { useSessionStore } from "../store/useSessionStore";
 import { formatMoney } from "../utils/formatters";
 import { loadCheckoutSelection, savePaymentReference } from "../utils/checkoutStorage";
 import * as ticketingService from "../services/ticketing.service";
+import {
+  openPaystackCheckout,
+  PAYSTACK_CHECKOUT_RESULT,
+} from "../services/paystackInline.service";
 
 function validateContact(contact) {
   const errors = {};
@@ -23,6 +27,15 @@ function validateContact(contact) {
 }
 
 function getCheckoutErrorMessage(error) {
+  if (error?.code === "PAYSTACK_INLINE_ERROR") {
+    return `${error.message} No charge was made. Please try again.`;
+  }
+  if (error?.code === "PAYSTACK_ACCESS_CODE_MISSING") {
+    return "Secure checkout could not be opened. No charge was made. Please try again.";
+  }
+  if (error?.code === "PAYSTACK_REFERENCE_MISMATCH") {
+    return "Payment could not be confirmed for this order. Please contact support before trying again.";
+  }
   if (error?.status === 409) return "These tickets are no longer available. Return to the event and update your selection.";
   if (error?.status === 429) return "Too many checkout attempts were made. Please wait a moment and try again.";
   if (error?.status === 502 || error?.status === 503) return "Payment could not be started right now. No charge was made.";
@@ -37,6 +50,7 @@ function CheckoutPage() {
   const [customerInfo, setCustomerInfo] = useState({ name: "", phone: "", email: "" });
   const [attendees, setAttendees] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [checkoutNotice, setCheckoutNotice] = useState(null);
   const [customerErrors, setCustomerErrors] = useState({});
   const [attendeeErrors, setAttendeeErrors] = useState([]);
 
@@ -77,6 +91,7 @@ function CheckoutPage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    setCheckoutNotice(null);
 
     if (!selection?.eventId || selection.items.length === 0) {
       toast.error("No tickets selected");
@@ -113,14 +128,35 @@ function CheckoutPage() {
       }
       savePaymentReference(paymentReference);
 
-      if (response?.payment?.authorizationUrl) {
-        window.location.assign(response.payment.authorizationUrl);
+      if (response?.payment?.free || response?.payment?.completed) {
+        navigate(`${ROUTE_PATHS.PAYMENT_CONFIRMATION}?reference=${encodeURIComponent(paymentReference)}`);
         return;
       }
 
+      const checkoutResult = await openPaystackCheckout(response?.payment?.accessCode);
+
+      if (checkoutResult.status === PAYSTACK_CHECKOUT_RESULT.CANCELLED) {
+        setCheckoutNotice({
+          tone: "warning",
+          message: "Payment was cancelled. Your ticket has not been issued, and you can try again when ready.",
+        });
+        toast("Payment cancelled");
+        return;
+      }
+
+      const providerReference = checkoutResult.response?.reference;
+      if (providerReference && providerReference !== paymentReference) {
+        const referenceError = new Error("Paystack returned an unexpected payment reference.");
+        referenceError.code = "PAYSTACK_REFERENCE_MISMATCH";
+        throw referenceError;
+      }
+
+      toast.success("Payment submitted. Verifying your order...");
       navigate(`${ROUTE_PATHS.PAYMENT_CONFIRMATION}?reference=${encodeURIComponent(paymentReference)}`);
     } catch (error) {
-      toast.error(getCheckoutErrorMessage(error));
+      const message = getCheckoutErrorMessage(error);
+      setCheckoutNotice({ tone: "error", message });
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -182,9 +218,33 @@ function CheckoutPage() {
             </div>
           </Card>
 
-          <Button type="submit" className="w-full" isLoading={isSubmitting} loadingText="Starting payment...">
+          <div className="flex items-start gap-3 rounded-2xl border border-app-400/20 bg-app-500/5 p-4">
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-app-300" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-semibold text-white">Secure popup checkout</p>
+              <p className="mt-1 text-sm leading-6 text-slate-400">
+                Paystack securely handles card, bank, and other available payment methods. We never collect your card details.
+              </p>
+            </div>
+          </div>
+
+          {checkoutNotice ? (
+            <div
+              role={checkoutNotice.tone === "error" ? "alert" : "status"}
+              className={`flex items-start gap-3 rounded-2xl border p-4 text-sm leading-6 ${
+                checkoutNotice.tone === "error"
+                  ? "border-rose-400/25 bg-rose-500/10 text-rose-100"
+                  : "border-amber-400/25 bg-amber-500/10 text-amber-100"
+              }`}
+            >
+              <CircleAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+              <span>{checkoutNotice.message}</span>
+            </div>
+          ) : null}
+
+          <Button type="submit" className="w-full" isLoading={isSubmitting} loadingText="Opening secure checkout...">
             <CreditCard className="h-4 w-4" />
-            Continue to payment
+            Pay securely with Paystack
           </Button>
         </form>
       </AuthCard>

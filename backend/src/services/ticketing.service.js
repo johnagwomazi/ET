@@ -303,13 +303,15 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
           payment: {
             reference: existingOrder.paymentReference,
             authorizationUrl: existingOrder.metadata?.authorizationUrl || null,
+            accessCode: existingOrder.metadata?.accessCode || null,
             free: Number(existingOrder.total || 0) === 0,
+            completed: true,
             reused: true,
           },
         };
       }
 
-      if (!existingOrder.metadata?.authorizationUrl) {
+      if (!existingOrder.metadata?.authorizationUrl || !existingOrder.metadata?.accessCode) {
         return {
           error: "The previous checkout could not be initialized. Please start a new checkout.",
           statusCode: HTTP_STATUS.CONFLICT,
@@ -321,6 +323,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
         payment: {
           reference: existingOrder.paymentReference,
           authorizationUrl: existingOrder.metadata?.authorizationUrl || null,
+          accessCode: existingOrder.metadata?.accessCode || null,
           reused: true,
         },
       };
@@ -474,7 +477,8 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
     });
 
     const authorizationUrl = payment?.data?.authorization_url || null;
-    if (!payment?.status || !authorizationUrl) {
+    const accessCode = payment?.data?.access_code || null;
+    if (!payment?.status || !authorizationUrl || !accessCode) {
       const failedOrder = await dependencies.orderRepository.updateOrderByPaymentReferenceAndStatus(
         paymentReference,
         [PAYMENT_STATUS.PENDING, PAYMENT_STATUS.INITIALIZED],
@@ -502,6 +506,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
         ...result.order.metadata,
         paystackConfigured: Boolean(payment?.configured),
         authorizationUrl,
+        accessCode,
       },
     });
     providerInitialized = true;
@@ -511,7 +516,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
       payment: {
         reference: paymentReference,
         authorizationUrl,
-        accessCode: payment?.data?.access_code || null,
+        accessCode,
         providerConfigured: Boolean(payment?.configured),
       },
     };
