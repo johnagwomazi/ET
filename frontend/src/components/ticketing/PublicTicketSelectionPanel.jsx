@@ -8,6 +8,7 @@ import EmptyState from "../common/EmptyState";
 import ErrorState from "../common/ErrorState";
 import { Skeleton } from "../common/Skeleton";
 import { ROUTE_PATHS } from "../../routes/routePaths";
+import { MARKETPLACE_BUYER_ROLES } from "../../constants/roles.constants";
 import { useSessionStore } from "../../store/useSessionStore";
 import { formatDateTime, formatMoney } from "../../utils/formatters";
 import { saveCheckoutSelection } from "../../utils/checkoutStorage";
@@ -90,13 +91,13 @@ function PublicTicketSelectionPanel({ event }) {
     });
 
     if (!isAuthenticated) {
-      toast.error("Log in as a customer to buy tickets");
+      toast.error("Log in to buy tickets");
       navigate(ROUTE_PATHS.LOGIN, { state: { from: ROUTE_PATHS.CHECKOUT } });
       return;
     }
 
-    if (currentUser?.role !== "CUSTOMER") {
-      toast.error("Only customer accounts can buy tickets");
+    if (!MARKETPLACE_BUYER_ROLES.includes(currentUser?.role)) {
+      toast.error("This account cannot buy tickets");
       return;
     }
 

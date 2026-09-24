@@ -17,6 +17,7 @@ import {
 import { EVENT_STATUS } from "../src/constants/eventStatus.constants.js";
 import { USER_ROLES } from "../src/constants/roles.constants.js";
 import * as ticketingService from "../src/services/ticketing.service.js";
+import ticketingRoutes from "../src/routes/ticketing.routes.js";
 import { buildPaymentCallbackUrl } from "../src/utils/payment.util.js";
 import {
   getEffectiveTicketTypeStatus,
@@ -33,6 +34,36 @@ const ids = {
   order: "64b64b64b64b64b64b64b647",
   ticket: "64b64b64b64b64b64b64b648",
 };
+
+function getMarketplaceRoleMiddleware(path, method) {
+  const routeLayer = ticketingRoutes.stack.find(
+    (layer) => layer.route?.path === path && layer.route.methods?.[method]
+  );
+  return routeLayer?.route?.stack.find(
+    (layer) => layer.handle?.name === "authorizeRolesMiddleware"
+  )?.handle;
+}
+
+function runRoleMiddleware(middleware, role) {
+  let nextCalled = false;
+  let statusCode = null;
+  middleware(
+    { user: { role } },
+    {
+      status(code) {
+        statusCode = code;
+        return this;
+      },
+      json() {
+        return this;
+      },
+    },
+    () => {
+      nextCalled = true;
+    }
+  );
+  return { nextCalled, statusCode };
+}
 
 function createDependencies(overrides = {}) {
   const organization = {
@@ -463,6 +494,25 @@ test("ticketing validators enforce ticket, checkout, refund, withdrawal, and val
   assert.equal(ticketValidationSchema.safeParse({ reference: "tkt_123", token: "a".repeat(32) }).success, false);
   assert.equal(ticketTypeCreateSchema.safeParse({ name: "USD", price: 1000, quantity: 20, currency: "USD" }).success, false);
   assert.equal(refundCreateSchema.safeParse({ reason: "Event canceled" }).success, true);
+});
+
+test("marketplace routes allow customers and organization admins but reject unrelated roles", () => {
+  const routes = [
+    ["/checkout", "post"],
+    ["/payments/verify", "post"],
+    ["/orders", "get"],
+    ["/tickets", "get"],
+    ["/history", "get"],
+  ];
+
+  for (const [path, method] of routes) {
+    const middleware = getMarketplaceRoleMiddleware(path, method);
+    assert.equal(typeof middleware, "function");
+    assert.equal(runRoleMiddleware(middleware, USER_ROLES.CUSTOMER).nextCalled, true);
+    assert.equal(runRoleMiddleware(middleware, USER_ROLES.ADMIN).nextCalled, true);
+    assert.equal(runRoleMiddleware(middleware, USER_ROLES.MANAGER).statusCode, 403);
+    assert.equal(runRoleMiddleware(middleware, USER_ROLES.SUPER_ADMIN).statusCode, 403);
+  }
 });
 
 test("ticket sales status follows event lifecycle and the current sales period without persistence", () => {

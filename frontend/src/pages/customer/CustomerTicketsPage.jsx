@@ -132,7 +132,7 @@ function CustomerTicketsPage() {
       <PageContainer className="space-y-5 sm:space-y-8">
         <header className="flex flex-col gap-4 border-b border-slate-800 pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase text-app-300">Customer account</p>
+            <p className="text-xs font-semibold uppercase text-app-300">Marketplace account</p>
             <h1 className="text-xl font-semibold text-white sm:text-3xl">My Tickets</h1>
             <p className="max-w-2xl text-sm leading-6 text-slate-400">Access every ticket issued to your account and distinguish usable tickets from past activity.</p>
           </div>

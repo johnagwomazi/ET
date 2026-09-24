@@ -12,7 +12,7 @@ import PermissionRoute from "./guards/PermissionRoute";
 import { ROUTE_PATHS } from "./routePaths";
 import HomePage from "../pages/HomePage";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants";
-import { USER_ROLES } from "../constants/roles.constants";
+import { MARKETPLACE_BUYER_ROLES, USER_ROLES } from "../constants/roles.constants";
 import { Navigate } from "react-router-dom";
 import RouteLoadingState from "../components/common/RouteLoadingState";
 
@@ -69,7 +69,7 @@ const router = createBrowserRouter([
     element: <ProtectedRoute />,
     children: [
       {
-        element: <RoleRoute allowedRoles={[USER_ROLES.CUSTOMER]} />,
+        element: <RoleRoute allowedRoles={MARKETPLACE_BUYER_ROLES} />,
         children: [
           {
             element: <PublicLayout />,
@@ -83,10 +83,6 @@ const router = createBrowserRouter([
                 element: <PaymentConfirmationPage />,
               },
               {
-                path: ROUTE_PATHS.CUSTOMER_PROFILE,
-                element: <CustomerProfilePage />,
-              },
-              {
                 path: ROUTE_PATHS.CUSTOMER_TICKETS,
                 element: <CustomerTicketsPage />,
               },
@@ -95,16 +91,30 @@ const router = createBrowserRouter([
                 element: <CustomerHistoryPage />,
               },
               {
+                path: ROUTE_PATHS.CUSTOMER_ORDERS,
+                element: <Navigate to={ROUTE_PATHS.CUSTOMER_HISTORY} replace />,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        element: <RoleRoute allowedRoles={[USER_ROLES.CUSTOMER]} />,
+        children: [
+          {
+            element: <PublicLayout />,
+            children: [
+              {
+                path: ROUTE_PATHS.CUSTOMER_PROFILE,
+                element: <CustomerProfilePage />,
+              },
+              {
                 path: ROUTE_PATHS.CUSTOMER_NOTIFICATIONS,
                 element: <NotificationHistoryPage />,
               },
               {
                 path: ROUTE_PATHS.CUSTOMER_DASHBOARD,
                 element: <Navigate to={ROUTE_PATHS.CUSTOMER_PROFILE} replace />,
-              },
-              {
-                path: ROUTE_PATHS.CUSTOMER_ORDERS,
-                element: <Navigate to={ROUTE_PATHS.CUSTOMER_HISTORY} replace />,
               },
             ],
           },

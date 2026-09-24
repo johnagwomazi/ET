@@ -134,7 +134,7 @@ function OrganizationLayout() {
       />
 
       <div className="min-h-screen lg:pl-72 md:pl-20">
-        <DashboardTopBar title={pageTitle} user={currentUser} />
+        <DashboardTopBar title={pageTitle} user={currentUser} marketplaceRoute={ROUTE_PATHS.HOME} />
 
         <main className={classNames("min-w-0 px-3 pb-24 pt-4 sm:px-6 sm:pb-28 sm:pt-6 lg:px-8")}>
           <div className="mx-auto flex min-w-0 w-full max-w-7xl flex-col gap-4 sm:gap-6">

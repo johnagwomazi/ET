@@ -17,12 +17,13 @@ const ticketingRouter = express.Router();
 const paymentLimiter = createRateLimiter({ max: envConfig.paymentMutationRateLimitMax });
 
 ticketingRouter.use(protectRoute);
-ticketingRouter.use(authorizeRoles(USER_ROLES.CUSTOMER));
 
-ticketingRouter.get("/history", validate(customerHistoryQuerySchema, "query"), ticketingController.getCustomerHistory);
-ticketingRouter.post("/checkout", paymentLimiter, validate(checkoutSchema), ticketingController.createCheckoutOrder);
-ticketingRouter.post("/payments/verify", paymentLimiter, validate(paymentVerifySchema), ticketingController.verifyPayment);
-ticketingRouter.get("/orders", validate(listQuerySchema, "query"), ticketingController.getCustomerOrders);
-ticketingRouter.get("/tickets", validate(listQuerySchema, "query"), ticketingController.getCustomerTickets);
+const authorizeMarketplaceBuyer = authorizeRoles(USER_ROLES.CUSTOMER, USER_ROLES.ADMIN);
+
+ticketingRouter.get("/history", authorizeMarketplaceBuyer, validate(customerHistoryQuerySchema, "query"), ticketingController.getCustomerHistory);
+ticketingRouter.post("/checkout", authorizeMarketplaceBuyer, paymentLimiter, validate(checkoutSchema), ticketingController.createCheckoutOrder);
+ticketingRouter.post("/payments/verify", authorizeMarketplaceBuyer, paymentLimiter, validate(paymentVerifySchema), ticketingController.verifyPayment);
+ticketingRouter.get("/orders", authorizeMarketplaceBuyer, validate(listQuerySchema, "query"), ticketingController.getCustomerOrders);
+ticketingRouter.get("/tickets", authorizeMarketplaceBuyer, validate(listQuerySchema, "query"), ticketingController.getCustomerTickets);
 
 export default ticketingRouter;

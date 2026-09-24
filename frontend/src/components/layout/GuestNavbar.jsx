@@ -18,7 +18,7 @@ import PageContainer from "../ui/PageContainer";
 import Avatar from "../dashboard/Avatar";
 import NotificationBell from "../notifications/NotificationBell";
 import { ROUTE_PATHS } from "../../routes/routePaths";
-import { USER_ROLES } from "../../constants/roles.constants";
+import { MARKETPLACE_BUYER_ROLES, USER_ROLES } from "../../constants/roles.constants";
 import { useSessionStore } from "../../store/useSessionStore";
 import { getDashboardRouteForRole } from "../../utils/auth";
 import { useClickOutside } from "../../hooks/useClickOutside";
@@ -44,6 +44,7 @@ function GuestNavbar() {
 
   const hasSession = isAuthenticated && Boolean(currentUser);
   const isCustomer = currentUser?.role === USER_ROLES.CUSTOMER;
+  const canUseBuyerFeatures = MARKETPLACE_BUYER_ROLES.includes(currentUser?.role);
   const dashboardRoute = getDashboardRouteForRole(currentUser?.role);
   const profileRoute = ROUTE_PATHS.CUSTOMER_PROFILE;
   const customerName = `${currentUser?.firstName || ""} ${currentUser?.lastName || ""}`.trim();
@@ -159,15 +160,18 @@ function GuestNavbar() {
 
                     <div className="grid gap-1 py-2">
                       {isCustomer ? (
+                        <Link
+                          to={profileRoute}
+                          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                          role="menuitem"
+                        >
+                          <UserRound className="h-4 w-4" />
+                          My Profile
+                        </Link>
+                      ) : null}
+
+                      {canUseBuyerFeatures ? (
                         <>
-                          <Link
-                            to={profileRoute}
-                            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
-                            role="menuitem"
-                          >
-                            <UserRound className="h-4 w-4" />
-                            My Profile
-                          </Link>
                           <Link
                             to={ROUTE_PATHS.CUSTOMER_TICKETS}
                             className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
@@ -264,12 +268,14 @@ function GuestNavbar() {
                 </Button>
               ))}
 
-              {hasSession && isCustomer ? (
+              {hasSession && canUseBuyerFeatures ? (
                 <>
-                  <Button as={Link} to={profileRoute} variant="ghost" size="sm" className="justify-start" onClick={() => setIsMenuOpen(false)}>
-                    <UserRound className="h-4 w-4" />
-                    My Profile
-                  </Button>
+                  {isCustomer ? (
+                    <Button as={Link} to={profileRoute} variant="ghost" size="sm" className="justify-start" onClick={() => setIsMenuOpen(false)}>
+                      <UserRound className="h-4 w-4" />
+                      My Profile
+                    </Button>
+                  ) : null}
                   <Button as={Link} to={ROUTE_PATHS.CUSTOMER_TICKETS} variant="ghost" size="sm" className="justify-start" onClick={() => setIsMenuOpen(false)}>
                     <Ticket className="h-4 w-4" />
                     My Tickets

@@ -5,6 +5,11 @@ export const USER_ROLES = {
   CUSTOMER: "CUSTOMER",
 };
 
+export const MARKETPLACE_BUYER_ROLES = [
+  USER_ROLES.CUSTOMER,
+  USER_ROLES.ADMIN,
+];
+
 export const DASHBOARD_ROUTES = {
   SUPER_ADMIN: "/super-admin/dashboard",
   ADMIN: "/organization/dashboard",
