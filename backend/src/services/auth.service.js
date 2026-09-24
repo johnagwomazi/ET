@@ -31,20 +31,29 @@ function validatePasswordPolicy(password) {
   return null;
 }
 
-function generateTokenPair(user) {
-  const payload = {
+function buildAuthTokenPayload(user) {
+  return {
     sub: user._id.toString(),
     role: user.role,
     organizationId: user.organization ? user.organization.toString() : null,
   };
+}
 
-  const accessToken = jwt.sign(payload, envConfig.jwtAccessSecret, {
+function generateAccessToken(user) {
+  return jwt.sign(buildAuthTokenPayload(user), envConfig.jwtAccessSecret, {
     expiresIn: envConfig.jwtAccessExpiresIn || AUTH_TOKEN_EXPIRES_IN.ACCESS_TOKEN,
   });
+}
 
-  const refreshToken = jwt.sign(payload, envConfig.jwtRefreshSecret, {
+function generateRefreshToken(user) {
+  return jwt.sign(buildAuthTokenPayload(user), envConfig.jwtRefreshSecret, {
     expiresIn: envConfig.jwtRefreshExpiresIn || AUTH_TOKEN_EXPIRES_IN.REFRESH_TOKEN,
   });
+}
+
+function generateTokenPair(user) {
+  const accessToken = generateAccessToken(user);
+  const refreshToken = generateRefreshToken(user);
 
   return {
     accessToken,
@@ -99,6 +108,11 @@ function ensureUserCanAuthenticate(user) {
   }
 
   return null;
+}
+
+function tokenPredatesPasswordChange(user, decodedToken) {
+  if (!user?.passwordChangedAt || !decodedToken?.iat) return false;
+  return Math.floor(new Date(user.passwordChangedAt).getTime() / 1000) > decodedToken.iat;
 }
 
 async function attachVerificationToken(userId) {
@@ -295,6 +309,40 @@ export async function loginSuperAdmin(payload) {
   return authenticateUser(payload, {
     allowedRoles: [USER_ROLES.SUPER_ADMIN],
   });
+}
+
+export async function refreshUserSession(refreshToken, dependencies = {}) {
+  const repositories = {
+    authRepository,
+    ...dependencies,
+  };
+
+  if (!refreshToken) {
+    return { error: "Session expired" };
+  }
+
+  let decodedToken;
+
+  try {
+    decodedToken = jwt.verify(refreshToken, envConfig.jwtRefreshSecret);
+  } catch (error) {
+    return { error: "Session expired" };
+  }
+
+  const user = await repositories.authRepository.findAuthUserByIdWithSecrets(decodedToken.sub);
+
+  if (
+    ensureUserCanAuthenticate(user) ||
+    tokenPredatesPasswordChange(user, decodedToken) ||
+    !user.refreshTokenHash ||
+    user.refreshTokenHash !== hashToken(refreshToken)
+  ) {
+    return { error: "Session expired" };
+  }
+
+  return {
+    accessToken: generateAccessToken(user),
+  };
 }
 
 export async function getCurrentUser(userId) {

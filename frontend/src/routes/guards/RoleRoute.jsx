@@ -8,12 +8,13 @@ function RoleRoute({ allowedRoles = [], children, loginPath = ROUTE_PATHS.LOGIN 
   const currentUser = useSessionStore((state) => state.currentUser);
   const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
   const isInitializing = useSessionStore((state) => state.isInitializing);
+  const requiresReauthentication = useSessionStore((state) => state.requiresReauthentication);
 
   if (isInitializing) {
     return <LoadingState label="Checking permissions..." />;
   }
 
-  if (!isAuthenticated || !currentUser) {
+  if ((!isAuthenticated && !requiresReauthentication) || !currentUser) {
     return (
       <Navigate
         to={loginPath}

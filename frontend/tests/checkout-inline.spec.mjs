@@ -23,7 +23,6 @@ async function prepareCheckout(page, outcome) {
   const requests = [];
 
   await page.addInitScript(({ selection, popupOutcome }) => {
-    window.localStorage.setItem("events_access_token", "browser-test-token");
     window.sessionStorage.setItem("events_checkout_selection", JSON.stringify(selection));
     window.__PAYSTACK_TEST_OUTCOME__ = popupOutcome;
   }, { selection: checkoutSelection, popupOutcome: outcome });

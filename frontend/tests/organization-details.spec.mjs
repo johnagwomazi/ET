@@ -61,7 +61,6 @@ async function installMocks(page) {
   const requests = [];
   let status = "APPROVED";
 
-  await page.addInitScript(() => window.localStorage.setItem("events_access_token", "super-admin-test-token"));
   await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
     const request = route.request();
     const url = new URL(request.url());

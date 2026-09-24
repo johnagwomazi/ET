@@ -4,9 +4,7 @@ import { AUTH_COOKIE_NAMES } from "../constants/auth.constants.js";
 import { ACCOUNT_STATUS } from "../constants/accountStatus.constants.js";
 import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
 import { errorResponse } from "../utils/apiResponse.js";
-import { hashToken } from "../utils/token.util.js";
-import { findAuthUserById, findAuthUserByIdWithSecrets } from "../repositories/auth.repository.js";
-import { setAccessTokenCookie } from "../utils/authCookie.util.js";
+import { findAuthUserById } from "../repositories/auth.repository.js";
 
 function getAccessToken(req) {
   const cookieToken = req.cookies?.[AUTH_COOKIE_NAMES.ACCESS_TOKEN];
@@ -19,24 +17,6 @@ function getAccessToken(req) {
   }
 
   return null;
-}
-
-function getRefreshToken(req) {
-  return req.cookies?.[AUTH_COOKIE_NAMES.REFRESH_TOKEN] || null;
-}
-
-function generateAccessToken(user) {
-  return jwt.sign(
-    {
-      sub: user._id.toString(),
-      role: user.role,
-      organizationId: getDocumentId(user.organization),
-    },
-    envConfig.jwtAccessSecret,
-    {
-      expiresIn: envConfig.jwtAccessExpiresIn || "15m",
-    }
-  );
 }
 
 function canAuthenticateUser(user) {
@@ -102,42 +82,11 @@ export async function protectRoute(req, res, next) {
 
         return next();
       } catch (error) {
-        // Fall through to refresh-token recovery below.
+        return res.status(HTTP_STATUS.UNAUTHORIZED).json(errorResponse("Not authorized"));
       }
     }
 
-    const refreshToken = getRefreshToken(req);
-
-    if (!refreshToken) {
-      return res.status(HTTP_STATUS.UNAUTHORIZED).json(errorResponse("Not authorized"));
-    }
-
-    const decodedRefreshToken = jwt.verify(refreshToken, envConfig.jwtRefreshSecret);
-    const user = await findAuthUserByIdWithSecrets(decodedRefreshToken.sub);
-
-    if (!canAuthenticateUser(user)) {
-      return res.status(HTTP_STATUS.UNAUTHORIZED).json(errorResponse("Not authorized"));
-    }
-
-    if (tokenPredatesPasswordChange(user, decodedRefreshToken)) {
-      return res.status(HTTP_STATUS.UNAUTHORIZED).json(errorResponse("Not authorized"));
-    }
-
-    if (!user.refreshTokenHash || user.refreshTokenHash !== hashToken(refreshToken)) {
-      return res.status(HTTP_STATUS.UNAUTHORIZED).json(errorResponse("Not authorized"));
-    }
-
-    const renewedAccessToken = generateAccessToken(user);
-    setAccessTokenCookie(res, renewedAccessToken);
-
-    req.user = user;
-    req.auth = {
-      userId: user._id.toString(),
-      role: user.role,
-      organizationId: getDocumentId(user.organization),
-    };
-
-    return next();
+    return res.status(HTTP_STATUS.UNAUTHORIZED).json(errorResponse("Not authorized"));
   } catch (error) {
     return res.status(HTTP_STATUS.UNAUTHORIZED).json(errorResponse("Not authorized"));
   }

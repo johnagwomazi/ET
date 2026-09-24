@@ -7,12 +7,13 @@ function ProtectedRoute({ loginPath = ROUTE_PATHS.LOGIN }) {
   const location = useLocation();
   const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
   const isInitializing = useSessionStore((state) => state.isInitializing);
+  const requiresReauthentication = useSessionStore((state) => state.requiresReauthentication);
 
   if (isInitializing) {
     return <LoadingState label="Preparing your session..." />;
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !requiresReauthentication) {
     return (
       <Navigate
         to={loginPath}

@@ -1,7 +1,8 @@
 import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
+import { AUTH_COOKIE_NAMES } from "../constants/auth.constants.js";
 import * as authService from "../services/auth.service.js";
 import { errorResponse, successResponse } from "../utils/apiResponse.js";
-import { clearAuthCookies, setAuthCookies } from "../utils/authCookie.util.js";
+import { clearAuthCookies, setAccessTokenCookie, setAuthCookies } from "../utils/authCookie.util.js";
 
 export async function registerCustomer(req, res) {
   try {
@@ -61,7 +62,6 @@ export async function login(req, res) {
     return res.status(HTTP_STATUS.OK).json(
       successResponse("Operation successful", {
         user: result.user,
-        accessToken: result.accessToken,
       })
     );
   } catch (error) {
@@ -69,6 +69,26 @@ export async function login(req, res) {
     console.log("error in auth controller");
 
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
+  }
+}
+
+export async function refresh(req, res) {
+  try {
+    const refreshToken = req.cookies?.[AUTH_COOKIE_NAMES.REFRESH_TOKEN] || null;
+    const result = await authService.refreshUserSession(refreshToken);
+
+    if (result.error) {
+      clearAuthCookies(res);
+      return res.status(HTTP_STATUS.UNAUTHORIZED).json(errorResponse(result.error));
+    }
+
+    setAccessTokenCookie(res, result.accessToken);
+    return res.status(HTTP_STATUS.OK).json(successResponse("Session renewed", {}));
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(HTTP_STATUS.SERVICE_UNAVAILABLE)
+      .json(errorResponse("Session renewal is temporarily unavailable"));
   }
 }
 

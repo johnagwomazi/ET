@@ -21,6 +21,7 @@ const recoveryLimiter = createRateLimiter({ max: Math.max(3, Math.floor(envConfi
 authRouter.post("/register/customer", authLimiter, validate(customerRegisterSchema), authController.registerCustomer);
 authRouter.post("/register/organizer", authLimiter, validate(organizerRegisterSchema), authController.registerOrganizer);
 authRouter.post("/login", authLimiter, validate(loginSchema), authController.login);
+authRouter.post("/refresh", authLimiter, authController.refresh);
 authRouter.post("/verify-email", validate(verifyEmailSchema), authController.verifyEmail);
 authRouter.post("/forgot-password", recoveryLimiter, validate(forgotPasswordSchema), authController.forgotPassword);
 authRouter.post("/reset-password", recoveryLimiter, validate(resetPasswordSchema), authController.resetPassword);

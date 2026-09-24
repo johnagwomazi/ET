@@ -1,16 +1,18 @@
 import { create } from "zustand";
 import * as authService from "../services/auth.service";
-import { clearStoredAccessToken, storeAccessToken } from "../utils/authToken";
+import { setSessionExpiredHandler } from "../api/httpClient";
 import { useNotificationStore } from "./useNotificationStore";
 
 let initializeSessionPromise = null;
 let refreshCurrentUserPromise = null;
+const LEGACY_ACCESS_TOKEN_STORAGE_KEY = "events_access_token";
 
 const initialState = {
   currentUser: null,
   isAuthenticated: false,
   isLoading: false,
   isInitializing: true,
+  requiresReauthentication: false,
 };
 
 function getAuthErrorMessage(error) {
@@ -32,6 +34,14 @@ function normalizeSessionUser(user, organizationPermissions = []) {
   };
 }
 
+function clearLegacyAccessToken() {
+  try {
+    window.localStorage.removeItem(LEGACY_ACCESS_TOKEN_STORAGE_KEY);
+  } catch (error) {
+    // Cookie-based authentication still works when browser storage is unavailable.
+  }
+}
+
 export const useSessionStore = create((set, get) => ({
   ...initialState,
 
@@ -41,6 +51,7 @@ export const useSessionStore = create((set, get) => ({
       isAuthenticated: Boolean(user),
       isLoading: false,
       isInitializing: false,
+      requiresReauthentication: false,
     });
   },
 
@@ -53,6 +64,7 @@ export const useSessionStore = create((set, get) => ({
   },
 
   async initializeSession() {
+    clearLegacyAccessToken();
     const { currentUser } = get();
 
     if (currentUser) {
@@ -86,7 +98,6 @@ export const useSessionStore = create((set, get) => ({
       const { currentUser: latestCurrentUser, isAuthenticated } = get();
 
       if (!latestCurrentUser && !isAuthenticated) {
-        clearStoredAccessToken();
         useNotificationStore.getState().reset();
         set({
           ...initialState,
@@ -109,8 +120,7 @@ export const useSessionStore = create((set, get) => ({
     set({ isLoading: true });
 
     try {
-      const response = await authService.login(credentials);
-      storeAccessToken(response?.accessToken);
+      await authService.login(credentials);
 
       const currentUserResponse = await authService.getCurrentUser();
       const user = currentUserResponse?.user || null;
@@ -122,11 +132,11 @@ export const useSessionStore = create((set, get) => ({
         isAuthenticated: Boolean(user),
         isLoading: false,
         isInitializing: false,
+        requiresReauthentication: false,
       });
 
       return user;
     } catch (error) {
-      clearStoredAccessToken();
       set({ isLoading: false, isInitializing: false });
       throw new Error(getAuthErrorMessage(error));
     }
@@ -136,8 +146,7 @@ export const useSessionStore = create((set, get) => ({
     set({ isLoading: true });
 
     try {
-      const response = await authService.adminLogin(credentials);
-      storeAccessToken(response?.accessToken);
+      await authService.adminLogin(credentials);
 
       const currentUserResponse = await authService.getCurrentUser();
       const user = currentUserResponse?.user || null;
@@ -149,11 +158,11 @@ export const useSessionStore = create((set, get) => ({
         isAuthenticated: Boolean(user),
         isLoading: false,
         isInitializing: false,
+        requiresReauthentication: false,
       });
 
       return user;
     } catch (error) {
-      clearStoredAccessToken();
       set({ isLoading: false, isInitializing: false });
       throw new Error(getAuthErrorMessage(error));
     }
@@ -167,12 +176,73 @@ export const useSessionStore = create((set, get) => ({
     } catch (error) {
       // Local session state must still be cleared when the server is unreachable.
     } finally {
-      clearStoredAccessToken();
       useNotificationStore.getState().reset();
       set({
         ...initialState,
         isInitializing: false,
       });
+    }
+  },
+
+  markSessionExpired() {
+    const { currentUser, requiresReauthentication } = get();
+
+    if (!currentUser) {
+      useNotificationStore.getState().reset();
+      set({
+        ...initialState,
+        isInitializing: false,
+      });
+      return;
+    }
+
+    if (requiresReauthentication) return;
+
+    useNotificationStore.getState().reset();
+    set({
+      isAuthenticated: false,
+      isLoading: false,
+      isInitializing: false,
+      requiresReauthentication: true,
+    });
+  },
+
+  async reauthenticate(credentials) {
+    const existingUser = get().currentUser;
+    set({ isLoading: true });
+
+    try {
+      if (existingUser?.role === "SUPER_ADMIN") {
+        await authService.adminLogin(credentials);
+      } else {
+        await authService.login(credentials);
+      }
+
+      const currentUserResponse = await authService.getCurrentUser();
+      const user = currentUserResponse?.user || null;
+      const organizationPermissions =
+        currentUserResponse?.organizationPermissions || user?.organizationPermissions || [];
+
+      const existingUserId = existingUser?.id || existingUser?._id;
+      const userId = user?.id || user?._id;
+
+      if (existingUserId && userId && String(existingUserId) !== String(userId)) {
+        await authService.logout().catch(() => {});
+        throw new Error("Sign in with the same account to continue.");
+      }
+
+      set({
+        currentUser: normalizeSessionUser(user, organizationPermissions),
+        isAuthenticated: Boolean(user),
+        isLoading: false,
+        isInitializing: false,
+        requiresReauthentication: false,
+      });
+
+      return user;
+    } catch (error) {
+      set({ isLoading: false });
+      throw new Error(getAuthErrorMessage(error));
     }
   },
 
@@ -193,6 +263,7 @@ export const useSessionStore = create((set, get) => ({
         isAuthenticated: Boolean(user),
         isLoading: false,
         isInitializing: false,
+        requiresReauthentication: false,
       });
 
       return normalizeSessionUser(user, organizationPermissions);
@@ -228,3 +299,7 @@ function currentUserRefreshInProgress() {
 }
 
 export const useAuthStore = useSessionStore;
+
+setSessionExpiredHandler(() => {
+  useSessionStore.getState().markSessionExpired();
+});

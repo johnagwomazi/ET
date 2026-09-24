@@ -16,12 +16,12 @@ export async function registerOrganizer(payload) {
 }
 
 export async function login(payload) {
-  const response = await post("/auth/login", payload);
+  const response = await post("/auth/login", payload, { skipAuthRefresh: true });
   return extractData(response);
 }
 
 export async function adminLogin(payload) {
-  const response = await post("/admin/login", payload);
+  const response = await post("/admin/login", payload, { skipAuthRefresh: true });
   return extractData(response);
 }
 
@@ -31,7 +31,7 @@ export async function getCurrentUser() {
 }
 
 export async function logout() {
-  const response = await post("/auth/logout", {});
+  const response = await post("/auth/logout", {}, { notifyOnAuthFailure: false });
   return extractData(response);
 }
 

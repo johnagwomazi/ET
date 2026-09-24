@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useSessionStore } from "./store/useSessionStore";
 import { useOrganizationContextStore } from "./store/useOrganizationContextStore";
 import AppErrorBoundary from "./components/common/AppErrorBoundary";
+import SessionExpiredDialog from "./components/auth/SessionExpiredDialog";
 
 function App() {
   const initializeSession = useSessionStore((state) => state.initializeSession);
@@ -20,6 +21,7 @@ function App() {
   return (
     <AppErrorBoundary>
       <AppRouter />
+      <SessionExpiredDialog />
     </AppErrorBoundary>
   );
 }

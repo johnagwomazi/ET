@@ -24,6 +24,7 @@ function OrganizationRoute() {
   const currentUser = useSessionStore((state) => state.currentUser);
   const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
   const isInitializing = useSessionStore((state) => state.isInitializing);
+  const requiresReauthentication = useSessionStore((state) => state.requiresReauthentication);
   const organization = useOrganizationContextStore((state) => state.organization);
   const lifecycleStatus = useOrganizationContextStore((state) => state.lifecycleStatus);
   const isOrgInitialized = useOrganizationContextStore((state) => state.isInitialized);
@@ -33,7 +34,7 @@ function OrganizationRoute() {
     return <LoadingState label="Loading organization context..." />;
   }
 
-  if (!isAuthenticated || !currentUser) {
+  if ((!isAuthenticated && !requiresReauthentication) || !currentUser) {
     return (
       <Navigate
         to={ROUTE_PATHS.LOGIN}

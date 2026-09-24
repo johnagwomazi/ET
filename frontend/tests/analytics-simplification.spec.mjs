@@ -70,7 +70,6 @@ const ticketTypes = [
 
 async function installMocks(page) {
   const requests = [];
-  await page.addInitScript(() => localStorage.setItem("events_access_token", "analytics-admin-token"));
   await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace("/api", "");

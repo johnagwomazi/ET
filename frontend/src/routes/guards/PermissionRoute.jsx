@@ -8,13 +8,14 @@ function PermissionRoute({ permission, permissions = [], children }) {
   const location = useLocation();
   const isAuthenticated = useSessionStore((state) => state.isAuthenticated);
   const isInitializing = useSessionStore((state) => state.isInitializing);
+  const requiresReauthentication = useSessionStore((state) => state.requiresReauthentication);
   const { isInitialized, isLoading, hasPermission, hasAnyPermission } = useOrganizationPermissions();
 
-  if (isInitializing || (isAuthenticated && !isInitialized) || isLoading) {
+  if (isInitializing || ((isAuthenticated || requiresReauthentication) && !isInitialized) || isLoading) {
     return <LoadingState label="Checking permissions..." />;
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !requiresReauthentication) {
     return (
       <Navigate
         to={ROUTE_PATHS.LOGIN}
