@@ -1,5 +1,5 @@
-import { ORGANIZATION_STATUS } from "../constants/organizationStatus.constants.js";
 import { USER_ROLES } from "../constants/roles.constants.js";
+import { isOrganizationActive } from "./organizationStatus.util.js";
 import {
   ORGANIZATION_PERMISSIONS,
   ORGANIZATION_ROLE_HIERARCHY,
@@ -42,7 +42,7 @@ export function getOrganizationRolePermissions(user, organization) {
     return [];
   }
 
-  if (!organization || organization.isDeleted || organization.status !== ORGANIZATION_STATUS.APPROVED) {
+  if (!isOrganizationActive(organization)) {
     return [];
   }
 

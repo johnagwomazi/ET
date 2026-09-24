@@ -1,4 +1,5 @@
 import { mapUserResponse } from "./userResponse.util.js";
+import { normalizeOrganizationStatus } from "./organizationStatus.util.js";
 
 function sanitizeOrganizationPrimaryAdmin(organization) {
   if (!organization || !organization.primaryAdmin) {
@@ -19,6 +20,7 @@ export function mapOrganizationResponse(organizationDocument) {
     : organizationDocument;
 
   const response = { ...organization };
+  response.status = normalizeOrganizationStatus(response.status);
   delete response.payoutDetails;
   delete response.financeLock;
   return sanitizeOrganizationPrimaryAdmin(response);

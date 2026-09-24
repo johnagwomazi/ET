@@ -6,3 +6,6 @@ coverage
 dist
 tmp
 reports/event-banner-migration*.json
+.env
+.env.*
+!.env.example

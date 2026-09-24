@@ -40,6 +40,26 @@ export async function verifyEmail(payload) {
   return extractData(response);
 }
 
+export async function resendVerification(payload) {
+  const response = await post("/auth/verify-email/resend", payload, { skipAuthRefresh: true });
+  return extractData(response);
+}
+
+export async function updateVerificationEmail(payload) {
+  const response = await patch("/auth/verify-email", payload, { skipAuthRefresh: true });
+  return extractData(response);
+}
+
+export async function authenticateWithGoogle(payload) {
+  const response = await post("/auth/google", payload, { skipAuthRefresh: true });
+  return extractData(response);
+}
+
+export async function completeGoogleRegistration(payload) {
+  const response = await post("/auth/google/complete", payload, { skipAuthRefresh: true });
+  return extractData(response);
+}
+
 export async function forgotPassword(payload) {
   const response = await post("/auth/forgot-password", payload);
   return extractData(response);

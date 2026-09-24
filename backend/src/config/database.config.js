@@ -3,6 +3,11 @@ import dns from "node:dns";
 import envConfig from "./env.config.js";
 import logger from "../lib/logger.js";
 import EventAttendance from "../models/eventAttendance.model.js";
+import Organization from "../models/organization.model.js";
+import {
+  LEGACY_ACTIVE_ORGANIZATION_STATUSES,
+  ORGANIZATION_STATUS,
+} from "../constants/organizationStatus.constants.js";
 
 let isConnected = false;
 
@@ -23,8 +28,19 @@ export async function connectDatabase() {
   }
 
   await mongoose.connect(envConfig.mongoUri);
+  const organizationMigration = await Organization.updateMany(
+    {
+      isDeleted: false,
+      status: { $in: LEGACY_ACTIVE_ORGANIZATION_STATUSES },
+    },
+    { $set: { status: ORGANIZATION_STATUS.ACTIVE } }
+  );
   await EventAttendance.createIndexes();
   isConnected = true;
+
+  if (organizationMigration.modifiedCount > 0) {
+    logger.info(`Activated ${organizationMigration.modifiedCount} legacy organization records`);
+  }
 
   logger.info("MongoDB connection established");
 

@@ -16,6 +16,10 @@ const emailVerificationSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    attempts: { type: Number, default: 0, min: 0 },
+    lastSentAt: { type: Date, default: null },
+    resendCount: { type: Number, default: 0, min: 0 },
+    resendWindowStartedAt: { type: Date, default: null },
   },
   { _id: false }
 );
@@ -53,9 +57,20 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+    phone: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     password: {
       type: String,
       required: true,
+      select: false,
+    },
+    googleSubject: {
+      type: String,
+      unique: true,
+      sparse: true,
       select: false,
     },
     role: {

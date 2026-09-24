@@ -6,9 +6,13 @@ import {
   changePasswordSchema,
   customerRegisterSchema,
   forgotPasswordSchema,
+  googleAuthenticationSchema,
+  googleRegistrationSchema,
   loginSchema,
   organizerRegisterSchema,
+  resendVerificationSchema,
   resetPasswordSchema,
+  updateVerificationEmailSchema,
   verifyEmailSchema,
 } from "../validators/auth.validator.js";
 import createRateLimiter from "../config/rateLimit.config.js";
@@ -21,8 +25,12 @@ const recoveryLimiter = createRateLimiter({ max: Math.max(3, Math.floor(envConfi
 authRouter.post("/register/customer", authLimiter, validate(customerRegisterSchema), authController.registerCustomer);
 authRouter.post("/register/organizer", authLimiter, validate(organizerRegisterSchema), authController.registerOrganizer);
 authRouter.post("/login", authLimiter, validate(loginSchema), authController.login);
+authRouter.post("/google", authLimiter, validate(googleAuthenticationSchema), authController.googleAuthenticate);
+authRouter.post("/google/complete", authLimiter, validate(googleRegistrationSchema), authController.completeGoogleRegistration);
 authRouter.post("/refresh", authLimiter, authController.refresh);
-authRouter.post("/verify-email", validate(verifyEmailSchema), authController.verifyEmail);
+authRouter.post("/verify-email", recoveryLimiter, validate(verifyEmailSchema), authController.verifyEmail);
+authRouter.post("/verify-email/resend", recoveryLimiter, validate(resendVerificationSchema), authController.resendVerification);
+authRouter.patch("/verify-email", recoveryLimiter, validate(updateVerificationEmailSchema), authController.updateVerificationEmail);
 authRouter.post("/forgot-password", recoveryLimiter, validate(forgotPasswordSchema), authController.forgotPassword);
 authRouter.post("/reset-password", recoveryLimiter, validate(resetPasswordSchema), authController.resetPassword);
 

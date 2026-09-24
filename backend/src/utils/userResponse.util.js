@@ -5,6 +5,7 @@ function sanitizePopulatedOrganization(organization) {
 
   if (organization.primaryAdmin && typeof organization.primaryAdmin === "object") {
     delete organization.primaryAdmin.password;
+    delete organization.primaryAdmin.googleSubject;
     delete organization.primaryAdmin.refreshTokenHash;
     delete organization.primaryAdmin.emailVerification;
     delete organization.primaryAdmin.passwordReset;
@@ -26,6 +27,7 @@ export function mapUserResponse(userDocument) {
   const user = typeof userDocument.toObject === "function" ? userDocument.toObject() : userDocument;
 
   delete user.password;
+  delete user.googleSubject;
   delete user.refreshTokenHash;
   delete user.emailVerification;
   delete user.passwordReset;

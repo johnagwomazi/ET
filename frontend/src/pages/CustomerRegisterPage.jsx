@@ -2,17 +2,19 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import AuthCard from "../components/layout/AuthCard";
 import AuthHeader from "../components/layout/AuthHeader";
-import BackButton from "../components/layout/BackButton";
+import GoogleAuthButton from "../components/auth/GoogleAuthButton";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import PasswordInput from "../components/ui/PasswordInput";
 import { ROUTE_PATHS } from "../routes/routePaths";
 import { customerRegisterSchema } from "../utils/authSchemas";
 import * as authService from "../services/auth.service";
+import { USER_ROLES } from "../constants/roles.constants";
+import { savePendingVerification } from "../utils/pendingAuth";
 
 function CustomerRegisterPage() {
   const navigate = useNavigate();
@@ -27,6 +29,7 @@ function CustomerRegisterPage() {
     defaultValues: {
       firstName: "",
       lastName: "",
+      phone: "",
       email: "",
       password: "",
       confirmPassword: "",
@@ -37,9 +40,14 @@ function CustomerRegisterPage() {
     setIsSubmitting(true);
 
     try {
-      await authService.registerCustomer(values);
-      toast.success("Account created successfully. Please verify your email.");
-      navigate(ROUTE_PATHS.LOGIN);
+      const result = await authService.registerCustomer(values);
+      savePendingVerification({
+        email: values.email.trim().toLowerCase(),
+        verificationTicket: result.verificationTicket,
+        sentAt: Date.now(),
+      });
+      toast.success(result.verificationEmailSent ? "Verification code sent to your email." : "Account created. Email delivery is not configured.");
+      navigate(`${ROUTE_PATHS.VERIFY_EMAIL}?email=${encodeURIComponent(values.email.trim())}`);
     } catch (error) {
       toast.error(error.message || "Something went wrong");
     } finally {
@@ -52,12 +60,8 @@ function CustomerRegisterPage() {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
-      className="space-y-6"
+      className="w-full"
     >
-      <div className="hidden lg:block">
-        <BackButton to={ROUTE_PATHS.SIGN_UP} label="Back to account selection" />
-      </div>
-
       <AuthCard>
         <div className="space-y-6">
           <AuthHeader
@@ -73,6 +77,7 @@ function CustomerRegisterPage() {
             </div>
 
             <Input label="Email" type="email" autoComplete="email" placeholder="john@example.com" error={errors.email?.message} {...register("email")} />
+            <Input label="Phone Number" type="tel" autoComplete="tel" placeholder="+234 800 000 0000" error={errors.phone?.message} {...register("phone")} />
 
             <PasswordInput label="Password" autoComplete="new-password" placeholder="Create a password" error={errors.password?.message} {...register("password")} />
             <PasswordInput label="Confirm Password" autoComplete="new-password" placeholder="Confirm your password" error={errors.confirmPassword?.message} {...register("confirmPassword")} />
@@ -81,6 +86,13 @@ function CustomerRegisterPage() {
               Create account
             </Button>
           </form>
+          <div className="flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-slate-600">
+            <span className="h-px flex-1 bg-slate-800" />or<span className="h-px flex-1 bg-slate-800" />
+          </div>
+          <GoogleAuthButton accountType={USER_ROLES.CUSTOMER} />
+          <p className="text-center text-sm text-slate-400">
+            Already registered? <Link to={ROUTE_PATHS.LOGIN} className="font-medium text-app-300 hover:text-app-200">Sign in</Link>
+          </p>
         </div>
       </AuthCard>
     </motion.div>

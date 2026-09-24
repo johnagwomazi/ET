@@ -16,6 +16,8 @@ export async function registerCustomer(req, res) {
       successResponse("Operation successful", {
         user: result.user,
         requiresEmailVerification: true,
+        verificationEmailSent: result.verificationEmailSent,
+        verificationTicket: result.verificationTicket,
       })
     );
   } catch (error) {
@@ -39,6 +41,8 @@ export async function registerOrganizer(req, res) {
         organization: result.organization,
         user: result.user,
         requiresEmailVerification: true,
+        verificationEmailSent: result.verificationEmailSent,
+        verificationTicket: result.verificationTicket,
       })
     );
   } catch (error) {
@@ -68,6 +72,45 @@ export async function login(req, res) {
     console.log(error);
     console.log("error in auth controller");
 
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
+  }
+}
+
+export async function googleAuthenticate(req, res) {
+  try {
+    const result = await authService.authenticateWithGoogle(req.body);
+    if (result.error) {
+      return res.status(result.statusCode || HTTP_STATUS.BAD_REQUEST).json(errorResponse(result.error));
+    }
+    if (result.accessToken && result.refreshToken) {
+      setAuthCookies(res, result.accessToken, result.refreshToken);
+    }
+    return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", {
+      user: result.user || null,
+      requiresProfileCompletion: result.requiresProfileCompletion || false,
+      requiresAccountType: result.requiresAccountType || false,
+      completionToken: result.completionToken || null,
+      profile: result.profile || null,
+    }));
+  } catch (error) {
+    console.log(error);
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
+  }
+}
+
+export async function completeGoogleRegistration(req, res) {
+  try {
+    const result = await authService.completeGoogleRegistration(req.body);
+    if (result.error) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json(errorResponse(result.error));
+    }
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+    return res.status(HTTP_STATUS.CREATED).json(successResponse("Operation successful", {
+      user: result.user,
+      organization: result.organization,
+    }));
+  } catch (error) {
+    console.log(error);
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
   }
 }
@@ -121,7 +164,7 @@ export async function logout(req, res) {
 
 export async function verifyEmail(req, res) {
   try {
-    const result = await authService.verifyEmail(req.body.token);
+    const result = await authService.verifyEmail(req.body);
 
     if (result.error) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json(errorResponse(result.error));
@@ -132,6 +175,41 @@ export async function verifyEmail(req, res) {
     console.log(error);
     console.log("error in auth controller");
 
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
+  }
+}
+
+export async function resendVerification(req, res) {
+  try {
+    const result = await authService.resendVerificationCode(req.body.email);
+    if (result.error) {
+      const status = result.retryAfterSeconds ? HTTP_STATUS.TOO_MANY_REQUESTS : HTTP_STATUS.BAD_REQUEST;
+      return res.status(status).json(errorResponse(result.error, {
+        retryAfterSeconds: result.retryAfterSeconds || null,
+      }));
+    }
+    return res.status(HTTP_STATUS.OK).json(successResponse("Verification code sent", {
+      retryAfterSeconds: result.retryAfterSeconds || 60,
+    }));
+  } catch (error) {
+    console.log(error);
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
+  }
+}
+
+export async function updateVerificationEmail(req, res) {
+  try {
+    const result = await authService.updatePendingVerificationEmail(req.body);
+    if (result.error) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json(errorResponse(result.error));
+    }
+    return res.status(HTTP_STATUS.OK).json(successResponse("Verification email updated", {
+      user: result.user,
+      verificationEmailSent: result.verificationEmailSent,
+      verificationTicket: result.verificationTicket,
+    }));
+  } catch (error) {
+    console.log(error);
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
   }
 }

@@ -13,9 +13,9 @@ import {
   WITHDRAWAL_RESERVED_STATUSES,
 } from "../constants/finance.constants.js";
 import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
-import { ORGANIZATION_STATUS } from "../constants/organizationStatus.constants.js";
 import { USER_ROLES } from "../constants/roles.constants.js";
 import { DEFAULT_CURRENCY, WITHDRAWAL_STATUS } from "../constants/ticketing.constants.js";
+import { isOrganizationActive } from "../utils/organizationStatus.util.js";
 import * as analyticsRepository from "../repositories/analytics.repository.js";
 import * as authRepository from "../repositories/auth.repository.js";
 import * as organizationRepository from "../repositories/organization.repository.js";
@@ -52,14 +52,6 @@ function serviceError(error, statusCode) {
 
 function isActiveUser(user) {
   return !user?.isDeleted && (!user?.accountStatus || user.accountStatus === ACCOUNT_STATUS.ACTIVE);
-}
-
-function isActiveOrganization(organization) {
-  return Boolean(
-    organization &&
-    !organization.isDeleted &&
-    organization.status === ORGANIZATION_STATUS.APPROVED
-  );
 }
 
 async function requireOrganizationAdmin(organizationId, actorUserId, dependencies) {
@@ -522,7 +514,7 @@ export async function approveWithdrawal(withdrawalId, reviewerId, payload = {}, 
       return serviceError("Withdrawal has already been reviewed", HTTP_STATUS.CONFLICT);
     }
     const organization = lock.organization || await dependencies.organizationRepository.findOrganizationWithPayoutDetailsById(organizationId);
-    if (!isActiveOrganization(organization)) return serviceError("Organization is not eligible for withdrawal", HTTP_STATUS.CONFLICT);
+    if (!isOrganizationActive(organization)) return serviceError("Organization is not eligible for withdrawal", HTTP_STATUS.CONFLICT);
     if (!withdrawal.providerRecipientCode) return serviceError("This request has no saved payout destination. Reject it and ask the organization to submit a new request.", HTTP_STATUS.CONFLICT);
     const position = await calculateOrganizationFinancialPosition(organizationId, dependencies);
     const obligationsMinor = position.completedWithdrawalsMinor + position.reservedWithdrawalsMinor;

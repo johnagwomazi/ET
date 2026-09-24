@@ -6,7 +6,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import AuthCard from "../components/layout/AuthCard";
 import AuthHeader from "../components/layout/AuthHeader";
-import BackButton from "../components/layout/BackButton";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import PasswordInput from "../components/ui/PasswordInput";
@@ -52,12 +51,8 @@ function AdminLoginPage() {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
-      className="space-y-6"
+      className="w-full"
     >
-      <div className="hidden lg:block">
-        <BackButton to={ROUTE_PATHS.HOME} label="Back to home" />
-      </div>
-
       <AuthCard>
         <div className="space-y-6">
           <AuthHeader

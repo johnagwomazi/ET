@@ -1,21 +1,17 @@
 import { Outlet } from "react-router-dom";
 import PageContainer from "../components/ui/PageContainer";
-import AuthPromoPanel from "../components/layout/AuthPromoPanel";
 import BrandLogo from "../components/layout/BrandLogo";
 
 function AuthLayout() {
   return (
-    <div className="min-h-screen app-shell">
-      <PageContainer className="py-6 lg:py-8">
-        <div className="grid min-h-[calc(100vh-3rem)] gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-stretch">
-          <AuthPromoPanel />
-
-          <div className="flex min-h-full flex-col justify-center">
-            <div className="mb-6 lg:hidden">
-              <BrandLogo />
-            </div>
-            <Outlet />
+    <div className="relative min-h-screen overflow-hidden app-shell">
+      <div className="pointer-events-none absolute left-1/2 top-0 h-72 w-72 -translate-x-1/2 rounded-full bg-app-500/10 blur-3xl" />
+      <PageContainer className="relative flex min-h-screen items-center justify-center py-8 sm:py-12">
+        <div className="w-full max-w-xl space-y-6">
+          <div className="flex justify-center">
+            <BrandLogo to={null} />
           </div>
+          <Outlet />
         </div>
       </PageContainer>
     </div>

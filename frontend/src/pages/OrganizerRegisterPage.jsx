@@ -2,17 +2,19 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import AuthCard from "../components/layout/AuthCard";
 import AuthHeader from "../components/layout/AuthHeader";
-import BackButton from "../components/layout/BackButton";
+import GoogleAuthButton from "../components/auth/GoogleAuthButton";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import PasswordInput from "../components/ui/PasswordInput";
 import { ROUTE_PATHS } from "../routes/routePaths";
 import { organizerRegisterSchema } from "../utils/authSchemas";
 import * as authService from "../services/auth.service";
+import { USER_ROLES } from "../constants/roles.constants";
+import { savePendingVerification } from "../utils/pendingAuth";
 
 function OrganizerRegisterPage() {
   const navigate = useNavigate();
@@ -39,9 +41,14 @@ function OrganizerRegisterPage() {
     setIsSubmitting(true);
 
     try {
-      await authService.registerOrganizer(values);
-      toast.success("Organization submitted successfully. Your account is awaiting Super Admin approval.");
-      navigate(ROUTE_PATHS.LOGIN);
+      const result = await authService.registerOrganizer(values);
+      savePendingVerification({
+        email: values.businessEmail.trim().toLowerCase(),
+        verificationTicket: result.verificationTicket,
+        sentAt: Date.now(),
+      });
+      toast.success(result.verificationEmailSent ? "Organization submitted. Verify your email to continue." : "Organization submitted. Email delivery is not configured.");
+      navigate(`${ROUTE_PATHS.VERIFY_EMAIL}?email=${encodeURIComponent(values.businessEmail.trim())}`);
     } catch (error) {
       toast.error(error.message || "Something went wrong");
     } finally {
@@ -54,12 +61,8 @@ function OrganizerRegisterPage() {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
-      className="space-y-6"
+      className="w-full"
     >
-      <div className="hidden lg:block">
-        <BackButton to={ROUTE_PATHS.SIGN_UP} label="Back to account selection" />
-      </div>
-
       <AuthCard>
         <div className="space-y-6">
           <AuthHeader
@@ -126,6 +129,13 @@ function OrganizerRegisterPage() {
               Register organization
             </Button>
           </form>
+          <div className="flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-slate-600">
+            <span className="h-px flex-1 bg-slate-800" />or<span className="h-px flex-1 bg-slate-800" />
+          </div>
+          <GoogleAuthButton accountType={USER_ROLES.ADMIN} />
+          <p className="text-center text-sm text-slate-400">
+            Already registered? <Link to={ROUTE_PATHS.LOGIN} className="font-medium text-app-300 hover:text-app-200">Sign in</Link>
+          </p>
         </div>
       </AuthCard>
     </motion.div>

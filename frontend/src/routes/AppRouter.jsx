@@ -26,6 +26,7 @@ const AdminLoginPage = lazy(() => import("../pages/AdminLoginPage"));
 const ForgotPasswordPage = lazy(() => import("../pages/ForgotPasswordPage"));
 const ResetPasswordPage = lazy(() => import("../pages/ResetPasswordPage"));
 const VerifyEmailPage = lazy(() => import("../pages/VerifyEmailPage"));
+const GoogleRegistrationPage = lazy(() => import("../pages/GoogleRegistrationPage"));
 const OrganizationDashboardPage = lazy(() => import("../pages/OrganizationDashboardPage"));
 const EventsPage = lazy(() => import("../pages/events/EventsPage"));
 const EventDetailsPage = lazy(() => import("../pages/events/EventDetailsPage"));
@@ -155,6 +156,10 @@ const router = createBrowserRouter([
           {
             path: ROUTE_PATHS.VERIFY_EMAIL,
             element: <VerifyEmailPage />,
+          },
+          {
+            path: ROUTE_PATHS.GOOGLE_COMPLETE,
+            element: <GoogleRegistrationPage />,
           },
           {
             path: ROUTE_PATHS.ADMIN_LOGIN,

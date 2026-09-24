@@ -1,9 +1,9 @@
 import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
-import { ORGANIZATION_STATUS } from "../constants/organizationStatus.constants.js";
 import { USER_ROLES } from "../constants/roles.constants.js";
 import { errorResponse } from "../utils/apiResponse.js";
 import * as organizationRepository from "../repositories/organization.repository.js";
 import { mapOrganizationResponse } from "../utils/organizationResponse.util.js";
+import { isOrganizationActive } from "../utils/organizationStatus.util.js";
 
 function getDocumentId(document) {
   if (!document) {
@@ -23,10 +23,6 @@ function getDocumentId(document) {
 
 function isSuperAdmin(user) {
   return user?.role === USER_ROLES.SUPER_ADMIN;
-}
-
-function isOrganizationActive(organization) {
-  return organization?.status === ORGANIZATION_STATUS.APPROVED;
 }
 
 function attachOrganizationContext(req, organization) {

@@ -54,3 +54,6 @@ desktop.ini
 # Misc
 .eslintcache
 .sass-cache/
+
+/frontend/.env.example
+/backend/.env.example

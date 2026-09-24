@@ -6,7 +6,6 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import AuthCard from "../components/layout/AuthCard";
 import AuthHeader from "../components/layout/AuthHeader";
-import BackButton from "../components/layout/BackButton";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import PasswordInput from "../components/ui/PasswordInput";
@@ -51,12 +50,8 @@ function ResetPasswordPage() {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
-      className="space-y-6"
+      className="w-full"
     >
-      <div className="hidden lg:block">
-        <BackButton to={ROUTE_PATHS.LOGIN} label="Back to login" />
-      </div>
-
       <AuthCard>
         <div className="space-y-6">
           <AuthHeader
@@ -91,6 +86,9 @@ function ResetPasswordPage() {
               Reset password
             </Button>
           </form>
+          <p className="text-center text-sm text-slate-400">
+            <Link to={ROUTE_PATHS.LOGIN} className="font-medium text-app-300 hover:text-app-200">Return to sign in</Link>
+          </p>
         </div>
       </AuthCard>
     </motion.div>

@@ -26,7 +26,7 @@ const envConfig = {
   requireEmailVerification:
     process.env.REQUIRE_EMAIL_VERIFICATION !== undefined
       ? process.env.REQUIRE_EMAIL_VERIFICATION === "true"
-      : process.env.NODE_ENV === "production",
+      : true,
   cookieHttpOnly: process.env.NODE_ENV === "production" ? true : process.env.COOKIE_HTTP_ONLY !== "false",
   cookieSecure:
     process.env.COOKIE_SECURE !== undefined
@@ -52,6 +52,7 @@ const envConfig = {
     pass: process.env.SMTP_PASS || "",
     from: process.env.SMTP_FROM || "",
   },
+  googleClientId: process.env.GOOGLE_CLIENT_ID || "",
   superAdmin: {
     firstName: process.env.SUPER_ADMIN_FIRST_NAME || "",
     lastName: process.env.SUPER_ADMIN_LAST_NAME || "",

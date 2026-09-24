@@ -24,7 +24,7 @@ export async function findUserById(userId) {
 
 export async function findUserByIdWithAuthFields(userId) {
   return User.findById(userId).select(
-    "+password +refreshTokenHash +emailVerification.tokenHash +emailVerification.expiresAt +passwordReset.tokenHash +passwordReset.expiresAt"
+    "+password +googleSubject +refreshTokenHash +emailVerification.tokenHash +emailVerification.expiresAt +emailVerification.attempts +emailVerification.lastSentAt +emailVerification.resendCount +emailVerification.resendWindowStartedAt +passwordReset.tokenHash +passwordReset.expiresAt"
   );
 }
 
@@ -38,7 +38,7 @@ export async function findUserByEmailIncludingDeleted(email) {
 
 export async function findUserByEmailWithAuthFields(email) {
   return User.findOne({ email }).select(
-    "+password +refreshTokenHash +emailVerification.tokenHash +emailVerification.expiresAt +passwordReset.tokenHash +passwordReset.expiresAt"
+    "+password +googleSubject +refreshTokenHash +emailVerification.tokenHash +emailVerification.expiresAt +emailVerification.attempts +emailVerification.lastSentAt +emailVerification.resendCount +emailVerification.resendWindowStartedAt +passwordReset.tokenHash +passwordReset.expiresAt"
   );
 }
 

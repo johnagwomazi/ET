@@ -7,6 +7,7 @@ export const customerRegisterSchema = z
   .object({
     firstName: z.string().trim().min(1, "First name is required"),
     lastName: z.string().trim().min(1, "Last name is required"),
+    phone: z.string().trim().min(5, "Phone number is required").max(30, "Phone number must be 30 characters or less"),
     email: emailSchema,
     password: passwordSchema,
     confirmPassword: z.string().min(1, "Confirm password is required"),
@@ -52,5 +53,13 @@ export const resetPasswordSchema = z
   });
 
 export const verifyEmailSchema = z.object({
-  token: z.string().trim().min(1, "Verification token is required"),
+  email: emailSchema,
+  code: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit verification code"),
+});
+
+export const googleRegistrationSchema = z.object({
+  firstName: z.string().trim().min(1, "First name is required"),
+  lastName: z.string().trim().min(1, "Last name is required"),
+  phone: z.string().trim().min(5, "Phone number is required").max(30, "Phone number must be 30 characters or less"),
+  organizationName: z.string().trim().optional(),
 });

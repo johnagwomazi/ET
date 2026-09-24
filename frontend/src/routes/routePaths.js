@@ -11,6 +11,7 @@ export const ROUTE_PATHS = {
   FORGOT_PASSWORD: "/forgot-password",
   RESET_PASSWORD: "/reset-password",
   VERIFY_EMAIL: "/verify-email",
+  GOOGLE_COMPLETE: "/auth/google/complete",
   CUSTOMER_DASHBOARD: "/customer/dashboard",
   CUSTOMER_PROFILE: "/customer/profile",
   CUSTOMER_HISTORY: "/customer/history",

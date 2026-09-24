@@ -15,6 +15,7 @@ export default defineConfig({
     env: {
       ...process.env,
       VITE_API_URL: "http://api.test/api",
+      VITE_GOOGLE_CLIENT_ID: "test-google-client.apps.googleusercontent.com",
     },
   },
 });

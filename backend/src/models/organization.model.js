@@ -85,8 +85,13 @@ const organizationSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: Object.values(ORGANIZATION_STATUS),
-      default: ORGANIZATION_STATUS.PENDING,
+      enum: [
+        ...Object.values(ORGANIZATION_STATUS),
+        "PENDING",
+        "APPROVED",
+        "REJECTED",
+      ],
+      default: ORGANIZATION_STATUS.ACTIVE,
     },
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
