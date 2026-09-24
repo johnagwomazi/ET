@@ -305,7 +305,22 @@ export async function getSalesTimeSeries(scope = {}, range = {}, period = "daily
     { $project: { _id: 0, periodStart: "$_id", refundsMinor: 1 } },
     { $sort: { periodStart: 1 } },
   ]);
-  return { sales, refunds, refundsAllocated: true };
+
+  const attendance = scope.eventId
+    ? await EventAttendance.aggregate([
+        { $match: buildAttendanceMatch(scope, range) },
+        {
+          $group: {
+            _id: dateTruncExpression("$checkedInAt", period, range.timezoneOffsetMinutes),
+            attendance: { $sum: 1 },
+          },
+        },
+        { $project: { _id: 0, periodStart: "$_id", attendance: 1 } },
+        { $sort: { periodStart: 1 } },
+      ])
+    : [];
+
+  return { sales, refunds, attendance, refundsAllocated: true };
 }
 
 function lookupDateConditions(primary, fallback, range) {
@@ -454,6 +469,14 @@ export async function getTicketTypePerformance(scope = {}, range = {}, paginatio
     { $match: match },
     {
       $lookup: {
+        from: EVENT_COLLECTION,
+        localField: "event",
+        foreignField: "_id",
+        as: "eventData",
+      },
+    },
+    {
+      $lookup: {
         from: ORDER_COLLECTION,
         let: { ticketTypeId: "$_id", eventId: "$event" },
         pipeline: [
@@ -471,6 +494,7 @@ export async function getTicketTypePerformance(scope = {}, range = {}, paginatio
     },
     {
       $set: {
+        eventStatus: { $first: "$eventData.status" },
         grossSalesMinor: { $ifNull: [{ $first: "$sales.grossSalesMinor" }, 0] },
         ticketsSold: { $ifNull: [{ $first: "$sales.ticketsSold" }, 0] },
       },
@@ -486,7 +510,7 @@ export async function getTicketTypePerformance(scope = {}, range = {}, paginatio
         },
       },
     },
-    { $unset: ["sales", "description", "createdBy"] },
+    { $unset: ["sales", "eventData", "description", "createdBy"] },
     { $sort: { [sortField]: direction, _id: 1 } },
     { $facet: { items: [{ $skip: pagination.skip || 0 }, { $limit: pagination.limit || 20 }], total: [{ $count: "count" }] } },
   ]);

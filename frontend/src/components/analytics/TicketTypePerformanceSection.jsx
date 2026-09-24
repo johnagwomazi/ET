@@ -4,6 +4,23 @@ import Pagination from "../dashboard/Pagination";
 import StatusBadge from "../dashboard/StatusBadge";
 import { formatMoney, formatNumber, formatPercentage } from "../../utils/formatters";
 
+function SalesPerformance({ value }) {
+  const percentage = Number(value || 0);
+  const barWidth = Math.min(100, Math.max(0, percentage));
+
+  return (
+    <div className="min-w-28">
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="text-slate-500">Sold</span>
+        <span className="font-medium text-slate-200">{formatPercentage(percentage)}</span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800">
+        <div className="h-full rounded-full bg-app-400" style={{ width: `${barWidth}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function TicketTypePerformanceSection({ ticketTypes = [], pagination = {}, isLoading = false, sortBy = "grossSales", sortOrder = "desc", onSort, onPageChange }) {
   const rows = ticketTypes.map((item) => ({ ...item, _id: item.ticketType?.id }));
   const columns = [
@@ -12,7 +29,7 @@ function TicketTypePerformanceSection({ ticketTypes = [], pagination = {}, isLoa
     { key: "ticketsSold", label: "Sold", sortable: true, render: (row) => formatNumber(row.ticketsSold) },
     { key: "inventory", label: "Inventory", render: (row) => formatNumber(row.sellableInventory) },
     { key: "remaining", label: "Remaining", render: (row) => formatNumber(row.ticketsRemaining) },
-    { key: "salesRate", label: "Sales rate", sortable: true, render: (row) => formatPercentage(row.salesRate) },
+    { key: "salesRate", label: "Sales performance", sortable: true, render: (row) => <SalesPerformance value={row.salesRate} /> },
   ];
 
   return (
@@ -25,7 +42,8 @@ function TicketTypePerformanceSection({ ticketTypes = [], pagination = {}, isLoa
           <Card key={row._id} className="border-slate-800/70 bg-slate-950/85 p-4">
             <div className="flex items-start justify-between gap-3"><p className="font-semibold text-white">{row.ticketType.name}</p><StatusBadge status={row.ticketType.status} /></div>
             <p className="mt-4 text-2xl font-semibold text-white">{formatMoney(row.grossSales, row.currency)}</p>
-            <dl className="mt-4 grid grid-cols-3 gap-2 text-sm"><div><dt className="text-slate-500">Sold</dt><dd className="mt-1 text-slate-200">{formatNumber(row.ticketsSold)}</dd></div><div><dt className="text-slate-500">Left</dt><dd className="mt-1 text-slate-200">{formatNumber(row.ticketsRemaining)}</dd></div><div><dt className="text-slate-500">Rate</dt><dd className="mt-1 text-slate-200">{formatPercentage(row.salesRate)}</dd></div></dl>
+            <dl className="mt-4 grid grid-cols-3 gap-2 text-sm"><div><dt className="text-slate-500">Sold</dt><dd className="mt-1 text-slate-200">{formatNumber(row.ticketsSold)}</dd></div><div><dt className="text-slate-500">Inventory</dt><dd className="mt-1 text-slate-200">{formatNumber(row.sellableInventory)}</dd></div><div><dt className="text-slate-500">Remaining</dt><dd className="mt-1 text-slate-200">{formatNumber(row.ticketsRemaining)}</dd></div></dl>
+            <div className="mt-4"><SalesPerformance value={row.salesRate} /></div>
           </Card>
         )) : <Card className="p-6 text-center text-sm text-slate-400">No ticket performance data for this period.</Card>}
       </div>
@@ -35,4 +53,3 @@ function TicketTypePerformanceSection({ ticketTypes = [], pagination = {}, isLoa
 }
 
 export default TicketTypePerformanceSection;
-

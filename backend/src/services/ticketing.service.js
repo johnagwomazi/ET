@@ -33,6 +33,10 @@ import { buildPaginationMeta, buildPaginationOptions, escapeRegex } from "../uti
 import { buildPaymentCallbackUrl } from "../utils/payment.util.js";
 import { hasOrganizationPermission } from "../utils/organizationPermission.util.js";
 import {
+  eventPermitsTicketSales,
+  isTicketTypeSalesActive,
+} from "../utils/ticketTypeAvailability.util.js";
+import {
   getDocumentId,
   mapOrderResponse,
   mapRefundResponse,
@@ -132,28 +136,14 @@ function normalizeAttendee(value = {}, fallback = {}) {
   };
 }
 
-function isTicketTypeAvailable(ticketType, quantity, now = new Date()) {
-  if (!ticketType || ticketType.status !== TICKET_TYPE_STATUS.ACTIVE) {
-    return false;
-  }
-
-  if (ticketType.saleStartsAt && ticketType.saleStartsAt > now) {
-    return false;
-  }
-
-  if (ticketType.saleEndsAt && ticketType.saleEndsAt < now) {
-    return false;
-  }
+function isTicketTypeAvailable(ticketType, event, quantity, now = new Date()) {
+  if (!isTicketTypeSalesActive(ticketType, event, now)) return false;
 
   if (quantity > Number(ticketType.maxPerOrder || 1)) {
     return false;
   }
 
   return Number(ticketType.quantity || 0) - Number(ticketType.soldQuantity || 0) >= quantity;
-}
-
-function isEventPurchasable(event) {
-  return [EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED].includes(event?.status);
 }
 
 async function getOrganizationActorContext(organizationId, actorUserId, dependencies = defaultDependencies) {
@@ -220,7 +210,7 @@ export async function createEventTicketType(organizationId, actorUserId, eventId
     createdBy: actorUserId,
   });
 
-  return { ticketType: mapTicketTypeResponse(ticketType) };
+  return { ticketType: mapTicketTypeResponse(ticketType, { event: context.event }) };
 }
 
 export async function updateEventTicketType(organizationId, actorUserId, eventId, ticketTypeId, payload, dependencies = defaultDependencies) {
@@ -247,7 +237,7 @@ export async function updateEventTicketType(organizationId, actorUserId, eventId
     payload
   );
 
-  return { ticketType: mapTicketTypeResponse(ticketType) };
+  return { ticketType: mapTicketTypeResponse(ticketType, { event: context.event }) };
 }
 
 export async function getEventTicketTypes(organizationId, actorUserId, eventId, query = {}, dependencies = defaultDependencies) {
@@ -265,7 +255,7 @@ export async function getEventTicketTypes(organizationId, actorUserId, eventId, 
   ]);
 
   return {
-    ticketTypes: ticketTypes.map(mapTicketTypeResponse),
+    ticketTypes: ticketTypes.map((ticketType) => mapTicketTypeResponse(ticketType, { event: context.event })),
     pagination: buildPaginationMeta(totalItems, pagination),
   };
 }
@@ -283,7 +273,7 @@ export async function getPublicEventTicketTypes(eventId, dependencies = defaultD
   }, { limit: 100 });
 
   return {
-    ticketTypes: ticketTypes.map(mapTicketTypeResponse),
+    ticketTypes: ticketTypes.map((ticketType) => mapTicketTypeResponse(ticketType, { event })),
   };
 }
 
@@ -332,7 +322,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
 
   const event = await dependencies.eventRepository.findPublicEventById(payload.eventId);
 
-  if (!event || !isEventPurchasable(event)) {
+  if (!event || !eventPermitsTicketSales(event)) {
     return { error: "Event is not available for checkout", statusCode: HTTP_STATUS.BAD_REQUEST };
   }
 
@@ -357,7 +347,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
           { session }
         );
 
-        if (!isTicketTypeAvailable(ticketType, item.quantity)) {
+        if (!isTicketTypeAvailable(ticketType, event, item.quantity)) {
           throw checkoutFailure("Ticket type is unavailable or sold out", HTTP_STATUS.CONFLICT);
         }
 

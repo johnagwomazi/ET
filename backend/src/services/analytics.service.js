@@ -14,6 +14,7 @@ import {
   mapAnalyticsRange,
   resolveAnalyticsDateRange,
 } from "../utils/analytics.util.js";
+import { getEffectiveTicketTypeStatus } from "../utils/ticketTypeAvailability.util.js";
 
 const defaultDependencies = {
   analyticsRepository,
@@ -138,11 +139,21 @@ function mapEvent(row) {
   };
 }
 
-function mapTicketType(row) {
+function mapTicketType(row, event = null, now = new Date()) {
   const sold = Number(row.ticketsSold || 0);
   const quantity = Number(row.quantity || 0);
+  const configuredStatus = row.status;
+  const eventContext = event || { status: row.eventStatus };
   return {
-    ticketType: { id: getId(row), eventId: getId(row.event), name: row.name, status: row.status },
+    ticketType: {
+      id: getId(row),
+      eventId: getId(row.event),
+      name: row.name,
+      status: getEffectiveTicketTypeStatus(row, eventContext, now),
+      configuredStatus,
+      saleStartsAt: row.saleStartsAt || null,
+      saleEndsAt: row.saleEndsAt || null,
+    },
     currency: row.currency || DEFAULT_CURRENCY,
     grossSales: fromMinorUnits(row.grossSalesMinor),
     ticketsSold: sold,
@@ -177,13 +188,20 @@ function mapSeries(raw) {
       netRevenue: fromMinorUnits(row.grossSalesMinor),
       ticketsSold: Number(row.ticketsSold || 0),
       successfulOrders: Number(row.successfulOrders || 0),
+      attendance: 0,
     });
   }
   for (const row of raw.refunds || []) {
     const key = new Date(row.periodStart).toISOString();
-    const item = periods.get(key) || { periodStart: key, grossSales: 0, refunds: 0, netRevenue: 0, ticketsSold: 0, successfulOrders: 0 };
+    const item = periods.get(key) || { periodStart: key, grossSales: 0, refunds: 0, netRevenue: 0, ticketsSold: 0, successfulOrders: 0, attendance: 0 };
     item.refunds = fromMinorUnits(row.refundsMinor);
     item.netRevenue = fromMinorUnits(Math.round(item.grossSales * 100) - Number(row.refundsMinor || 0));
+    periods.set(key, item);
+  }
+  for (const row of raw.attendance || []) {
+    const key = new Date(row.periodStart).toISOString();
+    const item = periods.get(key) || { periodStart: key, grossSales: 0, refunds: 0, netRevenue: 0, ticketsSold: 0, successfulOrders: 0, attendance: 0 };
+    item.attendance = Number(row.attendance || 0);
     periods.set(key, item);
   }
   return [...periods.values()].sort((a, b) => a.periodStart.localeCompare(b.periodStart));
@@ -216,7 +234,7 @@ export async function getEventAnalytics(organizationId, actorUserId, eventId, qu
     definitions: ANALYTICS_DEFINITIONS,
     event: { id: getId(context.event), name: context.event.eventName, status: context.event.status, startAt: context.event.startAt, endAt: context.event.endAt, capacity: Number(context.event.capacity || 0) },
     summary: buildAnalyticsSummary(raw),
-    ticketTypes: ticketTypes.items.map(mapTicketType),
+    ticketTypes: ticketTypes.items.map((ticketType) => mapTicketType(ticketType, context.event)),
   };
 }
 
@@ -290,4 +308,3 @@ export async function getPlatformOrganizationPerformance(actorUserId, query = {}
   const result = await dependencies.analyticsRepository.getOrganizationPerformance(context.range, page);
   return { range: mapAnalyticsRange(context.range), organizations: result.items.map(mapOrganization), pagination: buildPaginationMeta(result.totalItems, page) };
 }
-

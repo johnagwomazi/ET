@@ -11,12 +11,17 @@ import {
   ORDER_STATUS,
   PAYMENT_STATUS,
   TICKET_STATUS,
+  TICKET_TYPE_STATUS,
   TICKET_VALIDATION_OUTCOME,
 } from "../src/constants/ticketing.constants.js";
 import { EVENT_STATUS } from "../src/constants/eventStatus.constants.js";
 import { USER_ROLES } from "../src/constants/roles.constants.js";
 import * as ticketingService from "../src/services/ticketing.service.js";
 import { buildPaymentCallbackUrl } from "../src/utils/payment.util.js";
+import {
+  getEffectiveTicketTypeStatus,
+  isTicketTypeSalesActive,
+} from "../src/utils/ticketTypeAvailability.util.js";
 
 const ids = {
   customer: "64b64b64b64b64b64b64b641",
@@ -458,6 +463,87 @@ test("ticketing validators enforce ticket, checkout, refund, withdrawal, and val
   assert.equal(ticketValidationSchema.safeParse({ reference: "tkt_123", token: "a".repeat(32) }).success, false);
   assert.equal(ticketTypeCreateSchema.safeParse({ name: "USD", price: 1000, quantity: 20, currency: "USD" }).success, false);
   assert.equal(refundCreateSchema.safeParse({ reason: "Event canceled" }).success, true);
+});
+
+test("ticket sales status follows event lifecycle and the current sales period without persistence", () => {
+  const now = new Date("2026-09-24T12:00:00.000Z");
+  const ticketType = {
+    status: TICKET_TYPE_STATUS.ACTIVE,
+    saleStartsAt: new Date("2026-09-24T10:00:00.000Z"),
+    saleEndsAt: new Date("2026-09-24T14:00:00.000Z"),
+  };
+
+  assert.equal(isTicketTypeSalesActive(ticketType, { status: EVENT_STATUS.PUBLISHED }, now), true);
+  assert.equal(isTicketTypeSalesActive(ticketType, { status: EVENT_STATUS.POSTPONED }, now), true);
+  assert.equal(getEffectiveTicketTypeStatus(ticketType, { status: EVENT_STATUS.COMPLETED }, now), TICKET_TYPE_STATUS.INACTIVE);
+  assert.equal(getEffectiveTicketTypeStatus(ticketType, { status: EVENT_STATUS.CANCELED }, now), TICKET_TYPE_STATUS.INACTIVE);
+
+  ticketType.saleStartsAt = new Date("2026-09-24T13:00:00.000Z");
+  assert.equal(getEffectiveTicketTypeStatus(ticketType, { status: EVENT_STATUS.PUBLISHED }, now), TICKET_TYPE_STATUS.INACTIVE);
+
+  ticketType.saleStartsAt = new Date("2026-09-24T10:00:00.000Z");
+  ticketType.saleEndsAt = new Date("2026-09-24T11:00:00.000Z");
+  assert.equal(getEffectiveTicketTypeStatus(ticketType, { status: EVENT_STATUS.PUBLISHED }, now), TICKET_TYPE_STATUS.INACTIVE);
+
+  ticketType.saleEndsAt = new Date("2026-09-25T12:00:00.000Z");
+  assert.equal(getEffectiveTicketTypeStatus(ticketType, { status: EVENT_STATUS.POSTPONED }, now), TICKET_TYPE_STATUS.ACTIVE);
+
+  ticketType.status = TICKET_TYPE_STATUS.INACTIVE;
+  assert.equal(getEffectiveTicketTypeStatus(ticketType, { status: EVENT_STATUS.PUBLISHED }, now), TICKET_TYPE_STATUS.INACTIVE);
+});
+
+test("ticket list status agrees with checkout availability and can reactivate", async () => {
+  const { dependencies, state } = createDependencies();
+  const checkoutPayload = {
+    eventId: ids.event,
+    customerInfo: { name: "Ada Buyer", phone: "+2348012345678", email: "ada@example.com" },
+    items: [{ ticketTypeId: ids.ticketType, quantity: 1 }],
+  };
+
+  state.event.status = EVENT_STATUS.COMPLETED;
+  const completedList = await ticketingService.getEventTicketTypes(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    {},
+    dependencies
+  );
+  const completedCheckout = await ticketingService.createCheckoutOrder(
+    ids.customer,
+    checkoutPayload,
+    dependencies
+  );
+  assert.equal(completedList.ticketTypes[0].status, TICKET_TYPE_STATUS.INACTIVE);
+  assert.equal(completedList.ticketTypes[0].configuredStatus, TICKET_TYPE_STATUS.ACTIVE);
+  assert.equal(completedCheckout.statusCode, 400);
+
+  state.event.status = EVENT_STATUS.POSTPONED;
+  state.ticketType.saleStartsAt = new Date(Date.now() + 60_000);
+  const futureList = await ticketingService.getEventTicketTypes(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    {},
+    dependencies
+  );
+  const futureCheckout = await ticketingService.createCheckoutOrder(
+    ids.customer,
+    checkoutPayload,
+    dependencies
+  );
+  assert.equal(futureList.ticketTypes[0].status, TICKET_TYPE_STATUS.INACTIVE);
+  assert.equal(futureCheckout.statusCode, 409);
+
+  state.ticketType.saleStartsAt = new Date(Date.now() - 60_000);
+  state.ticketType.saleEndsAt = new Date(Date.now() + 60_000);
+  const reopenedList = await ticketingService.getEventTicketTypes(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    {},
+    dependencies
+  );
+  assert.equal(reopenedList.ticketTypes[0].status, TICKET_TYPE_STATUS.ACTIVE);
 });
 
 test("checkout creates server-priced orders and reserves ticket inventory", async () => {

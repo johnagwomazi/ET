@@ -1,3 +1,6 @@
+import { TICKET_TYPE_STATUS } from "../constants/ticketing.constants.js";
+import { getEffectiveTicketTypeStatus } from "./ticketTypeAvailability.util.js";
+
 export function getDocumentId(document) {
   if (!document) {
     return null;
@@ -74,7 +77,7 @@ function mapOrderSummary(orderDocument) {
   };
 }
 
-export function mapTicketTypeResponse(ticketTypeDocument) {
+export function mapTicketTypeResponse(ticketTypeDocument, options = {}) {
   if (!ticketTypeDocument) {
     return null;
   }
@@ -82,6 +85,7 @@ export function mapTicketTypeResponse(ticketTypeDocument) {
   const ticketType = typeof ticketTypeDocument.toObject === "function"
     ? ticketTypeDocument.toObject({ virtuals: true })
     : ticketTypeDocument;
+  const configuredStatus = ticketType.status || TICKET_TYPE_STATUS.INACTIVE;
 
   return {
     id: getDocumentId(ticketType),
@@ -97,7 +101,12 @@ export function mapTicketTypeResponse(ticketTypeDocument) {
     saleStartsAt: ticketType.saleStartsAt || null,
     saleEndsAt: ticketType.saleEndsAt || null,
     maxPerOrder: Number(ticketType.maxPerOrder || 1),
-    status: ticketType.status,
+    status: getEffectiveTicketTypeStatus(
+      { ...ticketType, status: configuredStatus },
+      options.event,
+      options.now
+    ),
+    configuredStatus,
     position: Number(ticketType.position || 0),
     createdAt: ticketType.createdAt || null,
     updatedAt: ticketType.updatedAt || null,

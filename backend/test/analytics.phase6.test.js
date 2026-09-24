@@ -16,6 +16,7 @@ import organizationRoutes from "../src/routes/organization.routes.js";
 import adminRoutes from "../src/routes/admin.routes.js";
 import eventRoutes from "../src/routes/event.routes.js";
 import { USER_ROLES } from "../src/constants/roles.constants.js";
+import { EVENT_STATUS } from "../src/constants/eventStatus.constants.js";
 
 const ids = {
   admin: "64b64b64b64b64b64b64b601",
@@ -78,6 +79,7 @@ function createDependencies(role = USER_ROLES.ADMIN, overrides = {}) {
         return {
           sales: [{ periodStart: new Date("2026-09-01T00:00:00.000Z"), grossSalesMinor: 500050, ticketsSold: 4, successfulOrders: 2 }],
           refunds: [{ periodStart: new Date("2026-09-01T00:00:00.000Z"), refundsMinor: 50050 }],
+          attendance: [{ periodStart: new Date("2026-09-01T00:00:00.000Z"), attendance: 3 }],
           refundsAllocated: true,
         };
       },
@@ -200,6 +202,71 @@ test("event analytics use historical order totals rather than the current ticket
   assert.equal(result.summary.grossSales, 5000.5);
   assert.equal(result.ticketTypes[0].grossSales, 5000.5);
   assert.equal(result.ticketTypes[0].ticketsRemaining, 6);
+  assert.equal(result.ticketTypes[0].ticketType.status, "ACTIVE");
+});
+
+test("event analytics derives ticket status from lifecycle and sales dates", async () => {
+  const dependencies = createDependencies();
+  const findEvent = dependencies.eventRepository.findEventByIdAndOrganization;
+  const getTicketTypes = dependencies.analyticsRepository.getTicketTypePerformance;
+  const event = await findEvent(ids.event, ids.organization);
+
+  dependencies.eventRepository.findEventByIdAndOrganization = async () => ({
+    ...event,
+    status: EVENT_STATUS.COMPLETED,
+  });
+  const completed = await analyticsService.getEventAnalytics(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    { preset: "all" },
+    dependencies
+  );
+  assert.equal(completed.ticketTypes[0].ticketType.status, "INACTIVE");
+
+  dependencies.eventRepository.findEventByIdAndOrganization = async () => ({
+    ...event,
+    status: EVENT_STATUS.POSTPONED,
+  });
+  dependencies.analyticsRepository.getTicketTypePerformance = async () => {
+    const result = await getTicketTypes();
+    return {
+      ...result,
+      items: result.items.map((ticketType) => ({
+        ...ticketType,
+        saleStartsAt: new Date(Date.now() - 60_000),
+        saleEndsAt: new Date(Date.now() - 1_000),
+      })),
+    };
+  };
+  const expired = await analyticsService.getEventAnalytics(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    { preset: "all" },
+    dependencies
+  );
+  assert.equal(expired.ticketTypes[0].ticketType.status, "INACTIVE");
+
+  dependencies.analyticsRepository.getTicketTypePerformance = async () => {
+    const result = await getTicketTypes();
+    return {
+      ...result,
+      items: result.items.map((ticketType) => ({
+        ...ticketType,
+        saleStartsAt: new Date(Date.now() - 60_000),
+        saleEndsAt: new Date(Date.now() + 60_000),
+      })),
+    };
+  };
+  const extended = await analyticsService.getEventAnalytics(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    { preset: "all" },
+    dependencies
+  );
+  assert.equal(extended.ticketTypes[0].ticketType.status, "ACTIVE");
 });
 
 test("sales series merges successful sales and refunds into frontend-ready net values", async () => {
@@ -209,6 +276,7 @@ test("sales series merges successful sales and refunds into frontend-ready net v
   assert.equal(result.series[0].refunds, 500.5);
   assert.equal(result.series[0].netRevenue, 4500);
   assert.equal(result.series[0].ticketsSold, 4);
+  assert.equal(result.series[0].attendance, 3);
 });
 
 test("event and ticket-type performance return bounded pagination metadata", async () => {
@@ -247,4 +315,3 @@ test("all Phase 6 routes are registered under existing protected route hierarchi
   assert.ok(paths(adminRoutes).includes("/analytics/overview"));
   assert.ok(paths(adminRoutes).includes("/analytics/organizations"));
 });
-

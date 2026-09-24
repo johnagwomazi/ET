@@ -76,7 +76,7 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
       maxPerOrder: String(ticketType.maxPerOrder || 10),
       saleStartsAt: ticketType.saleStartsAt ? ticketType.saleStartsAt.slice(0, 16) : "",
       saleEndsAt: ticketType.saleEndsAt ? ticketType.saleEndsAt.slice(0, 16) : "",
-      status: ticketType.status || "ACTIVE",
+      status: ticketType.configuredStatus || ticketType.status || "ACTIVE",
       position: String(ticketType.position || 0),
     });
     setModalOpen(true);

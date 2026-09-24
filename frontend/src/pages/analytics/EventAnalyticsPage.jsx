@@ -10,7 +10,7 @@ import AnalyticsFilters from "../../components/analytics/AnalyticsFilters";
 import AnalyticsSummary from "../../components/analytics/AnalyticsSummary";
 import AnalyticsPageSkeleton from "../../components/analytics/AnalyticsPageSkeleton";
 import AttendancePerformance from "../../components/analytics/AttendancePerformance";
-import RevenueTrendChart from "../../components/analytics/RevenueTrendChart";
+import EventPerformanceChart from "../../components/analytics/EventPerformanceChart";
 import TicketTypePerformanceSection from "../../components/analytics/TicketTypePerformanceSection";
 import { useAnalyticsFilters } from "../../hooks/useAnalyticsFilters";
 import { ROUTE_PATHS } from "../../routes/routePaths";
@@ -86,7 +86,7 @@ function EventAnalyticsPage() {
 
           <AnalyticsSummary summary={analytics.summary} loading={false} hideEvents showRemaining />
           <AttendancePerformance summary={analytics.summary} />
-          <RevenueTrendChart data={sales?.series || []} period={sales?.period || filters.period} currency={sales?.currency || analytics.summary.currency} loading={isLoading && !sales} />
+          <EventPerformanceChart data={sales?.series || []} period={sales?.period || filters.period} loading={isLoading && !sales} />
 
           <section className="space-y-4">
             <SectionHeader eyebrow="Ticket breakdown" title="Ticket-type performance" description="Sales value and current inventory for every ticket type configured on this event." />
