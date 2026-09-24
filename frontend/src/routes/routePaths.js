@@ -36,6 +36,7 @@ export const ROUTE_PATHS = {
   MANAGER_NOTIFICATIONS: "/manager/notifications",
   SUPER_ADMIN_DASHBOARD: "/super-admin/dashboard",
   SUPER_ADMIN_ORGANIZATIONS: "/super-admin/dashboard/organizations",
+  SUPER_ADMIN_ORGANIZATION_DETAILS: "/super-admin/dashboard/organizations/:organizationId",
   SUPER_ADMIN_USERS: "/super-admin/dashboard/users",
   SUPER_ADMIN_ROLES_PERMISSIONS: "/super-admin/dashboard/roles",
   SUPER_ADMIN_WITHDRAWALS: "/super-admin/dashboard/withdrawals",

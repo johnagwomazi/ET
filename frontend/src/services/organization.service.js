@@ -22,6 +22,12 @@ export async function getOrganizationById(organizationId, options = {}) {
   return unwrapResponse(response);
 }
 
+export async function getOrganizationDetails(organizationId, query = {}, options = {}) {
+  const response = await get(buildOrganizationPath(`/${organizationId}/details`, query), options);
+
+  return unwrapResponse(response);
+}
+
 export async function approveOrganization(organizationId) {
   const response = await patch(buildOrganizationPath(`/${organizationId}/approve`), {});
 

@@ -1,14 +1,36 @@
 import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
+import { EVENT_STATUS } from "../constants/eventStatus.constants.js";
 import { ORGANIZATION_STATUS } from "../constants/organizationStatus.constants.js";
+import { DEFAULT_CURRENCY } from "../constants/ticketing.constants.js";
+import * as analyticsRepository from "../repositories/analytics.repository.js";
 import * as authRepository from "../repositories/auth.repository.js";
+import * as eventRepository from "../repositories/event.repository.js";
+import * as orderRepository from "../repositories/order.repository.js";
 import * as organizationRepository from "../repositories/organization.repository.js";
 import * as userRepository from "../repositories/user.repository.js";
+import * as withdrawalRepository from "../repositories/withdrawal.repository.js";
+import { buildAnalyticsSummary } from "./analytics.service.js";
+import { calculateOrganizationFinancialPosition } from "./finance.service.js";
+import { fromMinorUnits } from "../utils/analytics.util.js";
+import { mapFinanceWithdrawal, mapFinancialPosition } from "../utils/financeResponse.util.js";
 import { buildPaginationMeta, buildPaginationOptions, escapeRegex } from "../utils/query.util.js";
+import { getDocumentId, mapOrderResponse } from "../utils/ticketingResponse.util.js";
+import { trustedOperator } from "../utils/trustedFilter.util.js";
 import {
   mapOrganizationProfileResponse,
   mapOrganizationResponse,
   mapOrganizationSettingsResponse,
 } from "../utils/organizationResponse.util.js";
+
+const organizationDetailsDependencies = {
+  analyticsRepository,
+  eventRepository,
+  orderRepository,
+  organizationRepository,
+  userRepository,
+  withdrawalRepository,
+  calculateOrganizationFinancialPosition,
+};
 
 function buildOrganizationFilter(query = {}) {
   const filter = {
@@ -250,6 +272,110 @@ function buildRecentActivity(organization, recentMemberDocuments) {
   }).slice(0, 5);
 }
 
+function mapOrganizationEventPerformance(row) {
+  const ticketsSold = Number(row.ticketsSold || 0);
+  const sellableInventory = Number(row.sellableInventory || 0);
+
+  return {
+    id: getDocumentId(row),
+    eventName: row.eventName || "Untitled event",
+    status: row.status || null,
+    startAt: row.startAt || null,
+    endAt: row.endAt || null,
+    capacity: Number(row.capacity || 0),
+    currency: DEFAULT_CURRENCY,
+    ticketsSold,
+    successfulOrders: Number(row.successfulOrders || 0),
+    grossSales: fromMinorUnits(row.grossSalesMinor),
+    refunds: fromMinorUnits(row.refundsMinor),
+    netRevenue: fromMinorUnits(row.netRevenueMinor),
+    sellableInventory,
+    ticketsRemaining: Math.max(0, sellableInventory - Number(row.reservedInventory || 0)),
+  };
+}
+
+function mapOrganizationMember(memberDocument, organization) {
+  const member = typeof memberDocument?.toObject === "function"
+    ? memberDocument.toObject()
+    : memberDocument || {};
+  const memberId = getDocumentId(member);
+
+  return {
+    id: memberId,
+    firstName: member.firstName || "",
+    lastName: member.lastName || "",
+    email: member.email || "",
+    role: member.role || null,
+    accountStatus: member.accountStatus || null,
+    isEmailVerified: Boolean(member.isEmailVerified),
+    isOwner: memberId === getDocumentId(organization.primaryAdmin),
+    lastLoginAt: member.lastLoginAt || null,
+    createdAt: member.createdAt || null,
+  };
+}
+
+function buildOrganizationDetailsActivity(
+  organization,
+  recentMembers = [],
+  recentEvents = [],
+  recentOrders = [],
+  recentWithdrawals = []
+) {
+  const activityItems = [...buildRecentActivity(organization, recentMembers)];
+
+  recentEvents.forEach((eventDocument) => {
+    const event = typeof eventDocument?.toObject === "function" ? eventDocument.toObject() : eventDocument;
+    addActivityItem(
+      activityItems,
+      "EVENT_CREATED",
+      `${event?.eventName || "Event"} was created`,
+      event?.createdAt,
+      `Event status: ${event?.status || "unknown"}.`
+    );
+  });
+
+  recentOrders.forEach((orderDocument) => {
+    const order = typeof orderDocument?.toObject === "function" ? orderDocument.toObject() : orderDocument;
+    addActivityItem(
+      activityItems,
+      "TICKET_ORDER_CREATED",
+      `Ticket order ${order?.reference || "created"}`,
+      order?.createdAt,
+      `${order?.customerInfo?.name || "A customer"} placed an order for ${order?.currency || DEFAULT_CURRENCY} ${Number(order?.total || 0).toLocaleString("en-US")}.`
+    );
+  });
+
+  recentWithdrawals.forEach((withdrawalDocument) => {
+    const withdrawal = typeof withdrawalDocument?.toObject === "function"
+      ? withdrawalDocument.toObject()
+      : withdrawalDocument;
+    addActivityItem(
+      activityItems,
+      "WITHDRAWAL_REQUESTED",
+      `Withdrawal ${withdrawal?.reference || "requested"}`,
+      withdrawal?.createdAt,
+      `Withdrawal status: ${withdrawal?.status || "unknown"}.`
+    );
+  });
+
+  return activityItems
+    .sort((firstActivity, secondActivity) => (
+      new Date(secondActivity.occurredAt).getTime() - new Date(firstActivity.occurredAt).getTime()
+    ))
+    .slice(0, 20)
+    .map((activity, index) => ({
+      id: `${activity.type}-${new Date(activity.occurredAt).getTime()}-${index}`,
+      ...activity,
+    }));
+}
+
+function detailsPagination(page, limit, sortBy = "createdAt") {
+  return buildPaginationOptions(
+    { page, limit, sortBy, sortOrder: "desc" },
+    { page: 1, limit: 10, sortBy, sortOrder: -1 }
+  );
+}
+
 export async function getOrganizations(query) {
   const pagination = buildPaginationOptions(query, {
     page: 1,
@@ -280,6 +406,113 @@ export async function getOrganizationById(organizationId) {
 
   return {
     organization: mapOrganizationResponse(organization),
+  };
+}
+
+export async function getOrganizationDetails(
+  organizationId,
+  query = {},
+  dependencies = organizationDetailsDependencies
+) {
+  const organization = await dependencies.organizationRepository.findOrganizationDetailsById(organizationId);
+
+  if (!organization) {
+    return {
+      error: "Organization not found",
+      statusCode: HTTP_STATUS.NOT_FOUND,
+    };
+  }
+
+  const limit = query.limit || 10;
+  const eventPage = detailsPagination(query.eventsPage, limit, "netRevenue");
+  const salesPage = detailsPagination(query.salesPage, limit);
+  const withdrawalPage = detailsPagination(query.withdrawalsPage, limit);
+  const memberPage = detailsPagination(query.membersPage, limit);
+  const organizationFilter = { organization: organizationId };
+  const memberFilter = { organization: organizationId, isDeleted: false };
+  const now = new Date();
+  const currentEventFilter = {
+    organization: organizationId,
+    status: trustedOperator({ $in: [EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED] }),
+    endAt: trustedOperator({ $gte: now }),
+  };
+
+  const [
+    rawOverview,
+    currentEvents,
+    eventPerformance,
+    sales,
+    salesTotal,
+    financialPosition,
+    withdrawals,
+    withdrawalsTotal,
+    members,
+    membersTotal,
+    recentEvents,
+    recentOrders,
+    recentWithdrawals,
+    recentMembers,
+  ] = await Promise.all([
+    dependencies.analyticsRepository.getScopeOverview({ organizationId }, {}),
+    dependencies.eventRepository.countEvents(currentEventFilter),
+    dependencies.analyticsRepository.getEventPerformance({ organizationId }, {}, eventPage),
+    dependencies.orderRepository.findOrders(organizationFilter, salesPage),
+    dependencies.orderRepository.countOrders(organizationFilter),
+    dependencies.calculateOrganizationFinancialPosition(organizationId, dependencies),
+    dependencies.withdrawalRepository.findWithdrawals(organizationFilter, withdrawalPage),
+    dependencies.withdrawalRepository.countWithdrawals(organizationFilter),
+    dependencies.userRepository.findOrganizationMembers(memberFilter, memberPage),
+    dependencies.userRepository.countUsers(memberFilter),
+    dependencies.eventRepository.findEvents(organizationFilter, { limit: 5, sortBy: "createdAt", sortOrder: -1 }),
+    dependencies.orderRepository.findOrders(organizationFilter, { limit: 5, sortBy: "createdAt", sortOrder: -1 }),
+    dependencies.withdrawalRepository.findWithdrawals(organizationFilter, { limit: 5, sortBy: "createdAt", sortOrder: -1 }),
+    dependencies.userRepository.findOrganizationRecentMemberActivity(organizationId, 5),
+  ]);
+
+  const analyticsSummary = buildAnalyticsSummary(rawOverview);
+  const financialSummary = mapFinancialPosition(financialPosition);
+  const organizationResponse = mapOrganizationResponse(organization);
+
+  return {
+    organization: organizationResponse,
+    summary: {
+      totalEvents: Number(analyticsSummary.events || 0),
+      currentEvents: Number(currentEvents || 0),
+      ticketsSold: Number(analyticsSummary.ticketsSold || 0),
+      grossTicketSales: Number(analyticsSummary.grossSales || 0),
+      availableBalance: Number(financialSummary.availableBalance || 0),
+      pendingWithdrawals: Number(financialSummary.pendingWithdrawals || 0),
+      totalWithdrawn: Number(financialSummary.completedWithdrawals || 0),
+      currency: financialSummary.currency || analyticsSummary.currency || DEFAULT_CURRENCY,
+    },
+    overview: {
+      ...analyticsSummary,
+      financialSummary,
+    },
+    events: {
+      items: (eventPerformance.items || []).map(mapOrganizationEventPerformance),
+      pagination: buildPaginationMeta(eventPerformance.totalItems || 0, eventPage),
+    },
+    ticketSales: {
+      items: sales.map(mapOrderResponse),
+      pagination: buildPaginationMeta(salesTotal, salesPage),
+    },
+    finance: {
+      ...financialSummary,
+      withdrawals: withdrawals.map(mapFinanceWithdrawal),
+      pagination: buildPaginationMeta(withdrawalsTotal, withdrawalPage),
+    },
+    members: {
+      items: members.map((member) => mapOrganizationMember(member, organization)),
+      pagination: buildPaginationMeta(membersTotal, memberPage),
+    },
+    activity: buildOrganizationDetailsActivity(
+      organization,
+      recentMembers,
+      recentEvents,
+      recentOrders,
+      recentWithdrawals
+    ),
   };
 }
 

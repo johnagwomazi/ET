@@ -40,6 +40,7 @@ const CustomerHistoryPage = lazy(() => import("../pages/customer/CustomerHistory
 const SuperAdminRolesPermissionsPage = lazy(() => import("../pages/super-admin/SuperAdminRolesPermissionsPage"));
 const SuperAdminDashboardPage = lazy(() => import("../pages/super-admin/SuperAdminDashboardPage"));
 const OrganizationsPage = lazy(() => import("../pages/super-admin/OrganizationsPage"));
+const OrganizationDetailsPage = lazy(() => import("../pages/super-admin/OrganizationDetailsPage"));
 const UsersPage = lazy(() => import("../pages/super-admin/UsersPage"));
 const WithdrawalsPage = lazy(() => import("../pages/super-admin/WithdrawalsPage"));
 const OrganizationAnalyticsPage = lazy(() => import("../pages/analytics/OrganizationAnalyticsPage"));
@@ -337,6 +338,10 @@ const router = createBrowserRouter([
               {
                 path: ROUTE_PATHS.SUPER_ADMIN_ORGANIZATIONS,
                 element: <OrganizationsPage />,
+              },
+              {
+                path: ROUTE_PATHS.SUPER_ADMIN_ORGANIZATION_DETAILS,
+                element: <OrganizationDetailsPage />,
               },
               {
                 path: ROUTE_PATHS.SUPER_ADMIN_USERS,

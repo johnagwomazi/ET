@@ -40,6 +40,26 @@ export async function getOrganizationById(req, res) {
   }
 }
 
+export async function getOrganizationDetails(req, res) {
+  try {
+    const result = await organizationService.getOrganizationDetails(
+      req.params.organizationId,
+      req.query
+    );
+
+    if (result.error) {
+      return sendServiceError(res, result);
+    }
+
+    return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
+  } catch (error) {
+    console.log(error);
+    console.log("error in organization controller");
+
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
+  }
+}
+
 export async function approveOrganization(req, res) {
   try {
     const result = await organizationService.approveOrganization(req.params.organizationId, req.auth.userId);

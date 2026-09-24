@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import Card from "../../components/ui/Card";
 import EmptyState from "../../components/common/EmptyState";
@@ -10,17 +11,15 @@ import DataTable from "../../components/dashboard/DataTable";
 import StatusBadge from "../../components/dashboard/StatusBadge";
 import Avatar from "../../components/dashboard/Avatar";
 import ActionMenu from "../../components/dashboard/ActionMenu";
-import Drawer from "../../components/layout/DashboardDrawer";
 import ConfirmationDialog from "../../components/dashboard/ConfirmationDialog";
 import OrganizationsMobileCards from "../../components/super-admin/OrganizationsMobileCards";
-import Button from "../../components/ui/Button";
-import { Skeleton, SkeletonText } from "../../components/common/Skeleton";
 import { formatDate, formatDateTime } from "../../utils/formatters";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { ORGANIZATION_STATUS_META } from "../../constants/dashboard.constants";
 import { useOrganizationStore } from "../../store/useOrganizationStore";
 import { getOrganizationAvailableActions } from "../../utils/dashboardActions";
-import { Building2, Check, Clock3, Eye, RotateCcw, ShieldAlert, ShieldOff, X } from "lucide-react";
+import { ROUTE_PATHS } from "../../routes/routePaths";
+import { Check, Eye, RotateCcw, ShieldAlert, ShieldOff, X } from "lucide-react";
 
 const TABLE_QUERY_LIMIT = 1000;
 
@@ -94,16 +93,13 @@ function buildActionItems(organization, handlers) {
 }
 
 function OrganizationsPage() {
+  const navigate = useNavigate();
   const organizations = useOrganizationStore((state) => state.organizations);
-  const selectedOrganization = useOrganizationStore((state) => state.selectedOrganization);
   const query = useOrganizationStore((state) => state.query);
   const isLoading = useOrganizationStore((state) => state.isLoading);
-  const isDetailLoading = useOrganizationStore((state) => state.isDetailLoading);
   const isMutating = useOrganizationStore((state) => state.isMutating);
   const error = useOrganizationStore((state) => state.error);
-  const detailError = useOrganizationStore((state) => state.detailError);
   const fetchOrganizations = useOrganizationStore((state) => state.fetchOrganizations);
-  const fetchOrganizationById = useOrganizationStore((state) => state.fetchOrganizationById);
   const setSelectedOrganization = useOrganizationStore((state) => state.setSelectedOrganization);
   const approveOrganization = useOrganizationStore((state) => state.approveOrganization);
   const rejectOrganization = useOrganizationStore((state) => state.rejectOrganization);
@@ -113,7 +109,6 @@ function OrganizationsPage() {
 
   const [searchValue, setSearchValue] = useState(query.search || "");
   const [activeDialog, setActiveDialog] = useState(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const didLoadRef = useRef(false);
 
   const debouncedSearch = useDebouncedValue(searchValue, 350);
@@ -209,13 +204,8 @@ function OrganizationsPage() {
     await fetchOrganizations(overrides);
   }
 
-  async function handleViewOrganization(organization) {
-    try {
-      await fetchOrganizationById(organization._id);
-      setDrawerOpen(true);
-    } catch (error) {
-      toast.error(error.message || "Unable to load organization details");
-    }
+  function handleViewOrganization(organization) {
+    navigate(`${ROUTE_PATHS.SUPER_ADMIN_ORGANIZATIONS}/${organization._id}`);
   }
 
   function handleOpenApprove(organization) {
@@ -292,7 +282,6 @@ function OrganizationsPage() {
       }
 
       setActiveDialog(null);
-      setDrawerOpen(false);
       await refreshOrganizations();
     } catch (error) {
       toast.error(error.message || "Action failed");
@@ -302,9 +291,6 @@ function OrganizationsPage() {
   function closeDialog() {
     setActiveDialog(null);
   }
-
-  const drawerOrganization = selectedOrganization || null;
-  const currentOrganization = selectedOrganization || drawerOrganization;
 
   if (error && organizations.length === 0) {
     return (
@@ -409,89 +395,6 @@ function OrganizationsPage() {
         }
       />
 
-      <Drawer
-        open={drawerOpen}
-        title={currentOrganization ? currentOrganization.organizationName : "Organization details"}
-        subtitle={currentOrganization?.businessEmail || "Organization review summary"}
-        onClose={() => {
-          setDrawerOpen(false);
-          setSelectedOrganization(null);
-        }}
-        footer={
-          <div className="flex flex-wrap gap-2">
-            {currentOrganization ? (
-              <>
-                {getOrganizationAvailableActions(currentOrganization).includes("approve") ? (
-                  <Button onClick={() => handleOpenApprove(currentOrganization)} isLoading={isMutating}>
-                    Approve
-                  </Button>
-                ) : null}
-                {getOrganizationAvailableActions(currentOrganization).includes("reject") ? (
-                  <Button variant="secondary" onClick={() => handleOpenReject(currentOrganization)} isLoading={isMutating}>
-                    Reject
-                  </Button>
-                ) : null}
-                {getOrganizationAvailableActions(currentOrganization).includes("suspend") ? (
-                  <Button variant="secondary" onClick={() => handleOpenSuspend(currentOrganization)} isLoading={isMutating}>
-                    Suspend
-                  </Button>
-                ) : null}
-                {getOrganizationAvailableActions(currentOrganization).includes("reactivate") ? (
-                  <Button variant="secondary" onClick={() => handleOpenReactivate(currentOrganization)} isLoading={isMutating}>
-                    Reactivate
-                  </Button>
-                ) : null}
-              </>
-            ) : null}
-          </div>
-        }
-      >
-        {isDetailLoading ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-16 w-16 rounded-2xl" />
-              <div className="space-y-2">
-                <SkeletonText className="h-4 w-40" />
-                <SkeletonText className="h-3 w-32" />
-              </div>
-            </div>
-            <Skeleton className="h-40 rounded-2xl" />
-          </div>
-        ) : detailError ? (
-          <ErrorState title="Unable to load details" message={detailError} onRetry={() => handleViewOrganization(selectedOrganization)} />
-        ) : currentOrganization ? (
-          <div className="space-y-6">
-            <div className="flex items-center gap-4">
-              <Avatar name={currentOrganization.organizationName} src={currentOrganization.logo?.url} size="lg" />
-              <div>
-                <p className="text-lg font-semibold text-white">{currentOrganization.organizationName}</p>
-                <p className="text-sm text-slate-400">{currentOrganization.businessEmail}</p>
-                <div className="mt-2">
-                  <StatusBadge status={currentOrganization.status} />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <DetailField label="Admin" value={currentOrganization.primaryAdmin ? `${currentOrganization.primaryAdmin.firstName} ${currentOrganization.primaryAdmin.lastName}` : "Unassigned"} />
-              <DetailField label="Phone" value={currentOrganization.businessPhone || "Not provided"} />
-              <DetailField label="Website" value={currentOrganization.website || "Placeholder"} />
-              <DetailField label="Address" value={currentOrganization.address || "Placeholder"} />
-            </div>
-
-            <Card className="border-slate-800/70 bg-slate-950/70 p-4">
-              <p className="text-sm font-semibold text-white">Approval History</p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <HistoryItem label="Approved at" value={formatDateTime(currentOrganization.approvedAt)} />
-                <HistoryItem label="Rejected at" value={formatDateTime(currentOrganization.rejectedAt)} />
-                <HistoryItem label="Suspended at" value={formatDateTime(currentOrganization.suspendedAt)} />
-                <HistoryItem label="Reactivated at" value={formatDateTime(currentOrganization.reactivatedAt)} />
-              </div>
-            </Card>
-          </div>
-        ) : null}
-      </Drawer>
-
       <ConfirmationDialog
         open={Boolean(activeDialog)}
         title={
@@ -535,24 +438,6 @@ function OrganizationsPage() {
         onCancel={closeDialog}
         onConfirm={submitOrganizationAction}
       />
-    </div>
-  );
-}
-
-function DetailField({ label, value }) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className="mt-2 text-sm text-slate-200">{value}</p>
-    </div>
-  );
-}
-
-function HistoryItem({ label, value }) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
-      <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-sm text-slate-200">{value}</p>
     </div>
   );
 }

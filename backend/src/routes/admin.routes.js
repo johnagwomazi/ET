@@ -11,6 +11,7 @@ import { USER_ROLES } from "../constants/roles.constants.js";
 import {
   adminLoginSchema,
   organizationIdParamSchema,
+  organizationDetailsQuerySchema,
   organizationListQuerySchema,
   reactivateOrganizationSchema,
   rejectOrganizationBodySchema,
@@ -73,6 +74,12 @@ adminRouter.get(
   "/organizations/:organizationId",
   validate(organizationIdParamSchema, "params"),
   organizationController.getOrganizationById
+);
+adminRouter.get(
+  "/organizations/:organizationId/details",
+  validate(organizationIdParamSchema, "params"),
+  validate(organizationDetailsQuerySchema, "query"),
+  organizationController.getOrganizationDetails
 );
 adminRouter.patch(
   "/organizations/:organizationId/approve",

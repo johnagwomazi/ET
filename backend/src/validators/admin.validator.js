@@ -46,6 +46,14 @@ export const organizationListQuerySchema = z.object({
   sortOrder: sortOrderSchema,
 });
 
+export const organizationDetailsQuerySchema = z.object({
+  eventsPage: pageSchema,
+  salesPage: pageSchema,
+  withdrawalsPage: pageSchema,
+  membersPage: pageSchema,
+  limit: z.coerce.number().int().positive().max(50).optional(),
+});
+
 export const userListQuerySchema = z.object({
   search: z.string().trim().optional(),
   role: z.string().trim().optional(),
