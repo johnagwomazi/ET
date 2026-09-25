@@ -41,16 +41,8 @@ function getLifecycleStatus(organization) {
     return ORGANIZATION_LIFECYCLE_STATUS.SUSPENDED;
   }
 
-  if (organization.status === "APPROVED") {
+  if (["ACTIVE", "APPROVED", "PENDING", "REJECTED"].includes(organization.status)) {
     return ORGANIZATION_LIFECYCLE_STATUS.ACTIVE;
-  }
-
-  if (organization.status === "PENDING") {
-    return ORGANIZATION_LIFECYCLE_STATUS.PENDING;
-  }
-
-  if (organization.status === "REJECTED") {
-    return ORGANIZATION_LIFECYCLE_STATUS.REJECTED;
   }
 
   return ORGANIZATION_LIFECYCLE_STATUS.UNKNOWN;

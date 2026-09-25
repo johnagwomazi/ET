@@ -8,7 +8,7 @@ function apiResponse(data) {
   return { success: true, message: "Operation successful", data };
 }
 
-function detailsPayload(status = "APPROVED") {
+function detailsPayload(status = "ACTIVE") {
   const organization = {
     _id: organizationId,
     organizationName: "Acme Events",
@@ -59,7 +59,7 @@ function detailsPayload(status = "APPROVED") {
 
 async function installMocks(page) {
   const requests = [];
-  let status = "APPROVED";
+  let status = "ACTIVE";
 
   await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
     const request = route.request();
@@ -82,6 +82,10 @@ async function installMocks(page) {
       status = "SUSPENDED";
       return route.fulfill({ json: apiResponse({ organization: detailsPayload(status).organization }) });
     }
+    if (path === `/admin/organizations/${organizationId}/reactivate` && request.method() === "PATCH") {
+      status = "ACTIVE";
+      return route.fulfill({ json: apiResponse({ organization: detailsPayload(status).organization }) });
+    }
 
     return route.fulfill({ status: 404, json: { success: false, message: `Unexpected request: ${request.method()} ${path}` } });
   });
@@ -99,6 +103,8 @@ test("View opens the full organization page with real sections and preserved sus
   await expect(page).toHaveURL(new RegExp(`/organizations/${organizationId}$`));
   await expect(page.getByRole("heading", { name: "Acme Events" })).toBeVisible();
   await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reject", exact: true })).toHaveCount(0);
   await expect(page.getByText("Total Events")).toBeVisible();
   await expect(page.getByText("NGN 3,000")).toBeVisible();
 
@@ -121,6 +127,12 @@ test("View opens the full organization page with real sections and preserved sus
 
   const suspendRequest = requests.find((request) => request.path.endsWith("/suspend"));
   expect(suspendRequest.body).toEqual({ suspensionReason: "Policy review" });
+
+  await page.getByRole("button", { name: "Reactivate", exact: true }).click();
+  await page.getByRole("button", { name: "Reactivate", exact: true }).last().click();
+  await expect(page.getByRole("button", { name: "Suspend", exact: true })).toBeVisible();
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  expect(requests.some((request) => request.path.endsWith("/reactivate"))).toBe(true);
 });
 
 test("organization details remains usable on mobile", async ({ page }) => {

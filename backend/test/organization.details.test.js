@@ -161,4 +161,6 @@ test("organization details returns not found and validates bounded pagination", 
 test("Super Admin router exposes the protected organization details path", () => {
   const paths = adminRoutes.stack.filter((layer) => layer.route).map((layer) => layer.route.path);
   assert.ok(paths.includes("/organizations/:organizationId/details"));
+  assert.equal(paths.includes("/organizations/:organizationId/approve"), false);
+  assert.equal(paths.includes("/organizations/:organizationId/reject"), false);
 });

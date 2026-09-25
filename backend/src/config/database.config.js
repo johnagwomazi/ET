@@ -14,6 +14,16 @@ let isConnected = false;
 mongoose.set("sanitizeFilter", true);
 mongoose.set("strictQuery", true);
 
+export async function activateLegacyOrganizations(organizationModel = Organization) {
+  return organizationModel.updateMany(
+    {
+      isDeleted: false,
+      status: mongoose.trusted({ $in: LEGACY_ACTIVE_ORGANIZATION_STATUSES }),
+    },
+    { $set: { status: ORGANIZATION_STATUS.ACTIVE } }
+  );
+}
+
 export async function connectDatabase() {
   if (!envConfig.mongoUri) {
     throw new Error("MONGODB_URI is required");
@@ -28,13 +38,7 @@ export async function connectDatabase() {
   }
 
   await mongoose.connect(envConfig.mongoUri);
-  const organizationMigration = await Organization.updateMany(
-    {
-      isDeleted: false,
-      status: { $in: LEGACY_ACTIVE_ORGANIZATION_STATUSES },
-    },
-    { $set: { status: ORGANIZATION_STATUS.ACTIVE } }
-  );
+  const organizationMigration = await activateLegacyOrganizations();
   await EventAttendance.createIndexes();
   isConnected = true;
 

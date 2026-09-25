@@ -14,7 +14,6 @@ import {
   organizationDetailsQuerySchema,
   organizationListQuerySchema,
   reactivateOrganizationSchema,
-  rejectOrganizationBodySchema,
   suspendOrganizationBodySchema,
   reactivateUserSchema,
   suspendUserSchema,
@@ -80,17 +79,6 @@ adminRouter.get(
   validate(organizationIdParamSchema, "params"),
   validate(organizationDetailsQuerySchema, "query"),
   organizationController.getOrganizationDetails
-);
-adminRouter.patch(
-  "/organizations/:organizationId/approve",
-  validate(organizationIdParamSchema, "params"),
-  organizationController.approveOrganization
-);
-adminRouter.patch(
-  "/organizations/:organizationId/reject",
-  validate(organizationIdParamSchema, "params"),
-  validate(rejectOrganizationBodySchema),
-  organizationController.rejectOrganization
 );
 adminRouter.patch(
   "/organizations/:organizationId/suspend",

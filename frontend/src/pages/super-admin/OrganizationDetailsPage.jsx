@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import {
   Activity, Banknote, Building2, CalendarDays, Check, Clock3, Landmark, Mail,
   MapPin, Phone, ReceiptText, RotateCcw, ShieldAlert, Ticket, Trash2,
-  TrendingUp, Users, WalletCards, X,
+  TrendingUp, Users, WalletCards,
 } from "lucide-react";
 import Avatar from "../../components/dashboard/Avatar";
 import ConfirmationDialog from "../../components/dashboard/ConfirmationDialog";
@@ -35,7 +35,7 @@ function personName(person) {
 }
 
 function statusLabel(status) {
-  if (status === "APPROVED") return "Active";
+  if (["ACTIVE", "APPROVED", "PENDING", "REJECTED"].includes(status)) return "Active";
   if (status === "SUSPENDED") return "Suspended";
   return undefined;
 }
@@ -233,13 +233,7 @@ function OrganizationDetailsPage() {
     if (!activeDialog) return;
     setIsMutating(true);
     try {
-      if (activeDialog === "approve") {
-        await organizationService.approveOrganization(organizationId);
-        toast.success("Organization approved successfully");
-      } else if (activeDialog === "reject") {
-        await organizationService.rejectOrganization(organizationId, { rejectionReason: reason });
-        toast.success("Organization rejected successfully");
-      } else if (activeDialog === "suspend") {
+      if (activeDialog === "suspend") {
         await organizationService.suspendOrganization(organizationId, { suspensionReason: reason });
         toast.success("Organization suspended successfully");
       } else if (activeDialog === "reactivate") {
@@ -282,8 +276,6 @@ function OrganizationDetailsPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            {actions.includes("approve") ? <Button size="sm" onClick={() => setActiveDialog("approve")}><Check className="h-4 w-4" />Approve</Button> : null}
-            {actions.includes("reject") ? <Button size="sm" variant="danger" onClick={() => setActiveDialog("reject")}><X className="h-4 w-4" />Reject</Button> : null}
             {actions.includes("suspend") ? <Button size="sm" variant="secondary" onClick={() => setActiveDialog("suspend")}><ShieldAlert className="h-4 w-4" />Suspend</Button> : null}
             {actions.includes("reactivate") ? <Button size="sm" onClick={() => setActiveDialog("reactivate")}><RotateCcw className="h-4 w-4" />Reactivate</Button> : null}
             {actions.includes("delete") ? <Button size="sm" variant="danger" onClick={() => setActiveDialog("delete")}><Trash2 className="h-4 w-4" />Delete</Button> : null}
@@ -324,11 +316,11 @@ function OrganizationDetailsPage() {
 
       <ConfirmationDialog
         open={Boolean(activeDialog)}
-        title={activeDialog === "approve" ? "Approve organization" : activeDialog === "reject" ? "Reject organization" : activeDialog === "suspend" ? "Suspend organization" : activeDialog === "reactivate" ? "Reactivate organization" : "Delete organization"}
-        message={activeDialog === "approve" ? "This will move the organization into the approved state." : activeDialog === "reject" ? "Provide a reason so the organization knows what needs to be addressed." : activeDialog === "suspend" ? "Suspended organizations cannot access the platform until they are reactivated." : activeDialog === "reactivate" ? "Reactivate this organization and restore access." : "This will permanently mark the organization as deleted."}
+        title={activeDialog === "suspend" ? "Suspend organization" : activeDialog === "reactivate" ? "Reactivate organization" : "Delete organization"}
+        message={activeDialog === "suspend" ? "Suspended organizations cannot access the platform until they are reactivated." : activeDialog === "reactivate" ? "Reactivate this organization and restore access." : "This will permanently mark the organization as deleted."}
         confirmText={activeDialog ? `${activeDialog.charAt(0).toUpperCase()}${activeDialog.slice(1)}` : "Confirm"}
-        tone={activeDialog === "approve" || activeDialog === "reactivate" ? "primary" : "danger"}
-        requiresReason={activeDialog === "reject" || activeDialog === "suspend"}
+        tone={activeDialog === "reactivate" ? "primary" : "danger"}
+        requiresReason={activeDialog === "suspend"}
         reasonLabel="Reason"
         reasonPlaceholder="Tell the organization why this decision was made..."
         isLoading={isMutating}

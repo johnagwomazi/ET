@@ -65,7 +65,7 @@ async function requireOrganizationAdmin(organizationId, actorUserId, dependencie
   if (getDocumentId(actor.organization) !== getDocumentId(organizationId)) {
     return serviceError("You cannot access another organization", HTTP_STATUS.FORBIDDEN);
   }
-  if (!isActiveOrganization(organization)) {
+  if (!isOrganizationActive(organization)) {
     return serviceError("Your organization is not active", HTTP_STATUS.FORBIDDEN);
   }
 
@@ -339,7 +339,7 @@ export async function requestWithdrawal(organizationId, actorUserId, payload, de
   let createdWithdrawal;
   try {
     const organization = lock.organization || context.organization;
-    if (!isActiveOrganization(organization) || !hasPayoutDestination(organization)) {
+    if (!isOrganizationActive(organization) || !hasPayoutDestination(organization)) {
       return serviceError("Organization payout eligibility changed", HTTP_STATUS.CONFLICT);
     }
     const position = await calculateOrganizationFinancialPosition(organizationId, dependencies);

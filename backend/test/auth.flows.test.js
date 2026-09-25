@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 
 import envConfig from "../src/config/env.config.js";
 import { ACCOUNT_STATUS } from "../src/constants/accountStatus.constants.js";
+import { ORGANIZATION_STATUS } from "../src/constants/organizationStatus.constants.js";
 import { USER_ROLES } from "../src/constants/roles.constants.js";
 import authRoutes from "../src/routes/auth.routes.js";
 import * as authService from "../src/services/auth.service.js";
@@ -353,6 +354,7 @@ test("Google login reuses an existing account and new customer/organizer signup 
     assert.equal(createdOrganizer.role, USER_ROLES.ADMIN);
     assert.equal(createdOrganizer.isEmailVerified, true);
     assert.equal(createdOrganization.organizationName, "Ola Events");
+    assert.equal(createdOrganization.status, ORGANIZATION_STATUS.ACTIVE);
     assert.equal(googleRegistrationSchema.safeParse({
       completionToken: organizerStart.completionToken,
       accountType: USER_ROLES.ADMIN,

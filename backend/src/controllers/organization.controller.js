@@ -60,44 +60,6 @@ export async function getOrganizationDetails(req, res) {
   }
 }
 
-export async function approveOrganization(req, res) {
-  try {
-    const result = await organizationService.approveOrganization(req.params.organizationId, req.auth.userId);
-
-    if (result.error) {
-      return sendServiceError(res, result);
-    }
-
-    return res.status(HTTP_STATUS.OK).json(successResponse("Organization approved successfully", result));
-  } catch (error) {
-    console.log(error);
-    console.log("error in organization controller");
-
-    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
-  }
-}
-
-export async function rejectOrganization(req, res) {
-  try {
-    const result = await organizationService.rejectOrganization(
-      req.params.organizationId,
-      req.auth.userId,
-      req.body.rejectionReason
-    );
-
-    if (result.error) {
-      return sendServiceError(res, result);
-    }
-
-    return res.status(HTTP_STATUS.OK).json(successResponse("Organization rejected successfully", result));
-  } catch (error) {
-    console.log(error);
-    console.log("error in organization controller");
-
-    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
-  }
-}
-
 export async function suspendOrganization(req, res) {
   try {
     const result = await organizationService.suspendOrganization(

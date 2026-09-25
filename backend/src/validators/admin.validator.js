@@ -72,10 +72,6 @@ export const userIdParamSchema = z.object({
   userId: objectIdSchema,
 });
 
-export const rejectOrganizationBodySchema = z.object({
-  rejectionReason: z.string().trim().min(1, "Rejection reason is required"),
-});
-
 export const suspendOrganizationBodySchema = z.object({
   suspensionReason: z.string().trim().min(1, "Suspension reason is required"),
 });

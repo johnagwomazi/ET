@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Eye, RotateCcw, ShieldAlert, ShieldOff, X } from "lucide-react";
+import { Eye, RotateCcw, ShieldAlert, ShieldOff } from "lucide-react";
 import Card from "../ui/Card";
 import Avatar from "../dashboard/Avatar";
 import StatusBadge from "../dashboard/StatusBadge";
@@ -18,23 +18,6 @@ function buildOrganizationActionItems(organization, handlers) {
       label: "View",
       icon: Eye,
       onClick: () => handlers.onView(organization),
-    });
-  }
-
-  if (availableActions.includes("approve")) {
-    items.push({
-      label: "Approve",
-      icon: Check,
-      onClick: () => handlers.onApprove(organization),
-    });
-  }
-
-  if (availableActions.includes("reject")) {
-    items.push({
-      label: "Reject",
-      icon: X,
-      tone: "danger",
-      onClick: () => handlers.onReject(organization),
     });
   }
 
@@ -83,8 +66,6 @@ function OrganizationsMobileCards({
   organizations = [],
   isLoading = false,
   onView,
-  onApprove,
-  onReject,
   onSuspend,
   onReactivate,
   onDelete,
@@ -124,8 +105,6 @@ function OrganizationsMobileCards({
   const activeActionItems = activeOrganization
     ? buildOrganizationActionItems(activeOrganization, {
         onView,
-        onApprove,
-        onReject,
         onSuspend,
         onReactivate,
         onDelete,

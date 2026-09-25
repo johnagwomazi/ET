@@ -141,68 +141,6 @@ export const useOrganizationStore = create((set, get) => ({
     });
   },
 
-  async approveOrganization(organizationId) {
-    set({ isMutating: true, error: null });
-
-    try {
-      const response = await organizationService.approveOrganization(organizationId);
-      const updatedOrganization = response?.organization || null;
-
-      set({
-        organizations: updatedOrganization
-          ? updateOrganizationList(get().organizations, updatedOrganization)
-          : get().organizations,
-        selectedOrganization:
-          get().selectedOrganization && get().selectedOrganization._id === organizationId
-            ? updatedOrganization
-            : get().selectedOrganization,
-        isMutating: false,
-      });
-
-      return updatedOrganization;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Something went wrong";
-
-      set({
-        isMutating: false,
-        error: message,
-      });
-
-      throw error;
-    }
-  },
-
-  async rejectOrganization(organizationId, payload) {
-    set({ isMutating: true, error: null });
-
-    try {
-      const response = await organizationService.rejectOrganization(organizationId, payload);
-      const updatedOrganization = response?.organization || null;
-
-      set({
-        organizations: updatedOrganization
-          ? updateOrganizationList(get().organizations, updatedOrganization)
-          : get().organizations,
-        selectedOrganization:
-          get().selectedOrganization && get().selectedOrganization._id === organizationId
-            ? updatedOrganization
-            : get().selectedOrganization,
-        isMutating: false,
-      });
-
-      return updatedOrganization;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Something went wrong";
-
-      set({
-        isMutating: false,
-        error: message,
-      });
-
-      throw error;
-    }
-  },
-
   async suspendOrganization(organizationId, payload) {
     set({ isMutating: true, error: null });
 

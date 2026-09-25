@@ -28,18 +28,6 @@ export async function getOrganizationDetails(organizationId, query = {}, options
   return unwrapResponse(response);
 }
 
-export async function approveOrganization(organizationId) {
-  const response = await patch(buildOrganizationPath(`/${organizationId}/approve`), {});
-
-  return unwrapResponse(response);
-}
-
-export async function rejectOrganization(organizationId, payload) {
-  const response = await patch(buildOrganizationPath(`/${organizationId}/reject`), payload);
-
-  return unwrapResponse(response);
-}
-
 export async function suspendOrganization(organizationId, payload) {
   const response = await patch(buildOrganizationPath(`/${organizationId}/suspend`), payload);
 

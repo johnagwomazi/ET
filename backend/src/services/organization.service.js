@@ -21,6 +21,7 @@ import {
   mapOrganizationResponse,
   mapOrganizationSettingsResponse,
 } from "../utils/organizationResponse.util.js";
+import { isOrganizationActive } from "../utils/organizationStatus.util.js";
 
 const organizationDetailsDependencies = {
   analyticsRepository,
@@ -38,7 +39,9 @@ function buildOrganizationFilter(query = {}) {
   };
 
   if (query.status) {
-    filter.status = query.status;
+    filter.status = query.status === ORGANIZATION_STATUS.ACTIVE
+      ? trustedOperator({ $in: [ORGANIZATION_STATUS.ACTIVE, "PENDING", "APPROVED", "REJECTED"] })
+      : query.status;
   }
 
   if (query.search) {
@@ -53,40 +56,12 @@ function buildOrganizationFilter(query = {}) {
   return filter;
 }
 
-function canApproveOrganization(organization) {
-  return organization.status === ORGANIZATION_STATUS.PENDING || organization.status === ORGANIZATION_STATUS.REJECTED;
-}
-
-function canRejectOrganization(organization) {
-  return organization.status === ORGANIZATION_STATUS.PENDING;
-}
-
 function canSuspendOrganization(organization) {
-  return organization.status === ORGANIZATION_STATUS.APPROVED;
+  return isOrganizationActive(organization);
 }
 
 function canReactivateOrganization(organization) {
   return organization.status === ORGANIZATION_STATUS.SUSPENDED;
-}
-
-function buildApprovalMetadata(actorUserId) {
-  return {
-    approvedBy: actorUserId,
-    approvedAt: new Date(),
-    rejectedBy: null,
-    rejectedAt: null,
-    rejectionReason: "",
-    status: ORGANIZATION_STATUS.APPROVED,
-  };
-}
-
-function buildRejectionMetadata(actorUserId, rejectionReason) {
-  return {
-    rejectedBy: actorUserId,
-    rejectedAt: new Date(),
-    rejectionReason,
-    status: ORGANIZATION_STATUS.REJECTED,
-  };
 }
 
 function buildSuspensionMetadata(actorUserId, suspensionReason) {
@@ -102,7 +77,7 @@ function buildReactivationMetadata(actorUserId) {
   return {
     reactivatedBy: actorUserId,
     reactivatedAt: new Date(),
-    status: ORGANIZATION_STATUS.APPROVED,
+    status: ORGANIZATION_STATUS.ACTIVE,
   };
 }
 
@@ -200,20 +175,6 @@ function buildRecentActivity(organization, recentMemberDocuments) {
     "Organization created",
     organization.createdAt,
     "The organization record was created."
-  );
-  addActivityItem(
-    activityItems,
-    "ORGANIZATION_APPROVED",
-    "Organization approved",
-    organization.approvedAt,
-    "The organization was approved by a super admin."
-  );
-  addActivityItem(
-    activityItems,
-    "ORGANIZATION_REJECTED",
-    "Organization rejected",
-    organization.rejectedAt,
-    "The organization was rejected by a super admin."
   );
   addActivityItem(
     activityItems,
@@ -516,58 +477,6 @@ export async function getOrganizationDetails(
   };
 }
 
-export async function approveOrganization(organizationId, actorUserId) {
-  const organization = await organizationRepository.findOrganizationDetailsById(organizationId);
-
-  if (!organization) {
-    return {
-      error: "Organization not found",
-      statusCode: HTTP_STATUS.NOT_FOUND,
-    };
-  }
-
-  if (!canApproveOrganization(organization)) {
-    return {
-      error: "This organization cannot be approved from its current state",
-      statusCode: HTTP_STATUS.BAD_REQUEST,
-    };
-  }
-
-  const updatedOrganization = await organizationRepository.updateOrganizationStatusById(organizationId, {
-    ...buildApprovalMetadata(actorUserId),
-  });
-
-  return {
-    organization: mapOrganizationResponse(updatedOrganization),
-  };
-}
-
-export async function rejectOrganization(organizationId, actorUserId, rejectionReason) {
-  const organization = await organizationRepository.findOrganizationDetailsById(organizationId);
-
-  if (!organization) {
-    return {
-      error: "Organization not found",
-      statusCode: HTTP_STATUS.NOT_FOUND,
-    };
-  }
-
-  if (!canRejectOrganization(organization)) {
-    return {
-      error: "Only pending organizations can be rejected",
-      statusCode: HTTP_STATUS.BAD_REQUEST,
-    };
-  }
-
-  const updatedOrganization = await organizationRepository.updateOrganizationStatusById(organizationId, {
-    ...buildRejectionMetadata(actorUserId, rejectionReason),
-  });
-
-  return {
-    organization: mapOrganizationResponse(updatedOrganization),
-  };
-}
-
 export async function suspendOrganization(organizationId, actorUserId, suspensionReason) {
   const organization = await organizationRepository.findOrganizationDetailsById(organizationId);
 
@@ -580,7 +489,7 @@ export async function suspendOrganization(organizationId, actorUserId, suspensio
 
   if (!canSuspendOrganization(organization)) {
     return {
-      error: "Only approved organizations can be suspended",
+      error: "Only active organizations can be suspended",
       statusCode: HTTP_STATUS.BAD_REQUEST,
     };
   }

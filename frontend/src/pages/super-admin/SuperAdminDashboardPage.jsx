@@ -27,8 +27,8 @@ const statCards = [
     icon: Building2,
   },
   {
-    key: DASHBOARD_STAT_KEYS.PENDING_ORGANIZATIONS,
-    label: "Pending Organizations",
+    key: DASHBOARD_STAT_KEYS.ACTIVE_ORGANIZATIONS,
+    label: "Active Organizations",
     icon: LayoutDashboard,
   },
   {
@@ -73,7 +73,7 @@ function DashboardListItem({ title, subtitle, status, meta, avatarName, avatarSr
 function SuperAdminDashboardPage() {
   const navigate = useNavigate();
   const overview = useSuperAdminDashboardStore((state) => state.overview);
-  const pendingOrganizations = useSuperAdminDashboardStore((state) => state.pendingOrganizations);
+  const suspendedOrganizations = useSuperAdminDashboardStore((state) => state.suspendedOrganizations);
   const isLoading = useSuperAdminDashboardStore((state) => state.isLoading);
   const error = useSuperAdminDashboardStore((state) => state.error);
   const fetchDashboard = useSuperAdminDashboardStore((state) => state.fetchDashboard);
@@ -105,7 +105,7 @@ function SuperAdminDashboardPage() {
       <SectionHeader
         eyebrow="Platform overview"
         title="Super Admin Dashboard"
-        description="Track platform health, review organization approvals, and monitor high-level growth signals from one place."
+        description="Track platform health, manage organizations, and monitor high-level growth signals from one place."
         actions={[
           {
             label: "Refresh",
@@ -170,15 +170,15 @@ function SuperAdminDashboardPage() {
 
         <Card className="border-slate-800/70 bg-slate-950/85">
           <SectionHeader
-            eyebrow="Approval queue"
-            title="Pending Organizations"
-            description="Organizations waiting for Super Admin review."
+            eyebrow="Access management"
+            title="Suspended Organizations"
+            description="Organizations whose platform access is currently restricted."
             className="mb-5"
           />
 
           <div className="space-y-3">
-            {pendingOrganizations.length > 0 ? (
-              pendingOrganizations.map((organization) => (
+            {suspendedOrganizations.length > 0 ? (
+              suspendedOrganizations.map((organization) => (
                 <DashboardListItem
                   key={organization._id}
                   title={organization.organizationName}
@@ -187,12 +187,12 @@ function SuperAdminDashboardPage() {
                   meta={formatDate(organization.createdAt)}
                   avatarName={organization.organizationName}
                   avatarSrc={organization.logo?.url}
-                  actionLabel="Review"
-                  onAction={() => navigate(ROUTE_PATHS.SUPER_ADMIN_ORGANIZATIONS)}
+                  actionLabel="Manage"
+                  onAction={() => navigate(`${ROUTE_PATHS.SUPER_ADMIN_ORGANIZATIONS}/${organization._id}`)}
                 />
               ))
             ) : (
-              <EmptyState title="No pending reviews" message="New organizations will show up here for approval." />
+              <EmptyState title="No suspended organizations" message="Suspended organizations will appear here for access management." />
             )}
           </div>
         </Card>

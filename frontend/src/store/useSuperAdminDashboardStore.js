@@ -4,7 +4,7 @@ import * as organizationService from "../services/organization.service";
 
 const initialState = {
   overview: null,
-  pendingOrganizations: [],
+  suspendedOrganizations: [],
   isLoading: false,
   error: null,
 };
@@ -20,10 +20,10 @@ export const useSuperAdminDashboardStore = create((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const [overviewResult, pendingOrganizationsResult] = await Promise.allSettled([
+      const [overviewResult, suspendedOrganizationsResult] = await Promise.allSettled([
         dashboardService.getDashboardOverview(),
         organizationService.getOrganizations({
-          status: "PENDING",
+          status: "SUSPENDED",
           page: 1,
           limit: 5,
           sortBy: "createdAt",
@@ -32,21 +32,21 @@ export const useSuperAdminDashboardStore = create((set, get) => ({
       ]);
 
       const overview = overviewResult.status === "fulfilled" ? overviewResult.value : get().overview;
-      const pendingOrganizations =
-        pendingOrganizationsResult.status === "fulfilled"
-          ? pendingOrganizationsResult.value?.organizations || []
-          : get().pendingOrganizations;
+      const suspendedOrganizations =
+        suspendedOrganizationsResult.status === "fulfilled"
+          ? suspendedOrganizationsResult.value?.organizations || []
+          : get().suspendedOrganizations;
 
       const firstError =
         overviewResult.status === "rejected"
           ? overviewResult.reason
-          : pendingOrganizationsResult.status === "rejected"
-          ? pendingOrganizationsResult.reason
+          : suspendedOrganizationsResult.status === "rejected"
+          ? suspendedOrganizationsResult.reason
           : null;
 
       set({
         overview,
-        pendingOrganizations,
+        suspendedOrganizations,
         isLoading: false,
         error: firstError ? firstError.message || "Something went wrong" : null,
       });

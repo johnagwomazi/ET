@@ -8,12 +8,11 @@ export function getOrganizationAvailableActions(organization) {
   }
 
   switch (organization.status) {
-    case ORGANIZATION_STATUS.PENDING:
-      return ["view", "approve", "reject", "delete"];
-    case ORGANIZATION_STATUS.APPROVED:
+    case ORGANIZATION_STATUS.ACTIVE:
+    case "APPROVED":
+    case "PENDING":
+    case "REJECTED":
       return ["view", "suspend", "delete"];
-    case ORGANIZATION_STATUS.REJECTED:
-      return ["view", "approve", "delete"];
     case ORGANIZATION_STATUS.SUSPENDED:
       return ["view", "reactivate", "delete"];
     default:
@@ -37,16 +36,8 @@ export function getUserAvailableActions(user) {
   return ["view", "suspend", "delete"];
 }
 
-export function canApproveOrganization(organization) {
-  return organization?.status === ORGANIZATION_STATUS.PENDING || organization?.status === ORGANIZATION_STATUS.REJECTED;
-}
-
-export function canRejectOrganization(organization) {
-  return organization?.status === ORGANIZATION_STATUS.PENDING;
-}
-
 export function canSuspendOrganization(organization) {
-  return organization?.status === ORGANIZATION_STATUS.APPROVED;
+  return [ORGANIZATION_STATUS.ACTIVE, "APPROVED", "PENDING", "REJECTED"].includes(organization?.status);
 }
 
 export function canReactivateOrganization(organization) {

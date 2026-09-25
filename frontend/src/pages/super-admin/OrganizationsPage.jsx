@@ -19,15 +19,13 @@ import { ORGANIZATION_STATUS_META } from "../../constants/dashboard.constants";
 import { useOrganizationStore } from "../../store/useOrganizationStore";
 import { getOrganizationAvailableActions } from "../../utils/dashboardActions";
 import { ROUTE_PATHS } from "../../routes/routePaths";
-import { Check, Eye, RotateCcw, ShieldAlert, ShieldOff, X } from "lucide-react";
+import { Eye, RotateCcw, ShieldAlert, ShieldOff } from "lucide-react";
 
 const TABLE_QUERY_LIMIT = 1000;
 
 const statusOptions = [
   { value: "", label: "All statuses" },
-  { value: "PENDING", label: ORGANIZATION_STATUS_META.PENDING.label },
-  { value: "APPROVED", label: ORGANIZATION_STATUS_META.APPROVED.label },
-  { value: "REJECTED", label: ORGANIZATION_STATUS_META.REJECTED.label },
+  { value: "ACTIVE", label: ORGANIZATION_STATUS_META.ACTIVE.label },
   { value: "SUSPENDED", label: ORGANIZATION_STATUS_META.SUSPENDED.label },
 ];
 
@@ -44,23 +42,6 @@ function buildActionItems(organization, handlers) {
       label: "View",
       icon: Eye,
       onClick: () => handlers.onView(organization),
-    });
-  }
-
-  if (availableActions.includes("approve")) {
-    items.push({
-      label: "Approve",
-      icon: Check,
-      onClick: () => handlers.onApprove(organization),
-    });
-  }
-
-  if (availableActions.includes("reject")) {
-    items.push({
-      label: "Reject",
-      icon: X,
-      tone: "danger",
-      onClick: () => handlers.onReject(organization),
     });
   }
 
@@ -101,8 +82,6 @@ function OrganizationsPage() {
   const error = useOrganizationStore((state) => state.error);
   const fetchOrganizations = useOrganizationStore((state) => state.fetchOrganizations);
   const setSelectedOrganization = useOrganizationStore((state) => state.setSelectedOrganization);
-  const approveOrganization = useOrganizationStore((state) => state.approveOrganization);
-  const rejectOrganization = useOrganizationStore((state) => state.rejectOrganization);
   const suspendOrganization = useOrganizationStore((state) => state.suspendOrganization);
   const reactivateOrganization = useOrganizationStore((state) => state.reactivateOrganization);
   const deleteOrganization = useOrganizationStore((state) => state.deleteOrganization);
@@ -187,8 +166,6 @@ function OrganizationsPage() {
           <ActionMenu
             items={buildActionItems(organization, {
               onView: handleViewOrganization,
-              onApprove: handleOpenApprove,
-              onReject: handleOpenReject,
               onSuspend: handleOpenSuspend,
               onReactivate: handleOpenReactivate,
               onDelete: handleOpenDelete,
@@ -206,22 +183,6 @@ function OrganizationsPage() {
 
   function handleViewOrganization(organization) {
     navigate(`${ROUTE_PATHS.SUPER_ADMIN_ORGANIZATIONS}/${organization._id}`);
-  }
-
-  function handleOpenApprove(organization) {
-    setSelectedOrganization(organization);
-    setActiveDialog({
-      type: "approve",
-      organization,
-    });
-  }
-
-  function handleOpenReject(organization) {
-    setSelectedOrganization(organization);
-    setActiveDialog({
-      type: "reject",
-      organization,
-    });
   }
 
   function handleOpenSuspend(organization) {
@@ -257,14 +218,6 @@ function OrganizationsPage() {
 
     try {
       switch (activeDialog.type) {
-        case "approve":
-          await approveOrganization(organization._id);
-          toast.success("Organization approved successfully");
-          break;
-        case "reject":
-          await rejectOrganization(organization._id, { rejectionReason: reason });
-          toast.success("Organization rejected successfully");
-          break;
         case "suspend":
           await suspendOrganization(organization._id, { suspensionReason: reason });
           toast.success("Organization suspended successfully");
@@ -310,9 +263,9 @@ function OrganizationsPage() {
   return (
     <div className="space-y-6">
       <SectionHeader
-        eyebrow="Organization review"
+        eyebrow="Organization management"
         title="Organizations"
-        description="Search, filter, and review organization applications from a single management table."
+        description="Search, filter, and manage active or suspended organizations."
         actions={[
           {
             label: "Refresh",
@@ -382,8 +335,6 @@ function OrganizationsPage() {
         organizations={organizations}
         isLoading={isLoading}
         onView={handleViewOrganization}
-        onApprove={handleOpenApprove}
-        onReject={handleOpenReject}
         onSuspend={handleOpenSuspend}
         onReactivate={handleOpenReactivate}
         onDelete={handleOpenDelete}
@@ -398,40 +349,28 @@ function OrganizationsPage() {
       <ConfirmationDialog
         open={Boolean(activeDialog)}
         title={
-          activeDialog?.type === "approve"
-            ? "Approve organization"
-            : activeDialog?.type === "reject"
-            ? "Reject organization"
-            : activeDialog?.type === "suspend"
+          activeDialog?.type === "suspend"
             ? "Suspend organization"
             : activeDialog?.type === "reactivate"
             ? "Reactivate organization"
             : "Delete organization"
         }
         message={
-          activeDialog?.type === "approve"
-            ? "This will move the organization into the approved state."
-            : activeDialog?.type === "reject"
-            ? "Provide a reason so the organization knows what needs to be addressed."
-            : activeDialog?.type === "suspend"
+          activeDialog?.type === "suspend"
             ? "Suspended organizations cannot access the platform until they are reactivated."
             : activeDialog?.type === "reactivate"
             ? "Reactivate this organization and restore access."
             : "This will permanently mark the organization as deleted."
         }
         confirmText={
-          activeDialog?.type === "approve"
-            ? "Approve"
-            : activeDialog?.type === "reject"
-            ? "Reject"
-            : activeDialog?.type === "suspend"
+          activeDialog?.type === "suspend"
             ? "Suspend"
             : activeDialog?.type === "reactivate"
             ? "Reactivate"
             : "Delete"
         }
-        tone={activeDialog?.type === "approve" || activeDialog?.type === "reactivate" ? "primary" : "danger"}
-        requiresReason={activeDialog?.type === "reject" || activeDialog?.type === "suspend"}
+        tone={activeDialog?.type === "reactivate" ? "primary" : "danger"}
+        requiresReason={activeDialog?.type === "suspend"}
         reasonLabel="Reason"
         reasonPlaceholder="Tell the organization why this decision was made..."
         isLoading={isMutating}

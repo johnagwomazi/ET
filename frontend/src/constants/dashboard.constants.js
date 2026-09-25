@@ -1,15 +1,7 @@
 export const ORGANIZATION_STATUS_META = {
-  PENDING: {
-    label: "Pending",
-    tone: "warning",
-  },
-  APPROVED: {
-    label: "Approved",
+  ACTIVE: {
+    label: "Active",
     tone: "success",
-  },
-  REJECTED: {
-    label: "Rejected",
-    tone: "danger",
   },
   SUSPENDED: {
     label: "Suspended",
@@ -67,7 +59,7 @@ export const DEFAULT_TABLE_PAGE_SIZE = 10;
 export const DASHBOARD_STAT_KEYS = {
   USERS: "totalUsers",
   ORGANIZATIONS: "totalOrganizations",
-  PENDING_ORGANIZATIONS: "pendingOrganizations",
+  ACTIVE_ORGANIZATIONS: "activeOrganizations",
   REVENUE: "totalRevenue",
   EVENTS: "totalEvents",
 };

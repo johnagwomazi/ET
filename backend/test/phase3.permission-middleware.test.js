@@ -72,7 +72,7 @@ test("permission middleware allows authorized organization users", () => {
     },
     organization: {
       _id: "org_1",
-      status: "APPROVED",
+      status: "ACTIVE",
       isDeleted: false,
       primaryAdmin: "user_1",
     },
@@ -87,4 +87,30 @@ test("permission middleware allows authorized organization users", () => {
   assert.equal(nextCalled, true);
   assert.equal(response.statusCode, null);
   assert.equal(response.body, null);
+});
+
+test("permission middleware denies suspended organizations", () => {
+  const middleware = requireOrganizationPermission(ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE);
+  const request = {
+    user: {
+      _id: "user_1",
+      role: USER_ROLES.ADMIN,
+      organization: "org_1",
+    },
+    organization: {
+      _id: "org_1",
+      status: "SUSPENDED",
+      isDeleted: false,
+      primaryAdmin: "user_1",
+    },
+  };
+  const response = createResponseMock();
+  let nextCalled = false;
+
+  middleware(request, response, () => {
+    nextCalled = true;
+  });
+
+  assert.equal(nextCalled, false);
+  assert.equal(response.statusCode, 403);
 });

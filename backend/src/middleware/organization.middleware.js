@@ -90,26 +90,6 @@ export function restrictToOwnOrganization(req, res, next) {
   return next();
 }
 
-export async function requireApprovedOrganization(req, res, next) {
-  if (!req.user) {
-    return res.status(HTTP_STATUS.UNAUTHORIZED).json(errorResponse("Not authorized"));
-  }
-
-  if (isSuperAdmin(req.user)) {
-    return next();
-  }
-
-  if (req.organization) {
-    if (!isOrganizationActive(req.organization)) {
-      return res.status(HTTP_STATUS.FORBIDDEN).json(errorResponse("Your organization is not active"));
-    }
-
-    return next();
-  }
-
-  return requireOrganizationContext(req, res, next);
-}
-
 export function requireOrganizationRole(...allowedRoles) {
   return function requireOrganizationRoleMiddleware(req, res, next) {
     if (!req.user) {
