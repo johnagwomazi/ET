@@ -47,6 +47,21 @@ export async function updateOrganizationEventTicketType(eventId, ticketTypeId, p
   return unwrapResponse(response);
 }
 
+export async function getOrganizationEventOrders(eventId, query = {}) {
+  const response = await get(`/organizations/me/events/${eventId}/orders${buildQueryString(query)}`);
+  return unwrapResponse(response);
+}
+
+export async function getOrganizationEventOrderTickets(eventId, orderId) {
+  const response = await get(`/organizations/me/events/${eventId}/orders/${orderId}/tickets`);
+  return unwrapResponse(response);
+}
+
+export async function createComplimentaryTickets(eventId, payload) {
+  const response = await post(`/organizations/me/events/${eventId}/complimentary-tickets`, payload);
+  return unwrapResponse(response);
+}
+
 export async function getOrganizationEventFinancialSummary(eventId) {
   const response = await get(`/organizations/me/events/${eventId}/financial-summary`);
   return unwrapResponse(response);

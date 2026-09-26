@@ -72,6 +72,7 @@ function mapOrderSummary(orderDocument) {
     currency: order.currency || "NGN",
     paymentStatus: order.paymentStatus || null,
     orderStatus: order.orderStatus || null,
+    source: order.source || "PAID",
     paidAt: order.paidAt || null,
     createdAt: order.createdAt || null,
   };
@@ -123,6 +124,7 @@ export function mapOrderResponse(orderDocument) {
   return {
     id: getDocumentId(order),
     reference: order.reference,
+    source: order.source || "PAID",
     customer: getDocumentId(order.customer),
     organization: getDocumentId(order.organization),
     event: getDocumentId(order.event),
@@ -159,6 +161,8 @@ export function mapTicketResponse(ticketDocument, options = {}) {
   const response = {
     id: getDocumentId(ticket),
     reference: ticket.reference,
+    checkInCode: ticket.checkInCode || null,
+    source: ticket.source || ticket.order?.source || "PAID",
     order: getDocumentId(ticket.order),
     event: getDocumentId(ticket.event),
     eventDetails: mapEventSummary(ticket.event),

@@ -19,6 +19,7 @@ export const eventTicketTypeParamSchema = z.object({ eventId: mongoIdSchema }).s
 export const ticketTypeParamSchema = z.object({ eventId: mongoIdSchema, ticketTypeId: mongoIdSchema }).strict();
 export const orderReferenceParamSchema = z.object({ reference: z.string().trim().min(1).max(80) }).strict();
 export const ticketReferenceParamSchema = z.object({ reference: z.string().trim().min(1).max(80) }).strict();
+export const eventOrderParamSchema = z.object({ eventId: mongoIdSchema, orderId: mongoIdSchema }).strict();
 
 export const listQuerySchema = z
   .object({
@@ -116,11 +117,33 @@ export const ticketValidationSchema = z
   .object({
     reference: z.string().trim().min(3, "Invalid ticket reference").max(120).optional(),
     token: z.string().trim().min(16, "Invalid ticket token").max(500).optional(),
+    code: z.string().trim().regex(/^\d{10}$/, "Enter the 10-digit check-in code").optional(),
   })
   .strict()
-  .refine((data) => Number(Boolean(data.reference)) + Number(Boolean(data.token)) === 1, {
-    message: "Provide either a ticket reference or token",
+  .refine((data) => Number(Boolean(data.reference)) + Number(Boolean(data.token)) + Number(Boolean(data.code)) === 1, {
+    message: "Provide a ticket reference, QR token, or check-in code",
   });
+
+const complimentaryAllocationSchema = z.object({
+  ticketTypeId: mongoIdSchema,
+  quantity: z.coerce.number().int().min(1).max(100),
+}).strict();
+
+export const complimentaryTicketCreateSchema = z.object({
+  recipients: z.array(z.object({
+    name: z.string().trim().min(1).max(120),
+    email: z.string().trim().email(),
+    phone: z.string().trim().min(5).max(30),
+    allocations: z.array(complimentaryAllocationSchema).min(1).max(20),
+  }).strict()).min(1).max(50),
+}).strict().superRefine((data, context) => {
+  data.recipients.forEach((recipient, recipientIndex) => {
+    const ids = recipient.allocations.map((allocation) => allocation.ticketTypeId);
+    if (new Set(ids).size !== ids.length) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "Duplicate ticket types are not allowed for a recipient", path: ["recipients", recipientIndex, "allocations"] });
+    }
+  });
+});
 
 export const refundCreateSchema = z
   .object({

@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { TICKET_STATUS } from "../constants/ticketing.constants.js";
+import { TICKET_SOURCE, TICKET_STATUS } from "../constants/ticketing.constants.js";
 
 const attendeeSchema = new mongoose.Schema(
   {
@@ -17,6 +17,14 @@ const ticketSchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true,
+    },
+    checkInCode: {
+      type: String,
+      required: true,
+      unique: true,
+      sparse: true,
+      trim: true,
+      match: /^\d{10}$/,
     },
     tokenHash: {
       type: String,
@@ -59,6 +67,12 @@ const ticketSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    source: {
+      type: String,
+      enum: Object.values(TICKET_SOURCE),
+      default: TICKET_SOURCE.PAID,
+      required: true,
+    },
     attendee: {
       type: attendeeSchema,
       default: () => ({}),
@@ -86,6 +100,7 @@ const ticketSchema = new mongoose.Schema(
 ticketSchema.index({ purchaser: 1, createdAt: -1 });
 ticketSchema.index({ event: 1, status: 1 });
 ticketSchema.index({ event: 1, reference: 1 });
+ticketSchema.index({ event: 1, checkInCode: 1 });
 ticketSchema.index({ order: 1 });
 
 const Ticket = mongoose.models.Ticket || mongoose.model("Ticket", ticketSchema);

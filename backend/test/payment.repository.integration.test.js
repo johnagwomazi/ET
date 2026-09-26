@@ -8,6 +8,7 @@ import { EVENT_STATUS } from "../src/constants/eventStatus.constants.js";
 import {
   ORDER_STATUS,
   PAYMENT_STATUS,
+  TICKET_SOURCE,
   TICKET_STATUS,
   WITHDRAWAL_STATUS,
 } from "../src/constants/ticketing.constants.js";
@@ -161,11 +162,38 @@ test("payment and refund transitions retain their conditional guards", async () 
   assert.equal(await orderRepository.settleOrderRefund(order.reference, 700), null);
 });
 
+test("complimentary orders remain excluded from paid financial totals", async () => {
+  const paid = await createOrder({
+    paymentStatus: PAYMENT_STATUS.PAID,
+    orderStatus: ORDER_STATUS.PAID,
+    paidAt: new Date(),
+  });
+  await createOrder({
+    organization: paid.organization,
+    event: paid.event,
+    customer: paid.customer,
+    source: TICKET_SOURCE.COMPLIMENTARY,
+    paymentProvider: "complimentary",
+    paymentReference: "",
+    items: [{ ticketType: paid.items[0].ticketType, name: "Regular", quantity: 3, unitPrice: 0, total: 0 }],
+    subtotal: 0,
+    total: 0,
+    paymentStatus: PAYMENT_STATUS.PAID,
+    orderStatus: ORDER_STATUS.PAID,
+    paidAt: new Date(),
+  });
+
+  const totals = await orderRepository.getOrganizationFinancialAggregation(paid.organization);
+  assert.equal(totals.grossSales, 1000);
+  assert.equal(totals.paidOrders, 1);
+});
+
 test("refund idempotency index and withdrawal status transitions execute against MongoDB", async () => {
   const order = await createOrder({ paymentStatus: PAYMENT_STATUS.PAID, orderStatus: ORDER_STATUS.PAID });
   await Ticket.create([
     {
       reference: "tkt_refund_valid",
+      checkInCode: "1000000001",
       tokenHash: "hash_refund_valid",
       qrToken: "token_refund_valid",
       order: order._id,
@@ -177,6 +205,7 @@ test("refund idempotency index and withdrawal status transitions execute against
     },
     {
       reference: "tkt_refund_used",
+      checkInCode: "1000000002",
       tokenHash: "hash_refund_used",
       qrToken: "token_refund_used",
       order: order._id,

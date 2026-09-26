@@ -88,6 +88,10 @@ function buildTicketPayload(value, source = "manual") {
 
   if (!code) return null;
 
+  if (/^\d{10}$/.test(code)) {
+    return { code };
+  }
+
   if (source === "scan" || !/^tkt_/i.test(code)) {
     return { token: code };
   }
@@ -478,7 +482,7 @@ function EventAttendancePanel({ event, scope = "organization" }) {
     const payload = buildTicketPayload(value, source);
 
     if (!payload) {
-      toast.error("Enter a ticket reference or scan a QR code");
+      toast.error("Enter a ticket reference or 10-digit code, or scan a QR code");
       return null;
     }
 
@@ -630,7 +634,7 @@ function EventAttendancePanel({ event, scope = "organization" }) {
               <Button size="lg" className="w-full" onClick={() => setIsScannerOpen(true)}><Camera className="h-5 w-5" />Scan ticket QR</Button>
               <div className="flex items-center gap-3 text-xs text-slate-600"><span className="h-px flex-1 bg-slate-800" /><Keyboard className="h-4 w-4" /><span className="h-px flex-1 bg-slate-800" /></div>
               <form className="grid gap-3 sm:grid-cols-[1fr_auto]" onSubmit={(submitEvent) => { submitEvent.preventDefault(); validateTicket(ticketCode).catch(() => {}); }}>
-                <Input label="Ticket reference" value={ticketCode} onChange={(inputEvent) => { setTicketCode(inputEvent.target.value); setTicketPayload(null); setTicketResult(null); }} placeholder="tkt_..." autoComplete="off" spellCheck="false" disabled={isValidatingTicket || isCheckingInTicket} />
+                <Input label="Ticket reference or check-in code" value={ticketCode} onChange={(inputEvent) => { setTicketCode(inputEvent.target.value); setTicketPayload(null); setTicketResult(null); }} placeholder="tkt_... or 10-digit code" autoComplete="off" spellCheck="false" disabled={isValidatingTicket || isCheckingInTicket} />
                 <div className="flex items-end"><Button type="submit" variant="secondary" className="w-full sm:w-auto" isLoading={isValidatingTicket} disabled={isCheckingInTicket}><ScanLine className="h-4 w-4" />Validate</Button></div>
               </form>
               <TicketResult result={ticketResult} eventName={event?.eventName} canCheckIn={canCheckIn} isCheckingIn={isCheckingInTicket} onCheckIn={handleTicketCheckIn} onReset={resetTicketStation} onRetry={() => validateTicket(ticketCode, ticketPayload?.token ? "scan" : "manual").catch(() => {})} />

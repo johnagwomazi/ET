@@ -29,3 +29,4 @@ validateApiUrl(configuredApiUrl);
 export const APP_NAME = import.meta.env.VITE_APP_NAME || "Events";
 export const APP_ENV = import.meta.env.MODE;
 export const API_URL = configuredApiUrl;
+export const BACKEND_ORIGIN = configuredApiUrl ? new URL(configuredApiUrl).origin : "";

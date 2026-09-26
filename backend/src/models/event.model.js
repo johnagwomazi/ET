@@ -182,6 +182,11 @@ const eventSchema = new mongoose.Schema(
       required: true,
       min: [0, "Capacity cannot be negative"],
     },
+    allocatedTicketQuantity: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     status: {
       type: String,
       enum: Object.values(EVENT_STATUS),

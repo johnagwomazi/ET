@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { DEFAULT_CURRENCY, ORDER_STATUS, PAYMENT_STATUS } from "../constants/ticketing.constants.js";
+import { DEFAULT_CURRENCY, ORDER_STATUS, PAYMENT_STATUS, TICKET_SOURCE } from "../constants/ticketing.constants.js";
 
 const orderItemSchema = new mongoose.Schema(
   {
@@ -58,6 +58,12 @@ const orderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
+    },
+    source: {
+      type: String,
+      enum: Object.values(TICKET_SOURCE),
+      default: TICKET_SOURCE.PAID,
+      required: true,
     },
     organization: {
       type: mongoose.Schema.Types.ObjectId,

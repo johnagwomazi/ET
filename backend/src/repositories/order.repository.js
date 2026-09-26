@@ -68,6 +68,20 @@ export async function countOrders(filter = {}, options = {}) {
   return applySession(Order.countDocuments(filter), options);
 }
 
+export async function findOrderByIdForOrganizationEvent(orderId, organizationId, eventId, options = {}) {
+  return applySession(
+    Order.findOne({ _id: orderId, organization: organizationId, event: eventId })
+      .populate("event")
+      .populate("customer")
+      .populate("items.ticketType"),
+    options
+  );
+}
+
+export async function deleteOrdersByIds(orderIds, options = {}) {
+  return Order.deleteMany({ _id: { $in: orderIds } }, { session: options.session });
+}
+
 export async function updateOrderByReference(reference, updateData, options = {}) {
   return applySession(
     Order.findOneAndUpdate({ reference }, updateData, { new: true, runValidators: true })
@@ -150,6 +164,7 @@ export async function getOrganizationFinancialAggregation(organizationId, eventI
   const match = {
     organization: organizationId,
     orderStatus: { $in: ["PAID", "PARTIALLY_REFUNDED", "REFUNDED"] },
+    source: { $ne: "COMPLIMENTARY" },
   };
 
   if (eventId) {

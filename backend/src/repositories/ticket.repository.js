@@ -146,6 +146,21 @@ export async function findTicketByTokenHash(tokenHash, options = {}) {
   );
 }
 
+export async function findTicketByCheckInCode(checkInCode, options = {}) {
+  return applySession(
+    Ticket.findOne({ checkInCode })
+      .select("+tokenHash +qrToken +qrCodeDataUrl")
+      .populate("event")
+      .populate("ticketType")
+      .populate("order"),
+    options
+  );
+}
+
+export async function deleteTicketsByOrders(orderIds, options = {}) {
+  return Ticket.deleteMany({ order: { $in: orderIds } }, { session: options.session });
+}
+
 export async function findTicketIdsByEventAndReference(eventId, reference, options = {}) {
   const expression = new RegExp(escapeRegex(reference), "i");
   const query = Ticket.find({ event: eventId, reference: expression })

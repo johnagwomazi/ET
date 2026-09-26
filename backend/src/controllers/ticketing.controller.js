@@ -57,6 +57,24 @@ export async function getEventTicketTypes(req, res) {
   return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
 }
 
+export async function getEventOrders(req, res) {
+  const result = await ticketingService.getEventOrders(req.organizationId, req.auth.userId, req.params.eventId, req.query);
+  if (result.error) return sendServiceError(res, result);
+  return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
+}
+
+export async function getEventOrderTickets(req, res) {
+  const result = await ticketingService.getEventOrderTickets(req.organizationId, req.auth.userId, req.params.eventId, req.params.orderId);
+  if (result.error) return sendServiceError(res, result);
+  return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
+}
+
+export async function createComplimentaryTickets(req, res) {
+  const result = await ticketingService.createComplimentaryTickets(req.organizationId, req.auth.userId, req.params.eventId, req.body);
+  if (result.error) return sendServiceError(res, result);
+  return res.status(HTTP_STATUS.CREATED).json(successResponse("Complimentary tickets issued successfully", result));
+}
+
 export async function getPublicEventTicketTypes(req, res) {
   const result = await ticketingService.getPublicEventTicketTypes(req.params.eventId);
 

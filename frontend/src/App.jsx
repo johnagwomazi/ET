@@ -4,6 +4,7 @@ import { useSessionStore } from "./store/useSessionStore";
 import { useOrganizationContextStore } from "./store/useOrganizationContextStore";
 import AppErrorBoundary from "./components/common/AppErrorBoundary";
 import SessionExpiredDialog from "./components/auth/SessionExpiredDialog";
+import { connectSocket, disconnectSocket } from "./realtime/socket";
 
 function App() {
   const initializeSession = useSessionStore((state) => state.initializeSession);
@@ -13,6 +14,11 @@ function App() {
   useEffect(() => {
     initializeSession().catch(() => {});
   }, [initializeSession]);
+
+  useEffect(() => {
+    connectSocket();
+    return disconnectSocket;
+  }, []);
 
   useEffect(() => {
     syncOrganizationContext(currentUser);

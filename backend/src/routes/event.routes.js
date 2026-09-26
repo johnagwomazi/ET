@@ -31,6 +31,9 @@ import {
   uploadEventBanner,
 } from "../middleware/eventBannerUpload.middleware.js";
 import {
+  complimentaryTicketCreateSchema,
+  eventOrderParamSchema,
+  listQuerySchema,
   ticketTypeCreateSchema,
   ticketTypeParamSchema,
   ticketTypeUpdateSchema,
@@ -74,6 +77,26 @@ eventRouter.patch(
   validate(ticketTypeParamSchema, "params"),
   validate(ticketTypeUpdateSchema),
   ticketingController.updateEventTicketType
+);
+
+eventRouter.get(
+  "/:eventId/orders",
+  validate(eventIdParamSchema, "params"),
+  validate(listQuerySchema, "query"),
+  ticketingController.getEventOrders
+);
+
+eventRouter.get(
+  "/:eventId/orders/:orderId/tickets",
+  validate(eventOrderParamSchema, "params"),
+  ticketingController.getEventOrderTickets
+);
+
+eventRouter.post(
+  "/:eventId/complimentary-tickets",
+  validate(eventIdParamSchema, "params"),
+  validate(complimentaryTicketCreateSchema),
+  ticketingController.createComplimentaryTickets
 );
 
 eventRouter.get(

@@ -73,6 +73,7 @@ function moneyToMinorExpression(value) {
 function buildOrderMatch(scope, range, includeTicketType = true) {
   const match = {
     paymentStatus: { $in: ANALYTICS_SUCCESSFUL_PAYMENT_STATUSES },
+    source: { $ne: "COMPLIMENTARY" },
     ...effectiveDateMatch("paidAt", "createdAt", range),
   };
 
@@ -208,7 +209,7 @@ async function aggregateInventorySummary(scope) {
 }
 
 async function aggregateOrderStateSummary(scope, range) {
-  const match = { ...effectiveDateMatch("createdAt", "createdAt", range) };
+  const match = { source: { $ne: "COMPLIMENTARY" }, ...effectiveDateMatch("createdAt", "createdAt", range) };
   if (scope.organizationId) match.organization = toObjectId(scope.organizationId);
   if (scope.eventId) match.event = toObjectId(scope.eventId);
 
@@ -341,6 +342,7 @@ function eventAnalyticsLookups(range) {
                 $and: [
                   { $eq: ["$event", "$$eventId"] },
                   { $in: ["$paymentStatus", ANALYTICS_SUCCESSFUL_PAYMENT_STATUSES] },
+                  { $ne: [{ $ifNull: ["$source", "PAID"] }, "COMPLIMENTARY"] },
                   ...lookupDateConditions("$paidAt", "$createdAt", range),
                 ],
               },
@@ -483,6 +485,7 @@ export async function getTicketTypePerformance(scope = {}, range = {}, paginatio
           { $match: { $expr: { $and: [
             { $eq: ["$event", "$$eventId"] },
             { $in: ["$paymentStatus", ANALYTICS_SUCCESSFUL_PAYMENT_STATUSES] },
+            { $ne: [{ $ifNull: ["$source", "PAID"] }, "COMPLIMENTARY"] },
             ...dateConditions,
           ] } } },
           { $unwind: "$items" },
@@ -544,6 +547,7 @@ export async function getOrganizationPerformance(range = {}, pagination = {}) {
       { $match: { $expr: { $and: [
         { $eq: ["$organization", "$$organizationId"] },
         { $in: ["$paymentStatus", ANALYTICS_SUCCESSFUL_PAYMENT_STATUSES] },
+        { $ne: [{ $ifNull: ["$source", "PAID"] }, "COMPLIMENTARY"] },
         ...orderDateConditions,
       ] } } },
       { $project: { grossSalesMinor: { $sum: { $map: { input: "$items", as: "item", in: moneyToMinorExpression("$$item.total") } } }, ticketsSold: { $sum: { $map: { input: "$items", as: "item", in: "$$item.quantity" } } } } },

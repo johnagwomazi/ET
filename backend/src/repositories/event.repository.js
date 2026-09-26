@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Event from "../models/event.model.js";
 import { PUBLIC_DISCOVERY_STATUSES } from "../utils/eventDiscovery.util.js";
+import { trustedOperator } from "../utils/trustedFilter.util.js";
 
 const PUBLIC_EVENT_POPULATE = {
   path: "organization",
@@ -176,4 +177,40 @@ export async function findEventsStartingBetween(startAt, endAt, statuses = []) {
   }
 
   return Event.find(filter).populate("organization").sort({ startAt: 1 });
+}
+
+export async function reserveEventTicketCapacity(eventId, organizationId, quantity, options = {}) {
+  return applySession(
+    Event.findOneAndUpdate(
+      {
+        _id: eventId,
+        organization: organizationId,
+        status: trustedOperator({ $nin: ["CANCELED", "COMPLETED"] }),
+        $expr: trustedOperator({
+          $gte: [
+            { $subtract: ["$capacity", { $ifNull: ["$allocatedTicketQuantity", 0] }] },
+            quantity,
+          ],
+        }),
+      },
+      { $inc: { allocatedTicketQuantity: quantity } },
+      { new: true, runValidators: true }
+    ),
+    options
+  );
+}
+
+export async function releaseEventTicketCapacity(eventId, organizationId, quantity, options = {}) {
+  return applySession(
+    Event.findOneAndUpdate(
+      {
+        _id: eventId,
+        organization: organizationId,
+        allocatedTicketQuantity: trustedOperator({ $gte: quantity }),
+      },
+      { $inc: { allocatedTicketQuantity: -quantity } },
+      { new: true, runValidators: true }
+    ),
+    options
+  );
 }

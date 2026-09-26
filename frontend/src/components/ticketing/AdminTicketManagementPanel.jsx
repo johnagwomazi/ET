@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { Plus, RefreshCw, Save } from "lucide-react";
+import { Gift, Plus, RefreshCw, Save } from "lucide-react";
 import Button from "../ui/Button";
 import Card from "../ui/Card";
 import Input from "../ui/Input";
@@ -11,6 +11,7 @@ import StatusBadge from "../dashboard/StatusBadge";
 import { Skeleton } from "../common/Skeleton";
 import { formatMoney } from "../../utils/formatters";
 import * as ticketingService from "../../services/ticketing.service";
+import ComplimentaryTicketModal from "./ComplimentaryTicketModal";
 
 const initialForm = {
   name: "",
@@ -37,6 +38,7 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
   const [editingTicketType, setEditingTicketType] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [isSaving, setIsSaving] = useState(false);
+  const [complimentaryOpen, setComplimentaryOpen] = useState(false);
 
   async function loadTicketTypes() {
     if (!eventId || !canManage) {
@@ -134,6 +136,7 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" onClick={loadTicketTypes} isLoading={isLoading}><RefreshCw className="h-4 w-4" />Refresh</Button>
+          <Button variant="secondary" size="sm" onClick={() => setComplimentaryOpen(true)} disabled={!ticketTypes.length || ["CANCELED", "COMPLETED"].includes(event?.status)}><Gift className="h-4 w-4" />Complimentary</Button>
           <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4" />New ticket</Button>
         </div>
       </div>
@@ -190,6 +193,13 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
           </div>
         </form>
       </Modal>
+      <ComplimentaryTicketModal
+        open={complimentaryOpen}
+        onClose={() => setComplimentaryOpen(false)}
+        eventId={eventId}
+        ticketTypes={ticketTypes}
+        onIssued={loadTicketTypes}
+      />
     </Card>
   );
 }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   checkoutSchema,
+  complimentaryTicketCreateSchema,
   refundCreateSchema,
   ticketTypeCreateSchema,
   ticketValidationSchema,
@@ -80,6 +81,7 @@ function createDependencies(overrides = {}) {
     startAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     endAt: new Date(Date.now() + 26 * 60 * 60 * 1000),
     capacity: 100,
+    allocatedTicketQuantity: 2,
   };
   const ticketType = {
     _id: ids.ticketType,
@@ -135,6 +137,7 @@ function createDependencies(overrides = {}) {
     },
   };
   let tickets = [];
+  const createdOrders = [];
   let refunds = [];
 
   function hydrateTicket(ticket) {
@@ -171,6 +174,9 @@ function createDependencies(overrides = {}) {
 
         return null;
       },
+      async findAuthUserByEmail(email) {
+        return email === "ada@example.com" ? { _id: ids.customer, email } : null;
+      },
     },
     eventRepository: {
       async countEvents() {
@@ -184,6 +190,16 @@ function createDependencies(overrides = {}) {
       },
       async findEvents() {
         return [event];
+      },
+      async reserveEventTicketCapacity(eventId, organizationId, quantity) {
+        if (eventId !== ids.event || organizationId !== ids.organization || event.allocatedTicketQuantity + quantity > event.capacity) return null;
+        event.allocatedTicketQuantity += quantity;
+        return event;
+      },
+      async releaseEventTicketCapacity(eventId, organizationId, quantity) {
+        if (eventId !== ids.event || organizationId !== ids.organization || event.allocatedTicketQuantity < quantity) return null;
+        event.allocatedTicketQuantity -= quantity;
+        return event;
       },
     },
     ticketTypeRepository: {
@@ -218,7 +234,9 @@ function createDependencies(overrides = {}) {
     },
     orderRepository: {
       async createOrder(data) {
-        order = { _id: ids.order, ...data };
+        const orderId = createdOrders.length === 0 ? ids.order : "64b64b64b64b64b64b64b649";
+        order = { _id: orderId, ...data };
+        createdOrders.push(order);
         return order;
       },
       async findOrderByCustomerAndIdempotencyKey() {
@@ -264,10 +282,17 @@ function createDependencies(overrides = {}) {
         return order;
       },
       async findOrders() {
-        return [order];
+        return createdOrders.length ? createdOrders : [order];
       },
       async countOrders() {
-        return 1;
+        return createdOrders.length || 1;
+      },
+      async findOrderByIdForOrganizationEvent(orderId, organizationId, eventId) {
+        const candidate = createdOrders.find((item) => String(item._id) === String(orderId)) || order;
+        return candidate && candidate.organization === organizationId && candidate.event === eventId ? candidate : null;
+      },
+      async deleteOrdersByIds(orderIds) {
+        return { deletedCount: orderIds.length };
       },
       async getOrganizationFinancialAggregation() {
         return { grossSales: 5000, refundedAmount: 500, paidOrders: 1 };
@@ -300,14 +325,23 @@ function createDependencies(overrides = {}) {
         return { tickets: historyTickets, totalItems: historyTickets.length };
       },
       async createTickets(rows) {
-        tickets = rows.map((row, index) => ({ _id: `${ids.ticket}${index}`, ...row }));
-        return tickets;
+        const created = rows.map((row, index) => ({ _id: ids.ticket + (tickets.length + index), ...row }));
+        tickets = [...tickets, ...created];
+        return created;
       },
       async findTicketByReference(reference) {
         return hydrateTicket(tickets.find((ticket) => ticket.reference === reference));
       },
       async findTicketByTokenHash(tokenHash) {
         return hydrateTicket(tickets.find((ticket) => ticket.tokenHash === tokenHash));
+      },
+      async findTicketByCheckInCode(checkInCode) {
+        return hydrateTicket(tickets.find((ticket) => ticket.checkInCode === checkInCode));
+      },
+      async deleteTicketsByOrders(orderIds) {
+        const before = tickets.length;
+        tickets = tickets.filter((ticket) => !orderIds.includes(ticket.order));
+        return { deletedCount: before - tickets.length };
       },
       async markTicketUsed(ticketId, actorUserId) {
         const ticket = tickets.find((item) => String(item._id) === String(ticketId));
@@ -474,7 +508,7 @@ function createDependencies(overrides = {}) {
     ...overrides,
   };
 
-  return { dependencies, state: { event, ticketType, get order() { return order; }, get tickets() { return tickets; } } };
+  return { dependencies, state: { event, ticketType, createdOrders, get order() { return order; }, get tickets() { return tickets; } } };
 }
 
 test("ticketing validators enforce ticket, checkout, refund, withdrawal, and validation payloads", () => {
@@ -490,10 +524,26 @@ test("ticketing validators enforce ticket, checkout, refund, withdrawal, and val
   );
   assert.equal(ticketValidationSchema.safeParse({}).success, false);
   assert.equal(ticketValidationSchema.safeParse({ reference: "tkt_123" }).success, true);
+  assert.equal(ticketValidationSchema.safeParse({ code: "0123456789" }).success, true);
+  assert.equal(ticketValidationSchema.safeParse({ code: "1234" }).success, false);
   assert.equal(ticketValidationSchema.safeParse({ token: "short" }).success, false);
   assert.equal(ticketValidationSchema.safeParse({ reference: "tkt_123", token: "a".repeat(32) }).success, false);
   assert.equal(ticketTypeCreateSchema.safeParse({ name: "USD", price: 1000, quantity: 20, currency: "USD" }).success, false);
   assert.equal(refundCreateSchema.safeParse({ reason: "Event canceled" }).success, true);
+});
+
+test("complimentary ticket payloads require recipients and unique ticket types per recipient", () => {
+  const recipient = {
+    name: "Ada Guest",
+    email: "guest@example.com",
+    phone: "+2348012345678",
+    allocations: [{ ticketTypeId: ids.ticketType, quantity: 2 }],
+  };
+  assert.equal(complimentaryTicketCreateSchema.safeParse({ recipients: [recipient] }).success, true);
+  assert.equal(complimentaryTicketCreateSchema.safeParse({ recipients: [] }).success, false);
+  assert.equal(complimentaryTicketCreateSchema.safeParse({
+    recipients: [{ ...recipient, allocations: [...recipient.allocations, ...recipient.allocations] }],
+  }).success, false);
 });
 
 test("marketplace routes allow customers and organization admins but reject unrelated roles", () => {
@@ -1357,4 +1407,303 @@ test("failed charge webhook processing can be claimed and retried safely", async
   assert.equal(retryClaims, 1);
   assert.equal(failedEvents, 1);
   assert.equal(processedEvents, 1);
+});
+
+test("paid issuance creates unique numeric check-in codes and keeps paid source", async () => {
+  const { dependencies, state } = createDependencies();
+  await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
+
+  assert.equal(state.tickets.length, 2);
+  assert.equal(new Set(state.tickets.map((ticket) => ticket.checkInCode)).size, 2);
+  assert.ok(state.tickets.every((ticket) => /^\d{10}$/.test(ticket.checkInCode)));
+  assert.ok(state.tickets.every((ticket) => ticket.source === "PAID"));
+});
+
+test("numeric ticket codes use the same validation and duplicate check-in protection as QR tickets", async () => {
+  const { dependencies, state } = createDependencies();
+  await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
+  const payload = { code: state.tickets[0].checkInCode };
+
+  const validated = await ticketingService.validateEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    payload,
+    dependencies
+  );
+  const checkedIn = await ticketingService.checkInEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    payload,
+    dependencies
+  );
+  const duplicate = await ticketingService.checkInEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    payload,
+    dependencies
+  );
+
+  assert.equal(validated.outcome, TICKET_VALIDATION_OUTCOME.VALID);
+  assert.equal(checkedIn.checkedIn, true);
+  assert.equal(duplicate.outcome, TICKET_VALIDATION_OUTCOME.ALREADY_CHECKED_IN);
+  assert.equal(dependencies.eventAttendanceRepository.records.length, 1);
+});
+
+test("complimentary issuance creates zero-value real tickets for multiple recipients without Paystack", async () => {
+  let paystackCalls = 0;
+  const { dependencies, state } = createDependencies();
+  dependencies.paystackService.initializeTransaction = async () => {
+    paystackCalls += 1;
+    throw new Error("Paystack must not be called");
+  };
+
+  const result = await ticketingService.createComplimentaryTickets(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    {
+      recipients: [
+        {
+          name: "Ada Buyer",
+          email: "ada@example.com",
+          phone: "+2348012345678",
+          allocations: [{ ticketTypeId: ids.ticketType, quantity: 2 }],
+        },
+        {
+          name: "Guest Holder",
+          email: "guest@example.com",
+          phone: "+2348099999999",
+          allocations: [{ ticketTypeId: ids.ticketType, quantity: 1 }],
+        },
+      ],
+    },
+    dependencies
+  );
+
+  assert.equal(result.issuedQuantity, 3);
+  assert.equal(result.orders.length, 2);
+  assert.ok(result.orders.every((order) => order.source === "COMPLIMENTARY" && order.total === 0));
+  assert.ok(result.tickets.every((ticket) => ticket.source === "COMPLIMENTARY" && /^\d{10}$/.test(ticket.checkInCode)));
+  assert.equal(result.tickets.filter((ticket) => ticket.purchaser === ids.customer).length, 2);
+  assert.equal(state.ticketType.soldQuantity, 5);
+  assert.equal(state.event.allocatedTicketQuantity, 5);
+  assert.equal(paystackCalls, 0);
+});
+
+test("one complimentary recipient can receive multiple ticket types", async () => {
+  const vipId = "64b64b64b64b64b64b64b698";
+  const { dependencies } = createDependencies();
+  const vip = {
+    _id: vipId,
+    event: ids.event,
+    organization: ids.organization,
+    name: "VIP",
+    price: 10000,
+    currency: "NGN",
+    quantity: 5,
+    soldQuantity: 0,
+    status: TICKET_TYPE_STATUS.ACTIVE,
+  };
+  const findTicketType = dependencies.ticketTypeRepository.findTicketTypeByIdAndEvent;
+  const reserveInventory = dependencies.ticketTypeRepository.reserveTicketInventory;
+  dependencies.ticketTypeRepository.findTicketTypeByIdAndEvent = async (ticketTypeId, ...args) => (
+    ticketTypeId === vipId ? vip : findTicketType(ticketTypeId, ...args)
+  );
+  dependencies.ticketTypeRepository.reserveTicketInventory = async (ticketTypeId, eventId, organizationId, quantity, options) => {
+    if (ticketTypeId !== vipId) return reserveInventory(ticketTypeId, eventId, organizationId, quantity, options);
+    if (vip.quantity - vip.soldQuantity < quantity) return null;
+    vip.soldQuantity += quantity;
+    return vip;
+  };
+
+  const result = await ticketingService.createComplimentaryTickets(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    {
+      recipients: [{
+        name: "Mixed Guest",
+        email: "guest@example.com",
+        phone: "+2348099999999",
+        allocations: [
+          { ticketTypeId: ids.ticketType, quantity: 1 },
+          { ticketTypeId: vipId, quantity: 2 },
+        ],
+      }],
+    },
+    dependencies
+  );
+
+  assert.equal(result.issuedQuantity, 3);
+  assert.equal(result.orders[0].items.length, 2);
+  assert.equal(result.tickets.filter((ticket) => ticket.ticketType === vipId).length, 2);
+  assert.equal(vip.soldQuantity, 2);
+});
+
+test("complimentary tickets check in through both QR and numeric code paths", async () => {
+  const { dependencies } = createDependencies();
+  const issued = await ticketingService.createComplimentaryTickets(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    {
+      recipients: [{
+        name: "Entry Guest",
+        email: "guest@example.com",
+        phone: "+2348099999999",
+        allocations: [{ ticketTypeId: ids.ticketType, quantity: 2 }],
+      }],
+    },
+    dependencies
+  );
+
+  const byCode = await ticketingService.checkInEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    { code: issued.tickets[0].checkInCode },
+    dependencies
+  );
+  const byQr = await ticketingService.checkInEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    { token: issued.tickets[1].qrToken },
+    dependencies
+  );
+  const invalid = await ticketingService.validateEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    { code: "9999999999" },
+    dependencies
+  );
+
+  assert.equal(byCode.checkedIn, true);
+  assert.equal(byQr.checkedIn, true);
+  assert.equal(invalid.outcome, TICKET_VALIDATION_OUTCOME.INVALID_TICKET);
+  assert.equal(dependencies.eventAttendanceRepository.records.length, 2);
+});
+
+test("complimentary issuance validates aggregate inventory and rolls back event capacity", async () => {
+  const { dependencies, state } = createDependencies();
+  const result = await ticketingService.createComplimentaryTickets(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    {
+      recipients: [
+        {
+          name: "Large Guest List",
+          email: "guest@example.com",
+          phone: "+2348099999999",
+          allocations: [{ ticketTypeId: ids.ticketType, quantity: 9 }],
+        },
+      ],
+    },
+    dependencies
+  );
+
+  assert.equal(result.statusCode, 409);
+  assert.equal(state.ticketType.soldQuantity, 2);
+  assert.equal(state.event.allocatedTicketQuantity, 2);
+  assert.equal(state.tickets.length, 0);
+  assert.equal(state.createdOrders.length, 0);
+});
+
+test("complimentary issuance rejects completed events and event-capacity overflow", async () => {
+  const completed = createDependencies();
+  completed.state.event.status = EVENT_STATUS.COMPLETED;
+  const payload = {
+    recipients: [{
+      name: "Guest",
+      email: "guest@example.com",
+      phone: "+2348099999999",
+      allocations: [{ ticketTypeId: ids.ticketType, quantity: 1 }],
+    }],
+  };
+  const completedResult = await ticketingService.createComplimentaryTickets(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    payload,
+    completed.dependencies
+  );
+
+  const full = createDependencies();
+  full.state.event.capacity = 2;
+  const fullResult = await ticketingService.createComplimentaryTickets(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    payload,
+    full.dependencies
+  );
+
+  assert.equal(completedResult.statusCode, 409);
+  assert.equal(fullResult.statusCode, 409);
+  assert.equal(full.state.ticketType.soldQuantity, 2);
+});
+
+test("event sales are purchase-based and individual ticket details stay organization-scoped", async () => {
+  const { dependencies, state } = createDependencies();
+  await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
+
+  const sales = await ticketingService.getEventOrders(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    {},
+    dependencies
+  );
+  const details = await ticketingService.getEventOrderTickets(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    state.order._id,
+    dependencies
+  );
+  const denied = await ticketingService.getEventOrders(
+    "64b64b64b64b64b64b64b699",
+    ids.admin,
+    ids.event,
+    {},
+    dependencies
+  );
+
+  assert.equal(sales.orders.length, 1);
+  assert.equal(sales.orders[0].items[0].quantity, 2);
+  assert.equal(details.tickets.length, 2);
+  assert.ok(details.tickets.every((ticket) => ticket.order === ids.order));
+  assert.equal(denied.statusCode, 403);
+});
+
+test("a five-ticket checkout remains one purchase with quantity five", async () => {
+  const { dependencies, state } = createDependencies();
+  state.ticketType.maxPerOrder = 10;
+  const checkout = await ticketingService.createCheckoutOrder(
+    ids.customer,
+    {
+      eventId: ids.event,
+      customerInfo: { name: "Ada Buyer", email: "ada@example.com", phone: "+2348012345678" },
+      items: [{ ticketTypeId: ids.ticketType, quantity: 5 }],
+      idempotencyKey: "five-ticket-purchase",
+    },
+    dependencies
+  );
+  await ticketingService.verifyPayment(ids.customer, checkout.payment.reference, dependencies);
+  const sales = await ticketingService.getEventOrders(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    {},
+    dependencies
+  );
+
+  assert.equal(sales.orders.length, 1);
+  assert.equal(sales.orders[0].items[0].quantity, 5);
+  assert.equal(state.tickets.length, 5);
 });

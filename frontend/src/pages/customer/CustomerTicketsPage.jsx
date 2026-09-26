@@ -47,6 +47,7 @@ function TicketCard({ ticket, active }) {
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={ticket.status} />
                 <StatusBadge status={active ? "ACTIVE" : "INACTIVE"} label={active ? "Active ticket" : "Past / inactive"} />
+                <StatusBadge status={ticket.source} label={ticket.source === "COMPLIMENTARY" ? "Complimentary" : "Paid"} />
               </div>
               <h3 className="mt-3 text-xl font-semibold text-white">{event?.eventName || "Event ticket"}</h3>
               <p className="mt-1 text-sm text-slate-400">{ticketType?.name || "Ticket type unavailable"}</p>
@@ -64,6 +65,7 @@ function TicketCard({ ticket, active }) {
             <div className="grid gap-5 border-t border-slate-800 p-4 sm:grid-cols-[1fr_150px]">
               <dl className="grid content-start gap-4 text-sm sm:grid-cols-2">
                 <div><dt className="text-xs uppercase text-slate-500">Reference</dt><dd className="mt-1 break-all text-slate-200">{ticket.reference}</dd></div>
+                <div><dt className="text-xs uppercase text-slate-500">Check-in code</dt><dd className="mt-1 font-mono text-lg tracking-[0.2em] text-app-200">{ticket.checkInCode || "Unavailable"}</dd></div>
                 <div><dt className="text-xs uppercase text-slate-500">Attendee</dt><dd className="mt-1 text-slate-200">{ticket.attendee?.name || "Not provided"}</dd></div>
                 <div><dt className="text-xs uppercase text-slate-500">Issued</dt><dd className="mt-1 text-slate-200">{formatDateTime(ticket.createdAt)}</dd></div>
                 {ticket.checkedInAt ? <div><dt className="text-xs uppercase text-slate-500">Checked in</dt><dd className="mt-1 text-slate-200">{formatDateTime(ticket.checkedInAt)}</dd></div> : null}

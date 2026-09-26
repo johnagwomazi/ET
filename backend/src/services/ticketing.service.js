@@ -11,6 +11,7 @@ import {
   PAYMENT_STATUS,
   REFUND_STATUS,
   SUPPORTED_PAYMENT_CURRENCIES,
+  TICKET_SOURCE,
   TICKET_STATUS,
   TICKET_TYPE_STATUS,
   TICKET_VALIDATION_OUTCOME,
@@ -91,6 +92,10 @@ function createReference(prefix) {
   return `${prefix}_${Date.now()}_${crypto.randomBytes(8).toString("hex")}`;
 }
 
+function createCheckInCode() {
+  return crypto.randomInt(0, 10_000_000_000).toString().padStart(10, "0");
+}
+
 function hashValue(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
@@ -107,6 +112,11 @@ async function releaseReservedInventory(reservedItems, dependencies) {
       dependencies.ticketTypeRepository.releaseTicketInventory(item.ticketTypeId, item.quantity)
     )
   );
+}
+
+async function releaseReservedEventCapacity(eventId, organizationId, quantity, dependencies) {
+  if (!quantity || !dependencies.eventRepository.releaseEventTicketCapacity) return;
+  await dependencies.eventRepository.releaseEventTicketCapacity(eventId, organizationId, quantity);
 }
 
 function providerFailureStatus(payment) {
@@ -329,9 +339,12 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
   const orderReference = createReference("ord");
   const paymentReference = createReference("pay");
   const reservedItems = [];
+  const totalRequestedQuantity = payload.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  const organizationId = getDocumentId(event.organization);
   const transactionUsed = canUseTransactions(dependencies);
   let reservationCommitted = false;
   let providerInitialized = false;
+  let eventCapacityReserved = false;
 
   try {
     const result = await runInTransaction(dependencies, async (session) => {
@@ -339,11 +352,24 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
       let subtotal = 0;
       let orderCurrency = null;
 
+      if (dependencies.eventRepository.reserveEventTicketCapacity) {
+        const reservedEvent = await dependencies.eventRepository.reserveEventTicketCapacity(
+          payload.eventId,
+          organizationId,
+          totalRequestedQuantity,
+          { session }
+        );
+        if (!reservedEvent) {
+          throw checkoutFailure("Event capacity is no longer available", HTTP_STATUS.CONFLICT);
+        }
+        eventCapacityReserved = true;
+      }
+
       for (const item of payload.items) {
         const ticketType = await dependencies.ticketTypeRepository.findTicketTypeByIdAndEvent(
           item.ticketTypeId,
           payload.eventId,
-          getDocumentId(event.organization),
+          organizationId,
           { session }
         );
 
@@ -363,7 +389,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
         const reservedTicketType = await dependencies.ticketTypeRepository.reserveTicketInventory(
           item.ticketTypeId,
           payload.eventId,
-          getDocumentId(event.organization),
+          organizationId,
           item.quantity,
           { session }
         );
@@ -389,7 +415,8 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
           reference: orderReference,
           idempotencyKey: payload.idempotencyKey || "",
           customer: customerId,
-          organization: getDocumentId(event.organization),
+          organization: organizationId,
+          source: TICKET_SOURCE.PAID,
           event: payload.eventId,
           items: orderItems,
           subtotal,
@@ -437,7 +464,10 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
           failedAt: new Date(),
           }
         );
-        if (failedOrder) await releaseReservedInventory(reservedItems, dependencies);
+        if (failedOrder) {
+          await releaseReservedInventory(reservedItems, dependencies);
+          await releaseReservedEventCapacity(payload.eventId, organizationId, totalRequestedQuantity, dependencies);
+        }
         return paidResult;
       }
 
@@ -483,7 +513,10 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
           },
         }
       );
-      if (failedOrder) await releaseReservedInventory(reservedItems, dependencies);
+      if (failedOrder) {
+        await releaseReservedInventory(reservedItems, dependencies);
+        await releaseReservedEventCapacity(payload.eventId, organizationId, totalRequestedQuantity, dependencies);
+      }
       logger.warn(`[checkout.initialize] orderReference=${orderReference} paymentReference=${paymentReference}: ${payment?.message || "Paystack initialization failed"}`);
       return {
         error: payment?.configured ? "Payment provider could not initialize checkout" : "Payment service is not configured",
@@ -528,7 +561,12 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
           }
         ).catch(() => null)
         : null;
-      if (!transactionUsed || failedOrder) await releaseReservedInventory(reservedItems, dependencies);
+      if (!transactionUsed || failedOrder) {
+        await releaseReservedInventory(reservedItems, dependencies);
+        if (eventCapacityReserved) {
+          await releaseReservedEventCapacity(payload.eventId, organizationId, totalRequestedQuantity, dependencies);
+        }
+      }
     }
 
     if (error?.checkoutResult) return error.checkoutResult;
@@ -554,7 +592,7 @@ function validateProviderPayment(order, paymentReference, providerPayload) {
   return null;
 }
 
-async function buildTicketsForPaidOrder(order, dependencies, session = null) {
+async function buildTicketsForOrder(order, dependencies, session = null) {
   const existingTickets = await dependencies.ticketRepository.findTickets({ order: order._id }, { limit: 1, session });
 
   if (existingTickets.length > 0) {
@@ -563,6 +601,7 @@ async function buildTicketsForPaidOrder(order, dependencies, session = null) {
 
   const attendeeLines = order.metadata?.attendeeLines || [];
   const ticketRows = [];
+  const generatedCodes = new Set();
 
   for (const item of order.items || []) {
     const line = attendeeLines.find((entry) => String(entry.ticketTypeId) === String(getDocumentId(item.ticketType)));
@@ -571,9 +610,13 @@ async function buildTicketsForPaidOrder(order, dependencies, session = null) {
     for (let index = 0; index < Number(item.quantity || 0); index += 1) {
       const rawToken = createReference("tkn");
       const qrCodeDataUrl = await QRCode.toDataURL(rawToken);
+      let checkInCode = createCheckInCode();
+      while (generatedCodes.has(checkInCode)) checkInCode = createCheckInCode();
+      generatedCodes.add(checkInCode);
 
       ticketRows.push({
         reference: createReference("tkt"),
+        checkInCode,
         tokenHash: hashValue(rawToken),
         qrToken: rawToken,
         qrCodeDataUrl,
@@ -582,6 +625,7 @@ async function buildTicketsForPaidOrder(order, dependencies, session = null) {
         organization: getDocumentId(order.organization),
         ticketType: getDocumentId(item.ticketType),
         purchaser: getDocumentId(order.customer),
+        source: order.source || TICKET_SOURCE.PAID,
         attendee: normalizeAttendee(attendees[index], order.customerInfo),
         status: TICKET_STATUS.VALID,
       });
@@ -634,7 +678,7 @@ export async function markOrderPaidFromProvider(paymentReference, providerPayloa
       return { error: "Order is not payable", statusCode: HTTP_STATUS.CONFLICT };
     }
 
-    const tickets = await buildTicketsForPaidOrder(paidOrder, dependencies, session);
+    const tickets = await buildTicketsForOrder(paidOrder, dependencies, session);
     notificationContext = { order: paidOrder, tickets };
 
     return {
@@ -709,6 +753,12 @@ export async function verifyPayment(customerId, reference, dependencies = defaul
           ticketTypeId: getDocumentId(item.ticketType),
           quantity: Number(item.quantity || 0),
         })),
+        dependencies
+      );
+      await releaseReservedEventCapacity(
+        getDocumentId(currentOrder.event),
+        getDocumentId(currentOrder.organization),
+        (currentOrder.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
         dependencies
       );
     }
@@ -800,6 +850,167 @@ export async function getCustomerOrders(customerId, query = {}, dependencies = d
   };
 }
 
+export async function getEventOrders(organizationId, actorUserId, eventId, query = {}, dependencies = defaultDependencies) {
+  const context = await getAdminEventContext(organizationId, actorUserId, eventId, dependencies);
+  if (context.error) return context;
+
+  const pagination = buildPaginationOptions(query, { page: 1, limit: 20, sortBy: "createdAt", sortOrder: -1 });
+  const filter = { organization: organizationId, event: eventId, ...buildOrderSearchFilter(query) };
+  const [orders, totalItems] = await Promise.all([
+    dependencies.orderRepository.findOrders(filter, pagination),
+    dependencies.orderRepository.countOrders(filter),
+  ]);
+
+  return {
+    orders: orders.map(mapOrderResponse),
+    pagination: buildPaginationMeta(totalItems, pagination),
+  };
+}
+
+export async function getEventOrderTickets(organizationId, actorUserId, eventId, orderId, dependencies = defaultDependencies) {
+  const context = await getAdminEventContext(organizationId, actorUserId, eventId, dependencies);
+  if (context.error) return context;
+
+  const order = await dependencies.orderRepository.findOrderByIdForOrganizationEvent(orderId, organizationId, eventId);
+  if (!order) return { error: "Order not found", statusCode: HTTP_STATUS.NOT_FOUND };
+  const tickets = await dependencies.ticketRepository.findTickets({ order: orderId, event: eventId, organization: organizationId }, { limit: 500 });
+
+  return {
+    order: mapOrderResponse(order),
+    tickets: tickets.map((ticket) => mapTicketResponse(ticket)),
+  };
+}
+
+export async function createComplimentaryTickets(organizationId, actorUserId, eventId, payload, dependencies = defaultDependencies) {
+  const context = await getAdminEventContext(organizationId, actorUserId, eventId, dependencies);
+  if (context.error) return context;
+  if ([EVENT_STATUS.CANCELED, EVENT_STATUS.COMPLETED].includes(context.event.status)) {
+    return { error: "Complimentary tickets cannot be issued for this event status", statusCode: HTTP_STATUS.CONFLICT };
+  }
+
+  const totalsByType = new Map();
+  let totalQuantity = 0;
+  for (const recipient of payload.recipients) {
+    for (const allocation of recipient.allocations) {
+      totalsByType.set(allocation.ticketTypeId, (totalsByType.get(allocation.ticketTypeId) || 0) + allocation.quantity);
+      totalQuantity += allocation.quantity;
+    }
+  }
+
+  const reservedItems = [];
+  const createdOrderIds = [];
+  const transactionUsed = canUseTransactions(dependencies);
+  let capacityReserved = false;
+
+  try {
+    const result = await runInTransaction(dependencies, async (session) => {
+      if (dependencies.eventRepository.reserveEventTicketCapacity) {
+        const reservedEvent = await dependencies.eventRepository.reserveEventTicketCapacity(
+          eventId,
+          organizationId,
+          totalQuantity,
+          { session }
+        );
+        if (!reservedEvent) throw checkoutFailure("Event capacity is no longer available", HTTP_STATUS.CONFLICT);
+        capacityReserved = true;
+      }
+
+      const ticketTypes = new Map();
+      for (const [ticketTypeId, quantity] of totalsByType) {
+        const ticketType = await dependencies.ticketTypeRepository.findTicketTypeByIdAndEvent(
+          ticketTypeId,
+          eventId,
+          organizationId,
+          { session }
+        );
+        if (!ticketType || ticketType.status !== TICKET_TYPE_STATUS.ACTIVE) {
+          throw checkoutFailure("A selected ticket type is inactive or unavailable", HTTP_STATUS.CONFLICT);
+        }
+        const reserved = await dependencies.ticketTypeRepository.reserveTicketInventory(
+          ticketTypeId,
+          eventId,
+          organizationId,
+          quantity,
+          { session }
+        );
+        if (!reserved) throw checkoutFailure(ticketType.name + " does not have enough remaining inventory", HTTP_STATUS.CONFLICT);
+        reservedItems.push({ ticketTypeId, quantity });
+        ticketTypes.set(ticketTypeId, ticketType);
+      }
+
+      const orders = [];
+      const allTickets = [];
+      for (const recipient of payload.recipients) {
+        const customer = dependencies.authRepository.findAuthUserByEmail
+          ? await dependencies.authRepository.findAuthUserByEmail(normalizeEmail(recipient.email))
+          : null;
+        const items = recipient.allocations.map((allocation) => {
+          const ticketType = ticketTypes.get(allocation.ticketTypeId);
+          return {
+            ticketType: allocation.ticketTypeId,
+            name: ticketType.name,
+            quantity: allocation.quantity,
+            unitPrice: 0,
+            total: 0,
+          };
+        });
+        const order = await dependencies.orderRepository.createOrder({
+          reference: createReference("ord"),
+          customer: getDocumentId(customer),
+          source: TICKET_SOURCE.COMPLIMENTARY,
+          organization: organizationId,
+          event: eventId,
+          items,
+          subtotal: 0,
+          fees: 0,
+          total: 0,
+          currency: items.length ? ticketTypes.get(recipient.allocations[0].ticketTypeId).currency || DEFAULT_CURRENCY : DEFAULT_CURRENCY,
+          paymentStatus: PAYMENT_STATUS.PAID,
+          orderStatus: ORDER_STATUS.PAID,
+          paymentProvider: "complimentary",
+          customerInfo: normalizeAttendee(recipient),
+          paidAt: new Date(),
+          metadata: {
+            issuedBy: actorUserId,
+            attendeeLines: recipient.allocations.map((allocation) => ({
+              ticketTypeId: allocation.ticketTypeId,
+              attendees: Array.from({ length: allocation.quantity }, () => normalizeAttendee(recipient)),
+            })),
+          },
+        }, { session });
+        createdOrderIds.push(order._id);
+        const tickets = await buildTicketsForOrder(order, dependencies, session);
+        orders.push(order);
+        allTickets.push(...tickets);
+      }
+
+      return {
+        orders: orders.map(mapOrderResponse),
+        tickets: allTickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true })),
+        issuedQuantity: allTickets.length,
+      };
+    });
+
+    return result;
+  } catch (error) {
+    if (!transactionUsed) {
+      if (createdOrderIds.length) {
+        await dependencies.ticketRepository.deleteTicketsByOrders?.(createdOrderIds).catch(() => {});
+        await dependencies.orderRepository.deleteOrdersByIds?.(createdOrderIds).catch(() => {});
+      }
+      await releaseReservedInventory(reservedItems, dependencies);
+      if (capacityReserved) {
+        await releaseReservedEventCapacity(eventId, organizationId, totalQuantity, dependencies);
+      }
+    }
+    if (error?.checkoutResult) return error.checkoutResult;
+    if (error?.code === 11000) {
+      return { error: "Ticket identifiers could not be allocated; please retry", statusCode: HTTP_STATUS.CONFLICT };
+    }
+    throw error;
+  }
+}
+
 export async function getCustomerTickets(customerId, query = {}, dependencies = defaultDependencies) {
   const pagination = buildPaginationOptions(query, { page: 1, limit: 20, sortBy: "createdAt", sortOrder: -1 });
   const [tickets, totalItems] = await Promise.all([
@@ -848,6 +1059,10 @@ export async function getCustomerHistory(customerId, query = {}, dependencies = 
 async function resolveTicketForValidation(payload, dependencies, options = {}) {
   if (payload.token) {
     return dependencies.ticketRepository.findTicketByTokenHash(hashValue(payload.token), options);
+  }
+
+  if (payload.code) {
+    return dependencies.ticketRepository.findTicketByCheckInCode(payload.code, options);
   }
 
   return dependencies.ticketRepository.findTicketByReference(payload.reference, options);
