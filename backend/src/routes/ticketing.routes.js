@@ -9,6 +9,8 @@ import {
   customerHistoryQuerySchema,
   listQuerySchema,
   paymentVerifySchema,
+  ticketAssignmentParamSchema,
+  ticketAssignmentSchema,
 } from "../validators/ticketing.validator.js";
 import createRateLimiter from "../config/rateLimit.config.js";
 import envConfig from "../config/env.config.js";
@@ -25,5 +27,12 @@ ticketingRouter.post("/checkout", authorizeMarketplaceBuyer, paymentLimiter, val
 ticketingRouter.post("/payments/verify", authorizeMarketplaceBuyer, paymentLimiter, validate(paymentVerifySchema), ticketingController.verifyPayment);
 ticketingRouter.get("/orders", authorizeMarketplaceBuyer, validate(listQuerySchema, "query"), ticketingController.getCustomerOrders);
 ticketingRouter.get("/tickets", authorizeMarketplaceBuyer, validate(listQuerySchema, "query"), ticketingController.getCustomerTickets);
+ticketingRouter.patch(
+  "/tickets/:ticketId/assignment",
+  authorizeMarketplaceBuyer,
+  validate(ticketAssignmentParamSchema, "params"),
+  validate(ticketAssignmentSchema),
+  ticketingController.assignCustomerTicket
+);
 
 export default ticketingRouter;

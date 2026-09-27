@@ -74,6 +74,9 @@ function ComplimentaryTicketModal({ open, onClose, eventId, ticketTypes, onIssue
         })),
       });
       toast.success((response?.issuedQuantity || 0) + " complimentary ticket(s) issued");
+      if (response?.delivery?.attempted > response?.delivery?.sent) {
+        toast.error("Some recipient emails could not be delivered. The tickets were still issued.");
+      }
       await onIssued?.(response);
       onClose();
     } catch (error) {

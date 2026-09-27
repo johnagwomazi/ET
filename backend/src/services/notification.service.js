@@ -217,7 +217,7 @@ export async function markAllNotificationsRead(recipientId, dependencies = defau
   return { updatedCount: Number(result.modifiedCount || 0) };
 }
 
-export async function sendPaymentSuccessNotification(order, dependencies = defaultDependencies) {
+export async function sendPaymentSuccessNotification(order, dependencies = defaultDependencies, options = {}) {
   if (order?.paymentStatus !== PAYMENT_STATUS.PAID) return { skipped: true, reason: "PAYMENT_NOT_CONFIRMED" };
   const recipient = await resolveUser(order.customer, dependencies);
   if (!recipient) return { skipped: true, reason: "CUSTOMER_UNAVAILABLE" };
@@ -233,10 +233,11 @@ export async function sendPaymentSuccessNotification(order, dependencies = defau
     navigation: { key: NOTIFICATION_NAVIGATION_KEY.CUSTOMER_TICKETS, params: {} },
     metadata: { orderReference: order.reference, amount: Number(order.total || 0), currency: order.currency || "NGN", ticketCount: quantity },
     deduplicationKey: `${NOTIFICATION_TYPE.PAYMENT_CONFIRMED}:ORDER:${getDocumentId(order)}:${PAYMENT_STATUS.PAID}`,
+    email: options.email !== false,
   }, dependencies);
 }
 
-export async function sendTicketIssuedNotification(order, tickets = [], dependencies = defaultDependencies) {
+export async function sendTicketIssuedNotification(order, tickets = [], dependencies = defaultDependencies, options = {}) {
   if (order?.paymentStatus !== PAYMENT_STATUS.PAID || !tickets.length) return { skipped: true, reason: "TICKETS_NOT_ISSUED" };
   const recipient = await resolveUser(order.customer, dependencies);
   if (!recipient) return { skipped: true, reason: "CUSTOMER_UNAVAILABLE" };
@@ -251,6 +252,7 @@ export async function sendTicketIssuedNotification(order, tickets = [], dependen
     navigation: { key: NOTIFICATION_NAVIGATION_KEY.CUSTOMER_TICKETS, params: {} },
     metadata: { orderReference: order.reference, ticketCount: tickets.length, ticketReferences: references },
     deduplicationKey: `${NOTIFICATION_TYPE.TICKET_ISSUED}:ORDER:${getDocumentId(order)}`,
+    email: options.email !== false,
   }, dependencies);
 }
 

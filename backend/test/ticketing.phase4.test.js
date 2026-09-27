@@ -138,6 +138,7 @@ function createDependencies(overrides = {}) {
   };
   let tickets = [];
   const createdOrders = [];
+  const sentEmails = [];
   let refunds = [];
 
   function hydrateTicket(ticket) {
@@ -505,10 +506,20 @@ function createDependencies(overrides = {}) {
         return { queued: false };
       },
     },
+    emailService: {
+      async sendPurchaseConfirmationEmail(input) {
+        sentEmails.push({ type: "purchase", ...input });
+        return { sent: true };
+      },
+      async sendComplimentaryTicketEmail(input) {
+        sentEmails.push({ type: "complimentary", ...input });
+        return { sent: true };
+      },
+    },
     ...overrides,
   };
 
-  return { dependencies, state: { event, ticketType, createdOrders, get order() { return order; }, get tickets() { return tickets; } } };
+  return { dependencies, state: { event, ticketType, createdOrders, sentEmails, get order() { return order; }, get tickets() { return tickets; } } };
 }
 
 test("ticketing validators enforce ticket, checkout, refund, withdrawal, and validation payloads", () => {
@@ -914,6 +925,8 @@ test("payment verification marks an order paid and creates individual tickets on
   assert.equal(second.reused, true);
   assert.equal(state.tickets.length, 2);
   assert.ok(first.tickets[0].qrToken);
+  assert.equal(state.sentEmails.filter((email) => email.type === "purchase").length, 1);
+  assert.match(state.sentEmails[0].myTicketsUrl, /\/customer\/tickets$/);
 });
 
 test("payment verification enforces customer ownership and authoritative provider totals", async () => {
@@ -1491,6 +1504,8 @@ test("complimentary issuance creates zero-value real tickets for multiple recipi
   assert.equal(state.ticketType.soldQuantity, 5);
   assert.equal(state.event.allocatedTicketQuantity, 5);
   assert.equal(paystackCalls, 0);
+  assert.equal(state.sentEmails.filter((email) => email.type === "complimentary").length, 3);
+  assert.ok(state.sentEmails.some((email) => /\/tickets\/access\/[a-f0-9]{64}$/i.test(email.ticketUrl)));
 });
 
 test("one complimentary recipient can receive multiple ticket types", async () => {

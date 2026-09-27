@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import mongoose from "mongoose";
 import QRCode from "qrcode";
+import envConfig from "../config/env.config.js";
 import { EVENT_STATUS } from "../constants/eventStatus.constants.js";
 import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants.js";
@@ -26,6 +27,7 @@ import * as refundRepository from "../repositories/refund.repository.js";
 import * as ticketRepository from "../repositories/ticket.repository.js";
 import * as ticketTypeRepository from "../repositories/ticketType.repository.js";
 import * as paystackService from "./paystack.service.js";
+import * as emailService from "./email.service.js";
 import * as notificationService from "./notification.service.js";
 import * as analyticsService from "./analytics.service.js";
 import * as financeService from "./finance.service.js";
@@ -39,12 +41,14 @@ import {
 } from "../utils/ticketTypeAvailability.util.js";
 import {
   getDocumentId,
+  mapGuestTicketResponse,
   mapOrderResponse,
   mapRefundResponse,
   mapTicketResponse,
   mapTicketTypeResponse,
 } from "../utils/ticketingResponse.util.js";
 import { mapEventAttendanceResponse } from "../utils/eventAttendanceResponse.util.js";
+import { generateSecureToken, hashToken } from "../utils/token.util.js";
 
 const defaultDependencies = {
   authRepository,
@@ -57,6 +61,7 @@ const defaultDependencies = {
   ticketRepository,
   ticketTypeRepository,
   paystackService,
+  emailService,
   notificationService,
   mongoose,
 };
@@ -98,6 +103,21 @@ function createCheckInCode() {
 
 function hashValue(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function buildFrontendUrl(pathname) {
+  const baseUrl = String(envConfig.frontendUrl || "").split(",")[0].trim().replace(/\/$/, "");
+  return `${baseUrl}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
+}
+
+async function sendDeliveryEmail(operation, send) {
+  if (typeof send !== "function") return { sent: false, notConfigured: true };
+  try {
+    return await send();
+  } catch (error) {
+    logger.error(`[${operation}] ${error?.message || "Email delivery failed"}`);
+    return { sent: false, deliveryFailed: true };
+  }
 }
 
 function checkoutFailure(error, statusCode) {
@@ -596,12 +616,16 @@ async function buildTicketsForOrder(order, dependencies, session = null) {
   const existingTickets = await dependencies.ticketRepository.findTickets({ order: order._id }, { limit: 1, session });
 
   if (existingTickets.length > 0) {
-    return dependencies.ticketRepository.findTickets({ order: order._id }, { limit: 500, session });
+    return {
+      tickets: await dependencies.ticketRepository.findTickets({ order: order._id }, { limit: 500, session }),
+      guestAccessTokens: new Map(),
+    };
   }
 
   const attendeeLines = order.metadata?.attendeeLines || [];
   const ticketRows = [];
   const generatedCodes = new Set();
+  const guestAccessTokens = new Map();
 
   for (const item of order.items || []) {
     const line = attendeeLines.find((entry) => String(entry.ticketTypeId) === String(getDocumentId(item.ticketType)));
@@ -610,12 +634,14 @@ async function buildTicketsForOrder(order, dependencies, session = null) {
     for (let index = 0; index < Number(item.quantity || 0); index += 1) {
       const rawToken = createReference("tkn");
       const qrCodeDataUrl = await QRCode.toDataURL(rawToken);
+      const ticketReference = createReference("tkt");
+      const guestAccessToken = order.customer ? null : generateSecureToken();
       let checkInCode = createCheckInCode();
       while (generatedCodes.has(checkInCode)) checkInCode = createCheckInCode();
       generatedCodes.add(checkInCode);
 
       ticketRows.push({
-        reference: createReference("tkt"),
+        reference: ticketReference,
         checkInCode,
         tokenHash: hashValue(rawToken),
         qrToken: rawToken,
@@ -625,14 +651,24 @@ async function buildTicketsForOrder(order, dependencies, session = null) {
         organization: getDocumentId(order.organization),
         ticketType: getDocumentId(item.ticketType),
         purchaser: getDocumentId(order.customer),
+        assignedTo: getDocumentId(order.customer),
+        assignmentUpdatedAt: order.source === TICKET_SOURCE.COMPLIMENTARY ? new Date() : null,
+        ...(guestAccessToken ? {
+          guestAccessTokenHash: hashToken(guestAccessToken),
+          guestAccessIssuedAt: new Date(),
+        } : {}),
         source: order.source || TICKET_SOURCE.PAID,
         attendee: normalizeAttendee(attendees[index], order.customerInfo),
         status: TICKET_STATUS.VALID,
       });
+      if (guestAccessToken) guestAccessTokens.set(ticketReference, guestAccessToken);
     }
   }
 
-  return dependencies.ticketRepository.createTickets(ticketRows, { session });
+  return {
+    tickets: await dependencies.ticketRepository.createTickets(ticketRows, { session }),
+    guestAccessTokens,
+  };
 }
 
 export async function markOrderPaidFromProvider(paymentReference, providerPayload = {}, dependencies = defaultDependencies) {
@@ -678,21 +714,34 @@ export async function markOrderPaidFromProvider(paymentReference, providerPayloa
       return { error: "Order is not payable", statusCode: HTTP_STATUS.CONFLICT };
     }
 
-    const tickets = await buildTicketsForOrder(paidOrder, dependencies, session);
-    notificationContext = { order: paidOrder, tickets };
+    const issuance = await buildTicketsForOrder(paidOrder, dependencies, session);
+    notificationContext = { order: paidOrder, tickets: issuance.tickets };
 
     return {
       order: mapOrderResponse(paidOrder),
-      tickets: tickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true })),
+      tickets: issuance.tickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true, viewerId: getDocumentId(paidOrder.customer) })),
     };
   });
 
   if (notificationContext) {
-    await dependencies.notificationService.sendPaymentSuccessNotification(notificationContext.order).catch(() => {});
+    await dependencies.notificationService.sendPaymentSuccessNotification(
+      notificationContext.order,
+      undefined,
+      { email: false }
+    ).catch(() => {});
     await dependencies.notificationService.sendTicketIssuedNotification(
       notificationContext.order,
-      notificationContext.tickets
+      notificationContext.tickets,
+      undefined,
+      { email: false }
     ).catch(() => {});
+    await sendDeliveryEmail("ticket.purchase.email", () => dependencies.emailService?.sendPurchaseConfirmationEmail({
+      to: notificationContext.order.customerInfo?.email,
+      buyerName: notificationContext.order.customerInfo?.name,
+      event: notificationContext.order.event,
+      order: notificationContext.order,
+      myTicketsUrl: buildFrontendUrl("/customer/tickets"),
+    }));
   }
 
   return result;
@@ -940,6 +989,7 @@ export async function createComplimentaryTickets(organizationId, actorUserId, ev
 
       const orders = [];
       const allTickets = [];
+      const deliveries = [];
       for (const recipient of payload.recipients) {
         const customer = dependencies.authRepository.findAuthUserByEmail
           ? await dependencies.authRepository.findAuthUserByEmail(normalizeEmail(recipient.email))
@@ -979,19 +1029,48 @@ export async function createComplimentaryTickets(organizationId, actorUserId, ev
           },
         }, { session });
         createdOrderIds.push(order._id);
-        const tickets = await buildTicketsForOrder(order, dependencies, session);
+        const issuance = await buildTicketsForOrder(order, dependencies, session);
         orders.push(order);
-        allTickets.push(...tickets);
+        allTickets.push(...issuance.tickets);
+        issuance.tickets.forEach((ticket) => {
+          deliveries.push({
+            recipient: normalizeAttendee(recipient),
+            registered: Boolean(customer),
+            guestAccessToken: issuance.guestAccessTokens.get(ticket.reference) || null,
+            ticketType: ticketTypes.get(String(getDocumentId(ticket.ticketType))),
+          });
+        });
       }
 
       return {
         orders: orders.map(mapOrderResponse),
         tickets: allTickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true })),
         issuedQuantity: allTickets.length,
+        deliveries,
       };
     });
 
-    return result;
+    const deliveryResults = await Promise.all(result.deliveries.map((delivery) => {
+      const ticketUrl = delivery.registered
+        ? buildFrontendUrl("/customer/tickets")
+        : buildFrontendUrl(`/tickets/access/${delivery.guestAccessToken}`);
+      return sendDeliveryEmail("ticket.complimentary.email", () => dependencies.emailService?.sendComplimentaryTicketEmail({
+        to: delivery.recipient.email,
+        recipientName: delivery.recipient.name,
+        organizationName: context.event.organization?.organizationName || "the organizer",
+        event: context.event,
+        ticketType: delivery.ticketType,
+        ticketUrl,
+      }));
+    }));
+    const { deliveries, ...publicResult } = result;
+    return {
+      ...publicResult,
+      delivery: {
+        sent: deliveryResults.filter((item) => item?.sent).length,
+        attempted: deliveryResults.length,
+      },
+    };
   } catch (error) {
     if (!transactionUsed) {
       if (createdOrderIds.length) {
@@ -1013,15 +1092,77 @@ export async function createComplimentaryTickets(organizationId, actorUserId, ev
 
 export async function getCustomerTickets(customerId, query = {}, dependencies = defaultDependencies) {
   const pagination = buildPaginationOptions(query, { page: 1, limit: 20, sortBy: "createdAt", sortOrder: -1 });
+  const ownershipFilter = { $or: [{ purchaser: customerId }, { assignedTo: customerId }] };
   const [tickets, totalItems] = await Promise.all([
-    dependencies.ticketRepository.findTickets({ purchaser: customerId }, pagination),
-    dependencies.ticketRepository.countTickets({ purchaser: customerId }),
+    dependencies.ticketRepository.findTickets(ownershipFilter, pagination),
+    dependencies.ticketRepository.countTickets(ownershipFilter),
   ]);
 
   return {
-    tickets: tickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true })),
+    tickets: tickets.map((ticket) => mapTicketResponse(ticket, { includeQr: true, viewerId: customerId })),
     pagination: buildPaginationMeta(totalItems, pagination),
   };
+}
+
+export async function assignCustomerTicket(customerId, ticketId, payload, dependencies = defaultDependencies) {
+  const ticket = await dependencies.ticketRepository.findTicketForAssignment(ticketId, customerId);
+  if (!ticket) return { error: "Ticket not found", statusCode: HTTP_STATUS.NOT_FOUND };
+
+  if (ticket.status !== TICKET_STATUS.VALID || ticket.checkedInAt) {
+    return { error: "Checked-in or inactive tickets cannot be reassigned", statusCode: HTTP_STATUS.CONFLICT };
+  }
+  if ([EVENT_STATUS.CANCELED, EVENT_STATUS.COMPLETED].includes(ticket.event?.status)) {
+    return { error: "Tickets for this event can no longer be reassigned", statusCode: HTTP_STATUS.CONFLICT };
+  }
+
+  const [sender, matchedUser] = await Promise.all([
+    dependencies.authRepository.findAuthUserById(customerId),
+    dependencies.authRepository.findAuthUserByEmail(normalizeEmail(payload.email)),
+  ]);
+  const recipientUser = matchedUser && !matchedUser.isDeleted ? matchedUser : null;
+  const guestAccessToken = recipientUser ? null : generateSecureToken();
+  const assignedAt = new Date();
+  const assignedTicket = await dependencies.ticketRepository.assignTicket(ticketId, customerId, {
+    attendee: normalizeAttendee(payload),
+    assignedTo: getDocumentId(recipientUser),
+    guestAccessTokenHash: guestAccessToken ? hashToken(guestAccessToken) : null,
+    assignedAt,
+  });
+
+  if (!assignedTicket) {
+    return { error: "Ticket can no longer be reassigned", statusCode: HTTP_STATUS.CONFLICT };
+  }
+
+  const senderName = [sender?.firstName, sender?.lastName].filter(Boolean).join(" ")
+    || ticket.order?.customerInfo?.name
+    || "Someone";
+  const ticketUrl = recipientUser
+    ? buildFrontendUrl("/customer/tickets")
+    : buildFrontendUrl(`/tickets/access/${guestAccessToken}`);
+  const delivery = await sendDeliveryEmail("ticket.assignment.email", () => dependencies.emailService?.sendTicketAssignmentEmail({
+    to: normalizeEmail(payload.email),
+    recipientName: payload.name,
+    senderName,
+    event: assignedTicket.event,
+    ticketType: assignedTicket.ticketType,
+    ticketUrl,
+    isGuest: !recipientUser,
+  }));
+
+  return {
+    ticket: mapTicketResponse(assignedTicket, { includeQr: true, viewerId: customerId }),
+    recipientHasAccount: Boolean(recipientUser),
+    emailSent: delivery.sent === true,
+  };
+}
+
+export async function getGuestTicket(accessToken, dependencies = defaultDependencies) {
+  const ticket = await dependencies.ticketRepository.findTicketByGuestAccessTokenHash(hashToken(accessToken));
+  if (!ticket) {
+    return { error: "Ticket link is invalid or no longer available", statusCode: HTTP_STATUS.NOT_FOUND };
+  }
+
+  return { ticket: mapGuestTicketResponse(ticket) };
 }
 
 function getCustomerHistoryStatus(ticket) {

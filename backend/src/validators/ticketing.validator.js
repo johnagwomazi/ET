@@ -20,6 +20,10 @@ export const ticketTypeParamSchema = z.object({ eventId: mongoIdSchema, ticketTy
 export const orderReferenceParamSchema = z.object({ reference: z.string().trim().min(1).max(80) }).strict();
 export const ticketReferenceParamSchema = z.object({ reference: z.string().trim().min(1).max(80) }).strict();
 export const eventOrderParamSchema = z.object({ eventId: mongoIdSchema, orderId: mongoIdSchema }).strict();
+export const ticketAssignmentParamSchema = z.object({ ticketId: mongoIdSchema }).strict();
+export const guestTicketAccessParamSchema = z.object({
+  token: z.string().trim().regex(/^[a-f0-9]{64}$/i, "Invalid ticket access link"),
+}).strict();
 
 export const listQuerySchema = z
   .object({
@@ -70,6 +74,8 @@ const checkoutAttendeeSchema = z
     email: z.string().trim().email(),
   })
   .strict();
+
+export const ticketAssignmentSchema = checkoutAttendeeSchema;
 
 export const checkoutSchema = z
   .object({

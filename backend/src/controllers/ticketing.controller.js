@@ -140,6 +140,18 @@ export async function getCustomerTickets(req, res) {
   return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
 }
 
+export async function assignCustomerTicket(req, res) {
+  const result = await ticketingService.assignCustomerTicket(req.auth.userId, req.params.ticketId, req.body);
+  if (result.error) return sendServiceError(res, result);
+  return res.status(HTTP_STATUS.OK).json(successResponse("Ticket assigned successfully", result));
+}
+
+export async function getGuestTicket(req, res) {
+  const result = await ticketingService.getGuestTicket(req.params.token);
+  if (result.error) return sendServiceError(res, result);
+  return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
+}
+
 export async function getCustomerHistory(req, res) {
   const result = await ticketingService.getCustomerHistory(req.auth.userId, req.query);
 

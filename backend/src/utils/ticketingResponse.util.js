@@ -172,6 +172,12 @@ export function mapTicketResponse(ticketDocument, options = {}) {
     orderDetails: mapOrderSummary(ticket.order),
     purchaser: getDocumentId(ticket.purchaser),
     attendee: ticket.attendee || {},
+    assignment: {
+      canAssign: Boolean(options.viewerId) && getDocumentId(ticket.purchaser) === getDocumentId(options.viewerId),
+      isAssigned: Boolean(ticket.assignmentUpdatedAt),
+      recipientType: ticket.assignmentUpdatedAt ? (ticket.assignedTo ? "REGISTERED" : "GUEST") : "PURCHASER",
+      assignedAt: ticket.assignmentUpdatedAt || null,
+    },
     status: ticket.status,
     checkedInAt: ticket.checkedInAt || null,
     checkedInBy: getDocumentId(ticket.checkedInBy),
@@ -184,6 +190,33 @@ export function mapTicketResponse(ticketDocument, options = {}) {
   }
 
   return response;
+}
+
+export function mapGuestTicketResponse(ticketDocument) {
+  if (!ticketDocument) return null;
+  const ticket = typeof ticketDocument.toObject === "function" ? ticketDocument.toObject() : ticketDocument;
+  const event = mapEventSummary(ticket.event);
+  const ticketType = mapTicketTypeSummary(ticket.ticketType);
+
+  return {
+    reference: ticket.reference,
+    checkInCode: ticket.checkInCode || null,
+    source: ticket.source || "PAID",
+    eventDetails: event ? {
+      eventName: event.eventName,
+      banner: event.banner?.url ? { url: event.banner.url } : {},
+      venue: event.venue,
+      startAt: event.startAt,
+      endAt: event.endAt,
+      status: event.status,
+    } : null,
+    ticketTypeDetails: ticketType ? { name: ticketType.name, description: ticketType.description } : null,
+    attendee: { name: ticket.attendee?.name || "" },
+    status: ticket.status,
+    checkedInAt: ticket.checkedInAt || null,
+    createdAt: ticket.createdAt || null,
+    qrCodeDataUrl: ticket.qrCodeDataUrl || "",
+  };
 }
 
 export function mapRefundResponse(refundDocument) {

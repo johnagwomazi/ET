@@ -26,6 +26,67 @@ export async function findTickets(filter = {}, options = {}) {
   );
 }
 
+export async function findTicketForAssignment(ticketId, purchaserId, options = {}) {
+  return applySession(
+    Ticket.findOne({ _id: ticketId, purchaser: purchaserId })
+      .select("+qrCodeDataUrl")
+      .populate("event")
+      .populate("ticketType")
+      .populate("order"),
+    options
+  );
+}
+
+export async function assignTicket(ticketId, purchaserId, assignment, options = {}) {
+  const update = {
+    $set: {
+      attendee: assignment.attendee,
+      assignedTo: assignment.assignedTo || null,
+      assignmentUpdatedAt: assignment.assignedAt || new Date(),
+    },
+    $unset: {
+      guestAccessTokenHash: 1,
+      guestAccessIssuedAt: 1,
+    },
+  };
+
+  if (assignment.guestAccessTokenHash) {
+    update.$set.guestAccessTokenHash = assignment.guestAccessTokenHash;
+    update.$set.guestAccessIssuedAt = assignment.assignedAt || new Date();
+    delete update.$unset.guestAccessTokenHash;
+    delete update.$unset.guestAccessIssuedAt;
+  }
+  if (Object.keys(update.$unset).length === 0) delete update.$unset;
+
+  return applySession(
+    Ticket.findOneAndUpdate(
+      {
+        _id: ticketId,
+        purchaser: purchaserId,
+        status: "VALID",
+        checkedInAt: null,
+      },
+      update,
+      { new: true, runValidators: true }
+    )
+      .select("+qrCodeDataUrl")
+      .populate("event")
+      .populate("ticketType")
+      .populate("order"),
+    options
+  );
+}
+
+export async function findTicketByGuestAccessTokenHash(guestAccessTokenHash, options = {}) {
+  return applySession(
+    Ticket.findOne({ guestAccessTokenHash })
+      .select("+guestAccessTokenHash +qrCodeDataUrl")
+      .populate("event")
+      .populate("ticketType"),
+    options
+  );
+}
+
 export async function countTickets(filter = {}, options = {}) {
   return applySession(Ticket.countDocuments(filter), options);
 }

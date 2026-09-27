@@ -67,6 +67,23 @@ const ticketSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    assignmentUpdatedAt: {
+      type: Date,
+      default: null,
+    },
+    guestAccessTokenHash: {
+      type: String,
+      select: false,
+    },
+    guestAccessIssuedAt: {
+      type: Date,
+      default: null,
+    },
     source: {
       type: String,
       enum: Object.values(TICKET_SOURCE),
@@ -98,6 +115,11 @@ const ticketSchema = new mongoose.Schema(
 );
 
 ticketSchema.index({ purchaser: 1, createdAt: -1 });
+ticketSchema.index({ assignedTo: 1, createdAt: -1 });
+ticketSchema.index(
+  { guestAccessTokenHash: 1 },
+  { unique: true, partialFilterExpression: { guestAccessTokenHash: { $type: "string" } } }
+);
 ticketSchema.index({ event: 1, status: 1 });
 ticketSchema.index({ event: 1, reference: 1 });
 ticketSchema.index({ event: 1, checkInCode: 1 });

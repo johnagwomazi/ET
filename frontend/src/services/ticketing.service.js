@@ -27,6 +27,16 @@ export async function getCustomerTickets(query = {}) {
   return unwrapResponse(response);
 }
 
+export async function assignCustomerTicket(ticketId, payload) {
+  const response = await patch(`/ticketing/tickets/${ticketId}/assignment`, payload);
+  return unwrapResponse(response);
+}
+
+export async function getGuestTicket(token) {
+  const response = await get(`/tickets/access/${encodeURIComponent(token)}`);
+  return unwrapResponse(response);
+}
+
 export async function getCustomerHistory(query = {}) {
   const response = await get(`/ticketing/history${buildQueryString(query)}`);
   return unwrapResponse(response);

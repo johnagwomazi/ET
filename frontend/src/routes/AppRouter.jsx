@@ -51,6 +51,7 @@ const NotificationHistoryPage = lazy(() => import("../pages/notifications/Notifi
 const ForbiddenPage = lazy(() => import("../pages/ForbiddenPage"));
 const PublicEventDetailsPage = lazy(() => import("../pages/events/PublicEventDetailsPage"));
 const NotFoundPage = lazy(() => import("../pages/NotFoundPage"));
+const GuestTicketPage = lazy(() => import("../pages/GuestTicketPage"));
 
 const router = createBrowserRouter([
   {
@@ -63,6 +64,10 @@ const router = createBrowserRouter([
       {
         path: ROUTE_PATHS.PUBLIC_EVENT_DETAILS,
         element: <PublicEventDetailsPage />,
+      },
+      {
+        path: ROUTE_PATHS.GUEST_TICKET,
+        element: <GuestTicketPage />,
       },
     ],
   },
