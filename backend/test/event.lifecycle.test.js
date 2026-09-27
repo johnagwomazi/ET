@@ -225,6 +225,63 @@ test("event lifecycle postpones a published event and preserves the original sch
   assert.equal(calls.createEventStatusHistory[0].newEndAt.toISOString(), "2026-09-15T18:00:00.000Z");
 });
 
+test("event lifecycle postpones an already-postponed event again and records the updated schedule", async () => {
+  const previousStartAt = new Date("2026-10-01T09:00:00.000Z");
+  const previousEndAt = new Date("2026-10-01T18:00:00.000Z");
+  const nextStartAt = new Date("2026-10-15T10:00:00.000Z");
+  const nextEndAt = new Date("2026-10-15T19:00:00.000Z");
+  const { dependencies, calls } = buildDependencies({
+    currentEvent: {
+      _id: "event_1",
+      eventName: "Annual Event Summit",
+      slug: "annual-event-summit",
+      startAt: previousStartAt,
+      endAt: previousEndAt,
+      capacity: 300,
+      status: EVENT_STATUS.POSTPONED,
+      organization: createDocument({ _id: "org_1", status: "APPROVED", isDeleted: false, primaryAdmin: "user_1" }),
+      createdBy: createDocument({ _id: "user_1", role: USER_ROLES.ADMIN, organization: "org_1" }),
+      lifecycle: { action: "postpone", reason: "Original delay" },
+    },
+    updatedEvent: {
+      _id: "event_1",
+      status: EVENT_STATUS.POSTPONED,
+      startAt: nextStartAt,
+      endAt: nextEndAt,
+      lifecycle: {
+        action: "postpone",
+        reason: "Venue still unavailable",
+        previousStatus: EVENT_STATUS.POSTPONED,
+        previousStartAt,
+        previousEndAt,
+        nextStartAt,
+        nextEndAt,
+        nextStatus: EVENT_STATUS.POSTPONED,
+      },
+    },
+  });
+
+  const result = await postponeOrganizationEvent(
+    "org_1",
+    "user_1",
+    "event_1",
+    { reason: "Venue still unavailable", newStartDateTime: nextStartAt, newEndDateTime: nextEndAt },
+    dependencies
+  );
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.event.status, EVENT_STATUS.POSTPONED);
+  assert.equal(result.event.startAt.toISOString(), nextStartAt.toISOString());
+  assert.equal(result.event.endAt.toISOString(), nextEndAt.toISOString());
+  assert.equal(calls.updateEventByIdAndOrganizationAndStatus[0].status, EVENT_STATUS.POSTPONED);
+  assert.equal(calls.createEventStatusHistory.length, 1);
+  assert.equal(calls.createEventStatusHistory[0].previousStatus, EVENT_STATUS.POSTPONED);
+  assert.equal(calls.createEventStatusHistory[0].newStatus, EVENT_STATUS.POSTPONED);
+  assert.equal(calls.createEventStatusHistory[0].reason, "Venue still unavailable");
+  assert.equal(calls.createEventStatusHistory[0].previousStartAt.toISOString(), previousStartAt.toISOString());
+  assert.equal(calls.createEventStatusHistory[0].newStartAt.toISOString(), nextStartAt.toISOString());
+});
+
 test("event lifecycle resumes a postponed event", async () => {
   const { dependencies, calls } = buildDependencies({
     currentEvent: {
@@ -381,6 +438,41 @@ test("event lifecycle completes a published event only after it ends", async () 
   assert.equal(calls.createEventStatusHistory[0].newStatus, EVENT_STATUS.COMPLETED);
 });
 
+test("event lifecycle completes a postponed event after its scheduled end and records history", async () => {
+  const { dependencies, calls } = buildDependencies({
+    currentEvent: {
+      _id: "event_1",
+      eventName: "Annual Event Summit",
+      slug: "annual-event-summit",
+      startAt: new Date("2026-08-01T09:00:00.000Z"),
+      endAt: new Date("2026-08-01T18:00:00.000Z"),
+      capacity: 300,
+      status: EVENT_STATUS.POSTPONED,
+      organization: createDocument({ _id: "org_1", status: "APPROVED", isDeleted: false, primaryAdmin: "user_1" }),
+      createdBy: createDocument({ _id: "user_1", role: USER_ROLES.ADMIN, organization: "org_1" }),
+      lifecycle: { action: "postpone", reason: "Delayed schedule" },
+    },
+    updatedEvent: {
+      _id: "event_1",
+      status: EVENT_STATUS.COMPLETED,
+      lifecycle: {
+        action: "complete",
+        previousStatus: EVENT_STATUS.POSTPONED,
+        nextStatus: EVENT_STATUS.COMPLETED,
+      },
+    },
+  });
+
+  const result = await completeOrganizationEvent("org_1", "user_1", "event_1", dependencies);
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.event.status, EVENT_STATUS.COMPLETED);
+  assert.equal(result.event.lifecycle.previousStatus, EVENT_STATUS.POSTPONED);
+  assert.equal(calls.createEventStatusHistory.length, 1);
+  assert.equal(calls.createEventStatusHistory[0].previousStatus, EVENT_STATUS.POSTPONED);
+  assert.equal(calls.createEventStatusHistory[0].newStatus, EVENT_STATUS.COMPLETED);
+});
+
 test("event lifecycle rejects invalid transition requests", async () => {
   const { dependencies, calls } = buildDependencies({
     currentEvent: {
@@ -431,7 +523,7 @@ test("event lifecycle rejects invalid transition requests", async () => {
   assert.equal(cancelAgain.error, "Only published or postponed events can be canceled");
 
   const completeCanceled = await completeOrganizationEvent("org_1", "user_1", "event_1", canceledDependencies.dependencies);
-  assert.equal(completeCanceled.error, "Only published events can be completed");
+  assert.equal(completeCanceled.error, "Only published or postponed events can be completed");
 });
 
 test("event lifecycle rejects draft postpone and draft cancel without creating history", async () => {
@@ -475,7 +567,7 @@ test("event lifecycle rejects draft postpone and draft cancel without creating h
     dependencies
   );
 
-  assert.equal(postponeDraft.error, "Only published events can be postponed");
+  assert.equal(postponeDraft.error, "Only published or postponed events can be postponed");
   assert.equal(calls.createEventStatusHistory.length, 0);
 });
 

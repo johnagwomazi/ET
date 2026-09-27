@@ -18,6 +18,12 @@ const ACTION_LABELS = {
   complete: "Complete",
 };
 
+const ACTION_BUTTON_LABELS = {
+  ...ACTION_LABELS,
+  cancel: "Cancel Event",
+  complete: "Mark as Completed",
+};
+
 const SIMPLE_ACTION_COPY = {
   publish: {
     title: "Publish this event?",
@@ -116,7 +122,7 @@ function getAvailableActions(event) {
   }
 
   if (currentStatus === "POSTPONED") {
-    return ["resume", "cancel"];
+    return ["resume", "postpone", "complete", "cancel"];
   }
 
   return [];
@@ -224,7 +230,7 @@ function LifecycleActionDialog({
     }
 
     setFormError("");
-    setReason("");
+    setReason(action === "postpone" && event?.status === "POSTPONED" ? event?.lifecycle?.reason || "" : "");
     setNewStartDateTime(getDateTimeLocalValue(event?.startAt));
     setNewEndDateTime(getDateTimeLocalValue(event?.endAt));
   }, [action, event, open]);
@@ -507,7 +513,7 @@ function EventLifecyclePanel({ event, canManageLifecycle = false, onEventUpdated
                   disabled={isActionSubmitting}
                   className="justify-center"
                 >
-                  {ACTION_LABELS[action] || formatStatusLabel(action)}
+                  {ACTION_BUTTON_LABELS[action] || formatStatusLabel(action)}
                 </Button>
               ))}
             </div>
