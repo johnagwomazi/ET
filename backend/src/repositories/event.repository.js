@@ -89,12 +89,20 @@ export async function findEventByOrganizationAndSlug(organizationId, slug, event
 }
 
 export async function updateEventByIdAndOrganization(eventId, organizationId, updateData, options = {}) {
+  const filter = {
+    _id: eventId,
+    organization: organizationId,
+  };
+
+  if (updateData.capacity !== undefined) {
+    filter.$expr = trustedOperator({
+      $lte: [{ $ifNull: ["$allocatedTicketQuantity", 0] }, updateData.capacity],
+    });
+  }
+
   return applySession(
     Event.findOneAndUpdate(
-      {
-        _id: eventId,
-        organization: organizationId,
-      },
+      filter,
       updateData,
       {
         new: true,
@@ -103,6 +111,17 @@ export async function updateEventByIdAndOrganization(eventId, organizationId, up
     )
       .populate("organization")
       .populate("createdBy"),
+    options
+  );
+}
+
+export async function touchEventInventory(eventId, organizationId, options = {}) {
+  return applySession(
+    Event.findOneAndUpdate(
+      { _id: eventId, organization: organizationId },
+      { $set: { updatedAt: new Date() } },
+      { new: true }
+    ),
     options
   );
 }

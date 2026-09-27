@@ -9,6 +9,7 @@ import {
   getOrganizationEvents,
   updateOrganizationEvent,
 } from "../src/services/event.service.js";
+import { updateEventTicketType } from "../src/services/ticketing.service.js";
 
 function createDocument(data) {
   return {
@@ -99,6 +100,11 @@ function buildDependencies(overrides = {}) {
           organization: organizationId,
           status: EVENT_STATUS.DRAFT,
         });
+      },
+    },
+    ticketTypeRepository: {
+      async getTicketInventoryTotals() {
+        return overrides.ticketInventoryTotals || { allocatedQuantity: 0, issuedQuantity: 0 };
       },
     },
   };
@@ -240,6 +246,123 @@ test("event service updates event slugs when the name changes", async () => {
   assert.equal(calls.findEventByOrganizationAndSlug.length, 1);
   assert.equal(calls.updateEventByIdAndOrganization.length, 1);
   assert.equal(calls.updateEventByIdAndOrganization[0].updateData.slug, "annual-product-summit");
+});
+
+test("published event capacity can increase but cannot drop below issued tickets or ticket allocations", async () => {
+  const publishedEvent = createDocument({
+    _id: "event_1",
+    eventName: "Annual Event Summit",
+    slug: "annual-event-summit",
+    status: EVENT_STATUS.PUBLISHED,
+    capacity: 100,
+    allocatedTicketQuantity: 30,
+    organization: createDocument({ _id: "org_1", status: "APPROVED", isDeleted: false, primaryAdmin: "user_1" }),
+    createdBy: createDocument({ _id: "user_1", role: USER_ROLES.ADMIN, organization: "org_1" }),
+  });
+  const { dependencies, calls } = buildDependencies({
+    eventById: publishedEvent,
+    ticketInventoryTotals: { allocatedQuantity: 80, issuedQuantity: 30 },
+    updatedEvent: createDocument({ ...publishedEvent.toObject(), capacity: 150 }),
+  });
+
+  const increased = await updateOrganizationEvent("org_1", "user_1", "event_1", { capacity: 150 }, dependencies);
+  assert.equal(increased.error, undefined);
+  assert.equal(calls.updateEventByIdAndOrganization[0].updateData.capacity, 150);
+
+  const belowIssued = await updateOrganizationEvent("org_1", "user_1", "event_1", { capacity: 20 }, dependencies);
+  assert.match(belowIssued.error, /tickets already issued/i);
+
+  const belowAllocation = await updateOrganizationEvent("org_1", "user_1", "event_1", { capacity: 70 }, dependencies);
+  assert.match(belowAllocation.error, /total ticket allocation/i);
+  assert.equal(calls.updateEventByIdAndOrganization.length, 1);
+});
+
+test("a persisted capacity increase is used by the next allocation update", async () => {
+  const organization = { _id: "org_1", status: "ACTIVE", isDeleted: false, primaryAdmin: "user_1" };
+  const actor = { _id: "user_1", role: USER_ROLES.ADMIN, organization: "org_1" };
+  let event = {
+    _id: "event_1",
+    eventName: "Capacity Test",
+    slug: "capacity-test",
+    status: EVENT_STATUS.PUBLISHED,
+    capacity: 100,
+    allocatedTicketQuantity: 20,
+    organization,
+    createdBy: actor,
+  };
+  const regular = {
+    _id: "ticket_regular",
+    event: "event_1",
+    organization: "org_1",
+    name: "Regular",
+    price: 1000,
+    currency: "NGN",
+    quantity: 70,
+    soldQuantity: 20,
+    status: "ACTIVE",
+  };
+  const vip = { ...regular, _id: "ticket_vip", name: "VIP", quantity: 30, soldQuantity: 0 };
+  const ticketTypes = [regular, vip];
+  const dependencies = {
+    mongoose: { connection: { readyState: 0 } },
+    authRepository: {
+      async findAuthUserById() {
+        return actor;
+      },
+    },
+    organizationRepository: {
+      async findOrganizationDetailsById() {
+        return organization;
+      },
+    },
+    eventRepository: {
+      async countEvents() {
+        return 1;
+      },
+      async findEventByIdAndOrganization() {
+        return event;
+      },
+      async findEventByOrganizationAndSlug() {
+        return null;
+      },
+      async updateEventByIdAndOrganization(eventId, organizationId, updateData) {
+        event = { ...event, ...updateData };
+        return event;
+      },
+    },
+    ticketTypeRepository: {
+      async getTicketInventoryTotals() {
+        return {
+          allocatedQuantity: ticketTypes.reduce((sum, type) => sum + type.quantity, 0),
+          issuedQuantity: ticketTypes.reduce((sum, type) => sum + type.soldQuantity, 0),
+        };
+      },
+      async findTicketTypeByIdAndEvent(ticketTypeId) {
+        return ticketTypes.find((type) => type._id === ticketTypeId) || null;
+      },
+      async updateTicketTypeByIdAndEvent(ticketTypeId, eventId, organizationId, updateData) {
+        const ticketType = ticketTypes.find((type) => type._id === ticketTypeId);
+        Object.assign(ticketType, updateData);
+        return ticketType;
+      },
+    },
+  };
+
+  const capacityResult = await updateOrganizationEvent("org_1", "user_1", "event_1", { capacity: 150 }, dependencies);
+  assert.equal(capacityResult.error, undefined);
+  assert.equal(event.capacity, 150);
+
+  const allocationResult = await updateEventTicketType(
+    "org_1",
+    "user_1",
+    "event_1",
+    "ticket_regular",
+    { quantity: 100 },
+    dependencies
+  );
+  assert.equal(allocationResult.error, undefined);
+  assert.equal(regular.quantity + vip.quantity, 130);
+  assert.equal(event.capacity, 150);
 });
 
 test("event service blocks deleting non-draft events", async () => {

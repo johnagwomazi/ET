@@ -21,8 +21,10 @@ import * as ticketingService from "../src/services/ticketing.service.js";
 import ticketingRoutes from "../src/routes/ticketing.routes.js";
 import { buildPaymentCallbackUrl } from "../src/utils/payment.util.js";
 import {
+  getTicketTypeAvailability,
   getEffectiveTicketTypeStatus,
   isTicketTypeSalesActive,
+  TICKET_AVAILABILITY,
 } from "../src/utils/ticketTypeAvailability.util.js";
 
 const ids = {
@@ -217,7 +219,7 @@ function createDependencies(overrides = {}) {
         return ticketType;
       },
       async reserveTicketInventory(ticketTypeId, eventId, organizationId, quantity) {
-        if (quantity > 8) {
+        if (quantity > Number(ticketType.quantity || 0) - Number(ticketType.soldQuantity || 0)) {
           return null;
         }
 
@@ -601,6 +603,156 @@ test("ticket sales status follows event lifecycle and the current sales period w
 
   ticketType.status = TICKET_TYPE_STATUS.INACTIVE;
   assert.equal(getEffectiveTicketTypeStatus(ticketType, { status: EVENT_STATUS.PUBLISHED }, now), TICKET_TYPE_STATUS.INACTIVE);
+});
+
+test("ticket availability distinguishes sold out and sales dates and recovers dynamically", () => {
+  const now = new Date("2026-09-24T12:00:00.000Z");
+  const event = { status: EVENT_STATUS.PUBLISHED };
+  const ticketType = {
+    status: TICKET_TYPE_STATUS.ACTIVE,
+    quantity: 10,
+    soldQuantity: 10,
+    saleStartsAt: new Date("2026-09-24T10:00:00.000Z"),
+    saleEndsAt: new Date("2026-09-24T14:00:00.000Z"),
+  };
+
+  assert.equal(getTicketTypeAvailability(ticketType, event, now), TICKET_AVAILABILITY.SOLD_OUT);
+  ticketType.quantity = 12;
+  assert.equal(getTicketTypeAvailability(ticketType, event, now), TICKET_AVAILABILITY.AVAILABLE);
+  ticketType.saleStartsAt = new Date("2026-09-24T13:00:00.000Z");
+  assert.equal(getTicketTypeAvailability(ticketType, event, now), TICKET_AVAILABILITY.SALES_NOT_STARTED);
+  ticketType.saleStartsAt = new Date("2026-09-24T10:00:00.000Z");
+  ticketType.saleEndsAt = new Date("2026-09-24T11:00:00.000Z");
+  assert.equal(getTicketTypeAvailability(ticketType, event, now), TICKET_AVAILABILITY.SALES_ENDED);
+  ticketType.saleEndsAt = new Date("2026-09-24T14:00:00.000Z");
+  assert.equal(getTicketTypeAvailability(ticketType, event, now), TICKET_AVAILABILITY.AVAILABLE);
+});
+
+test("published ticket allocations can be redistributed but not below issued tickets or above capacity", async () => {
+  const { dependencies, state } = createDependencies();
+  const vipId = "64b64b64b64b64b64b64b650";
+  const vip = {
+    ...state.ticketType,
+    _id: vipId,
+    name: "VIP",
+    quantity: 30,
+    soldQuantity: 10,
+  };
+  state.event.capacity = 150;
+  state.ticketType.quantity = 70;
+  state.ticketType.soldQuantity = 40;
+  dependencies.ticketTypeRepository.findTicketTypes = async () => [state.ticketType, vip];
+  dependencies.ticketTypeRepository.findTicketTypeByIdAndEvent = async (ticketTypeId) => (
+    ticketTypeId === vipId ? vip : state.ticketType
+  );
+  dependencies.ticketTypeRepository.updateTicketTypeByIdAndEvent = async (ticketTypeId, eventId, organizationId, data) => {
+    const target = ticketTypeId === vipId ? vip : state.ticketType;
+    if (data.quantity !== undefined && data.quantity < target.soldQuantity) return null;
+    Object.assign(target, data);
+    return target;
+  };
+
+  const regularIncrease = await ticketingService.updateEventTicketType(
+    ids.organization, ids.admin, ids.event, ids.ticketType, { quantity: 100 }, dependencies
+  );
+  assert.equal(regularIncrease.error, undefined);
+  assert.equal(state.ticketType.quantity + vip.quantity, 130);
+
+  const exactCapacity = await ticketingService.updateEventTicketType(
+    ids.organization, ids.admin, ids.event, vipId, { quantity: 50 }, dependencies
+  );
+  assert.equal(exactCapacity.error, undefined);
+  assert.equal(state.ticketType.quantity + vip.quantity, 150);
+
+  const overCapacity = await ticketingService.updateEventTicketType(
+    ids.organization, ids.admin, ids.event, vipId, { quantity: 60 }, dependencies
+  );
+  assert.match(overCapacity.error, /cannot exceed the event capacity/i);
+  assert.equal(vip.quantity, 50);
+
+  const issuedNotDoubleCounted = await ticketingService.updateEventTicketType(
+    ids.organization, ids.admin, ids.event, ids.ticketType, { quantity: 100 }, dependencies
+  );
+  assert.equal(issuedNotDoubleCounted.error, undefined);
+  assert.equal(state.ticketType.quantity + vip.quantity, 150);
+  assert.equal(state.ticketType.soldQuantity, 40);
+
+  const belowIssued = await ticketingService.updateEventTicketType(
+    ids.organization, ids.admin, ids.event, ids.ticketType, { quantity: 39 }, dependencies
+  );
+  assert.match(belowIssued.error, /tickets already issued/i);
+
+  const extraType = await ticketingService.createEventTicketType(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    { name: "VVIP", price: 5000, quantity: 1 },
+    dependencies
+  );
+  assert.match(extraType.error, /cannot exceed the event capacity/i);
+});
+
+test("restored inventory reopens checkout only while the sales period is active", async () => {
+  const { dependencies, state } = createDependencies();
+  state.ticketType.quantity = 2;
+  state.ticketType.soldQuantity = 2;
+  state.event.allocatedTicketQuantity = 2;
+  const payload = {
+    eventId: ids.event,
+    customerInfo: { name: "Ada Buyer", phone: "+2348012345678", email: "ada@example.com" },
+    items: [{ ticketTypeId: ids.ticketType, quantity: 1 }],
+  };
+
+  const soldOut = await ticketingService.getPublicEventTicketTypes(ids.event, dependencies);
+  assert.equal(soldOut.ticketTypes[0].availability, TICKET_AVAILABILITY.SOLD_OUT);
+  await ticketingService.updateEventTicketType(
+    ids.organization, ids.admin, ids.event, ids.ticketType, { quantity: 4 }, dependencies
+  );
+  const available = await ticketingService.getPublicEventTicketTypes(ids.event, dependencies);
+  assert.equal(available.ticketTypes[0].availability, TICKET_AVAILABILITY.AVAILABLE);
+  const checkout = await ticketingService.createCheckoutOrder(ids.customer, payload, dependencies);
+  assert.equal(checkout.error, undefined);
+
+  state.ticketType.saleEndsAt = new Date(Date.now() - 60_000);
+  await ticketingService.updateEventTicketType(
+    ids.organization, ids.admin, ids.event, ids.ticketType, { quantity: 5 }, dependencies
+  );
+  const expired = await ticketingService.getPublicEventTicketTypes(ids.event, dependencies);
+  assert.equal(expired.ticketTypes[0].availability, TICKET_AVAILABILITY.SALES_ENDED);
+  const expiredCheckout = await ticketingService.createCheckoutOrder(ids.customer, payload, dependencies);
+  assert.equal(expiredCheckout.statusCode, 409);
+
+  await ticketingService.updateEventTicketType(
+    ids.organization,
+    ids.admin,
+    ids.event,
+    ids.ticketType,
+    { saleEndsAt: new Date(Date.now() + 60_000) },
+    dependencies
+  );
+  const reopened = await ticketingService.getPublicEventTicketTypes(ids.event, dependencies);
+  assert.equal(reopened.ticketTypes[0].availability, TICKET_AVAILABILITY.AVAILABLE);
+});
+
+test("concurrent checkouts cannot reserve the same final ticket twice", async () => {
+  const { dependencies, state } = createDependencies();
+  state.ticketType.quantity = 3;
+  state.ticketType.soldQuantity = 2;
+  state.event.allocatedTicketQuantity = 2;
+  const payload = {
+    eventId: ids.event,
+    customerInfo: { name: "Ada Buyer", phone: "+2348012345678", email: "ada@example.com" },
+    items: [{ ticketTypeId: ids.ticketType, quantity: 1 }],
+  };
+
+  const results = await Promise.all([
+    ticketingService.createCheckoutOrder(ids.customer, payload, dependencies),
+    ticketingService.createCheckoutOrder(ids.customer, payload, dependencies),
+  ]);
+  assert.equal(results.filter((result) => !result.error).length, 1);
+  assert.equal(results.filter((result) => result.statusCode === 409).length, 1);
+  assert.equal(state.ticketType.soldQuantity, 3);
+  assert.equal(state.event.allocatedTicketQuantity, 3);
 });
 
 test("ticket list status agrees with checkout availability and can reactivate", async () => {

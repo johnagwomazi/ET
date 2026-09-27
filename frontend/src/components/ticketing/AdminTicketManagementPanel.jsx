@@ -25,20 +25,32 @@ const initialForm = {
   position: "0",
 };
 
-function toDateOrUndefined(value) {
-  return value ? new Date(value).toISOString() : undefined;
+function toDateOrNull(value) {
+  return value ? new Date(value).toISOString() : null;
 }
 
 function AdminTicketManagementPanel({ event, canManage = false }) {
   const eventId = event?._id || event?.id;
   const [ticketTypes, setTicketTypes] = useState([]);
+  const [inventory, setInventory] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTicketType, setEditingTicketType] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState("");
   const [complimentaryOpen, setComplimentaryOpen] = useState(false);
+  const totalAllocation = Number(inventory?.allocatedQuantity ?? ticketTypes.reduce(
+    (sum, ticketType) => sum + Number(ticketType.quantity || 0),
+    0
+  ));
+  const totalIssued = Number(inventory?.issuedQuantity ?? ticketTypes.reduce(
+    (sum, ticketType) => sum + Number(ticketType.issuedQuantity ?? ticketType.soldQuantity ?? 0),
+    0
+  ));
+  const currentEventCapacity = Number(inventory?.eventCapacity ?? event?.capacity ?? 0);
+  const unallocatedCapacity = Math.max(0, currentEventCapacity - totalAllocation);
 
   async function loadTicketTypes() {
     if (!eventId || !canManage) {
@@ -51,6 +63,7 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
     try {
       const response = await ticketingService.getOrganizationEventTicketTypes(eventId);
       setTicketTypes(response?.ticketTypes || []);
+      setInventory(response?.inventory || null);
     } catch (loadError) {
       setError(loadError.message || "Unable to load ticket types");
     } finally {
@@ -65,6 +78,7 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
   function openCreate() {
     setEditingTicketType(null);
     setForm(initialForm);
+    setFormError("");
     setModalOpen(true);
   }
 
@@ -81,6 +95,7 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
       status: ticketType.configuredStatus || ticketType.status || "ACTIVE",
       position: String(ticketType.position || 0),
     });
+    setFormError("");
     setModalOpen(true);
   }
 
@@ -90,6 +105,19 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
 
   async function handleSave(event) {
     event.preventDefault();
+    setFormError("");
+    const nextQuantity = Number(form.quantity);
+    const issuedQuantity = Number(editingTicketType?.issuedQuantity ?? editingTicketType?.soldQuantity ?? 0);
+    const nextTotalAllocation = totalAllocation - Number(editingTicketType?.quantity || 0) + nextQuantity;
+
+    if (editingTicketType && nextQuantity < issuedQuantity) {
+      setFormError("Ticket allocation cannot be lower than the number of tickets already issued.");
+      return;
+    }
+    if (nextTotalAllocation > currentEventCapacity) {
+      setFormError("Total ticket allocation cannot exceed the event capacity. Increase the event capacity or reduce another ticket type's allocation first.");
+      return;
+    }
     setIsSaving(true);
 
     try {
@@ -99,8 +127,8 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
         price: Number(form.price),
         quantity: Number(form.quantity),
         maxPerOrder: Number(form.maxPerOrder),
-        saleStartsAt: toDateOrUndefined(form.saleStartsAt),
-        saleEndsAt: toDateOrUndefined(form.saleEndsAt),
+        saleStartsAt: toDateOrNull(form.saleStartsAt),
+        saleEndsAt: toDateOrNull(form.saleEndsAt),
         status: form.status,
         position: Number(form.position || 0),
       };
@@ -116,7 +144,9 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
       setModalOpen(false);
       await loadTicketTypes();
     } catch (saveError) {
-      toast.error(saveError.message || "Unable to save ticket type");
+      const message = saveError.message || "Unable to save ticket type";
+      setFormError(message);
+      toast.error(message);
     } finally {
       setIsSaving(false);
     }
@@ -142,6 +172,19 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
       </div>
 
       <div className="mt-5">
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            ["Event capacity", currentEventCapacity],
+            ["Allocated", totalAllocation],
+            ["Issued / reserved", totalIssued],
+            ["Unallocated", unallocatedCapacity],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+              <p className="mt-1 text-lg font-semibold text-white">{value}</p>
+            </div>
+          ))}
+        </div>
         {isLoading && ticketTypes.length === 0 ? (
           <div className="grid gap-3">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-24 rounded-2xl" />)}</div>
         ) : error ? (
@@ -156,7 +199,7 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
                       <p className="font-semibold text-white">{ticketType.name}</p>
                       <StatusBadge status={ticketType.status} />
                     </div>
-                    <p className="mt-1 text-sm text-slate-400">{ticketType.soldQuantity} sold | {ticketType.remainingQuantity} remaining | {formatMoney(ticketType.price, ticketType.currency)}</p>
+                    <p className="mt-1 text-sm text-slate-400">{ticketType.quantity} allocated | {ticketType.issuedQuantity ?? ticketType.soldQuantity} issued/reserved | {ticketType.remainingQuantity} remaining | {formatMoney(ticketType.price, ticketType.currency)}</p>
                   </div>
                   <Button variant="secondary" size="sm" onClick={() => openEdit(ticketType)}>Edit</Button>
                 </div>
@@ -170,10 +213,20 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
 
       <Modal open={modalOpen} title={editingTicketType ? "Edit ticket type" : "Create ticket type"} onClose={() => setModalOpen(false)} className="max-w-3xl">
         <form className="space-y-4" onSubmit={handleSave}>
+          {formError ? <p className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{formError}</p> : null}
           <div className="grid gap-4 md:grid-cols-2">
             <Input label="Name" value={form.name} onChange={(event) => updateField("name", event.target.value)} />
             <Input label="Price" type="number" min="0" value={form.price} onChange={(event) => updateField("price", event.target.value)} />
-            <Input label="Quantity" type="number" min="0" value={form.quantity} onChange={(event) => updateField("quantity", event.target.value)} />
+            <Input
+              label="Allocation"
+              type="number"
+              min={editingTicketType ? Number(editingTicketType.issuedQuantity ?? editingTicketType.soldQuantity ?? 0) : 0}
+              value={form.quantity}
+              onChange={(event) => updateField("quantity", event.target.value)}
+              helperText={editingTicketType
+                ? `${editingTicketType.issuedQuantity ?? editingTicketType.soldQuantity ?? 0} already issued; ${unallocatedCapacity} event slots currently unallocated.`
+                : `${unallocatedCapacity} event slots currently unallocated.`}
+            />
             <Input label="Max per order" type="number" min="1" value={form.maxPerOrder} onChange={(event) => updateField("maxPerOrder", event.target.value)} />
             <Input label="Sale starts" type="datetime-local" value={form.saleStartsAt} onChange={(event) => updateField("saleStartsAt", event.target.value)} />
             <Input label="Sale ends" type="datetime-local" value={form.saleEndsAt} onChange={(event) => updateField("saleEndsAt", event.target.value)} />

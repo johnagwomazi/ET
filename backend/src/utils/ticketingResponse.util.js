@@ -1,5 +1,5 @@
 import { TICKET_TYPE_STATUS } from "../constants/ticketing.constants.js";
-import { getEffectiveTicketTypeStatus } from "./ticketTypeAvailability.util.js";
+import { getEffectiveTicketTypeStatus, getTicketTypeAvailability } from "./ticketTypeAvailability.util.js";
 
 export function getDocumentId(document) {
   if (!document) {
@@ -98,6 +98,7 @@ export function mapTicketTypeResponse(ticketTypeDocument, options = {}) {
     currency: ticketType.currency || "NGN",
     quantity: Number(ticketType.quantity || 0),
     soldQuantity: Number(ticketType.soldQuantity || 0),
+    issuedQuantity: Number(ticketType.soldQuantity || 0),
     remainingQuantity: Math.max(0, Number(ticketType.quantity || 0) - Number(ticketType.soldQuantity || 0)),
     saleStartsAt: ticketType.saleStartsAt || null,
     saleEndsAt: ticketType.saleEndsAt || null,
@@ -108,6 +109,11 @@ export function mapTicketTypeResponse(ticketTypeDocument, options = {}) {
       options.now
     ),
     configuredStatus,
+    availability: getTicketTypeAvailability(
+      { ...ticketType, status: configuredStatus },
+      options.event,
+      options.now
+    ),
     position: Number(ticketType.position || 0),
     createdAt: ticketType.createdAt || null,
     updatedAt: ticketType.updatedAt || null,

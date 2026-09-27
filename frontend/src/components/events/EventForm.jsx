@@ -33,6 +33,8 @@ const fieldErrorToFieldMap = {
   "Capacity cannot be negative": "capacity",
   "Capacity must be a whole number": "capacity",
   "Capacity must be at least 1": "capacity",
+  "Event capacity cannot be lower than the number of tickets already issued.": "capacity",
+  "Event capacity cannot be lower than total ticket allocation. Increase the capacity or reduce ticket allocations first.": "capacity",
   "Event date is required": "eventDate",
   "Start time is required": "startTime",
   "End time is required": "endTime",
@@ -370,7 +372,7 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-white">Capacity</p>
                   <p className="text-sm leading-6 text-slate-400">
-                    Enter the maximum number of attendees for this event.
+                    Enter the maximum number of attendees for this event. Published-event capacity may be increased at any time.
                   </p>
                 </div>
               </div>
@@ -383,6 +385,9 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
                   step="1"
                   placeholder="250"
                   error={errors.capacity?.message}
+                  helperText={isEditMode
+                    ? `${Number(initialEvent?.allocatedTicketQuantity || 0)} ticket(s) are currently issued or reserved. Capacity cannot be reduced below issued tickets or total ticket allocation.`
+                    : "Ticket-type allocations cannot exceed this capacity."}
                   {...register("capacity")}
                 />
               </div>

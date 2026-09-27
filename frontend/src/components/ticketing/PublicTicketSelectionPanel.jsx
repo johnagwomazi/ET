@@ -15,7 +15,23 @@ import { saveCheckoutSelection } from "../../utils/checkoutStorage";
 import * as ticketingService from "../../services/ticketing.service";
 
 function isPurchasable(ticketType) {
+  if (ticketType?.availability) return ticketType.availability === "AVAILABLE";
   return ticketType?.status === "ACTIVE" && Number(ticketType.remainingQuantity || 0) > 0;
+}
+
+function availabilityLabel(ticketType) {
+  switch (ticketType?.availability) {
+    case "SOLD_OUT":
+      return "Sold Out";
+    case "SALES_NOT_STARTED":
+      return "Sales Not Started";
+    case "SALES_ENDED":
+      return "Sales Ended";
+    case "AVAILABLE":
+      return `${ticketType.remainingQuantity} remaining`;
+    default:
+      return isPurchasable(ticketType) ? `${ticketType.remainingQuantity} remaining` : "Unavailable";
+  }
 }
 
 function PublicTicketSelectionPanel({ event }) {
@@ -136,7 +152,7 @@ function PublicTicketSelectionPanel({ event }) {
                     <p className="text-sm text-slate-400">{ticketType.description || "General admission ticket"}</p>
                     <p className="text-sm font-semibold text-white">{formatMoney(ticketType.price, ticketType.currency)}</p>
                     <p className="text-xs text-slate-500">
-                      {purchasable ? `${ticketType.remainingQuantity} remaining` : "Unavailable"}
+                      {availabilityLabel(ticketType)}
                       {ticketType.saleEndsAt ? ` | Sales end ${formatDateTime(ticketType.saleEndsAt)}` : ""}
                     </p>
                   </div>

@@ -176,6 +176,24 @@ function isTicketTypeAvailable(ticketType, event, quantity, now = new Date()) {
   return Number(ticketType.quantity || 0) - Number(ticketType.soldQuantity || 0) >= quantity;
 }
 
+async function getTicketInventoryTotals(eventId, organizationId, dependencies, options = {}) {
+  if (dependencies.ticketTypeRepository.getTicketInventoryTotals) {
+    return dependencies.ticketTypeRepository.getTicketInventoryTotals(eventId, organizationId, options);
+  }
+
+  const ticketTypes = await dependencies.ticketTypeRepository.findTicketTypes(
+    { event: eventId, organization: organizationId },
+    { limit: 1000, ...options }
+  );
+  return ticketTypes.reduce(
+    (totals, ticketType) => ({
+      allocatedQuantity: totals.allocatedQuantity + Number(ticketType.quantity || 0),
+      issuedQuantity: totals.issuedQuantity + Number(ticketType.soldQuantity || 0),
+    }),
+    { allocatedQuantity: 0, issuedQuantity: 0 }
+  );
+}
+
 async function getOrganizationActorContext(organizationId, actorUserId, dependencies = defaultDependencies) {
   const [actorUser, eventCount] = await Promise.all([
     dependencies.authRepository.findAuthUserById(actorUserId),
@@ -220,27 +238,47 @@ export async function createEventTicketType(organizationId, actorUserId, eventId
     return context;
   }
 
-  if (![EVENT_STATUS.DRAFT, EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED].includes(context.event.status)) {
-    return { error: "Ticket types cannot be changed for this event status", statusCode: HTTP_STATUS.BAD_REQUEST };
-  }
+  return runInTransaction(dependencies, async (session) => {
+    const currentEvent = await dependencies.eventRepository.findEventByIdAndOrganization(
+      eventId,
+      organizationId,
+      { session }
+    );
+    if (!currentEvent) return { error: "Event not found", statusCode: HTTP_STATUS.NOT_FOUND };
+    if (![EVENT_STATUS.DRAFT, EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED].includes(currentEvent.status)) {
+      return { error: "Ticket types cannot be changed for this event status", statusCode: HTTP_STATUS.BAD_REQUEST };
+    }
 
-  const ticketType = await dependencies.ticketTypeRepository.createTicketType({
-    event: eventId,
-    organization: organizationId,
-    name: payload.name,
-    description: payload.description || "",
-    price: payload.price,
-    currency: payload.currency || DEFAULT_CURRENCY,
-    quantity: payload.quantity,
-    saleStartsAt: payload.saleStartsAt || null,
-    saleEndsAt: payload.saleEndsAt || null,
-    maxPerOrder: payload.maxPerOrder || 10,
-    status: payload.status || TICKET_TYPE_STATUS.ACTIVE,
-    position: payload.position || 0,
-    createdBy: actorUserId,
+    const totals = await getTicketInventoryTotals(eventId, organizationId, dependencies, { session });
+    if (Number(totals.allocatedQuantity || 0) + Number(payload.quantity || 0) > Number(currentEvent.capacity || 0)) {
+      return {
+        error: "Total ticket allocation cannot exceed the event capacity. Increase the event capacity or reduce another ticket type's allocation first.",
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+      };
+    }
+
+    if (session && dependencies.eventRepository.touchEventInventory) {
+      await dependencies.eventRepository.touchEventInventory(eventId, organizationId, { session });
+    }
+
+    const ticketType = await dependencies.ticketTypeRepository.createTicketType({
+      event: eventId,
+      organization: organizationId,
+      name: payload.name,
+      description: payload.description || "",
+      price: payload.price,
+      currency: payload.currency || DEFAULT_CURRENCY,
+      quantity: payload.quantity,
+      saleStartsAt: payload.saleStartsAt || null,
+      saleEndsAt: payload.saleEndsAt || null,
+      maxPerOrder: payload.maxPerOrder || 10,
+      status: payload.status || TICKET_TYPE_STATUS.ACTIVE,
+      position: payload.position || 0,
+      createdBy: actorUserId,
+    }, { session });
+
+    return { ticketType: mapTicketTypeResponse(ticketType, { event: currentEvent }) };
   });
-
-  return { ticketType: mapTicketTypeResponse(ticketType, { event: context.event }) };
 }
 
 export async function updateEventTicketType(organizationId, actorUserId, eventId, ticketTypeId, payload, dependencies = defaultDependencies) {
@@ -250,24 +288,76 @@ export async function updateEventTicketType(organizationId, actorUserId, eventId
     return context;
   }
 
-  const currentTicketType = await dependencies.ticketTypeRepository.findTicketTypeByIdAndEvent(ticketTypeId, eventId, organizationId);
+  return runInTransaction(dependencies, async (session) => {
+    const currentEvent = await dependencies.eventRepository.findEventByIdAndOrganization(
+      eventId,
+      organizationId,
+      { session }
+    );
+    if (!currentEvent) return { error: "Event not found", statusCode: HTTP_STATUS.NOT_FOUND };
+    if (![EVENT_STATUS.DRAFT, EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED].includes(currentEvent.status)) {
+      return { error: "Ticket types cannot be changed for this event status", statusCode: HTTP_STATUS.BAD_REQUEST };
+    }
 
-  if (!currentTicketType) {
-    return { error: "Ticket type not found", statusCode: HTTP_STATUS.NOT_FOUND };
-  }
+    const currentTicketType = await dependencies.ticketTypeRepository.findTicketTypeByIdAndEvent(
+      ticketTypeId,
+      eventId,
+      organizationId,
+      { session }
+    );
+    if (!currentTicketType) return { error: "Ticket type not found", statusCode: HTTP_STATUS.NOT_FOUND };
 
-  if (payload.quantity !== undefined && Number(payload.quantity) < Number(currentTicketType.soldQuantity || 0)) {
-    return { error: "Quantity cannot be lower than tickets already sold", statusCode: HTTP_STATUS.BAD_REQUEST };
-  }
+    const nextQuantity = payload.quantity === undefined
+      ? Number(currentTicketType.quantity || 0)
+      : Number(payload.quantity);
+    if (nextQuantity < Number(currentTicketType.soldQuantity || 0)) {
+      return {
+        error: "Ticket allocation cannot be lower than the number of tickets already issued.",
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+      };
+    }
 
-  const ticketType = await dependencies.ticketTypeRepository.updateTicketTypeByIdAndEvent(
-    ticketTypeId,
-    eventId,
-    organizationId,
-    payload
-  );
+    const totals = await getTicketInventoryTotals(eventId, organizationId, dependencies, { session });
+    const nextTotalAllocation = Number(totals.allocatedQuantity || 0)
+      - Number(currentTicketType.quantity || 0)
+      + nextQuantity;
+    if (nextTotalAllocation > Number(currentEvent.capacity || 0)) {
+      return {
+        error: "Total ticket allocation cannot exceed the event capacity. Increase the event capacity or reduce another ticket type's allocation first.",
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+      };
+    }
 
-  return { ticketType: mapTicketTypeResponse(ticketType, { event: context.event }) };
+    const nextSaleStartsAt = payload.saleStartsAt === undefined
+      ? currentTicketType.saleStartsAt
+      : payload.saleStartsAt;
+    const nextSaleEndsAt = payload.saleEndsAt === undefined
+      ? currentTicketType.saleEndsAt
+      : payload.saleEndsAt;
+    if (nextSaleStartsAt && nextSaleEndsAt && new Date(nextSaleEndsAt) <= new Date(nextSaleStartsAt)) {
+      return { error: "Sale end must be after sale start", statusCode: HTTP_STATUS.BAD_REQUEST };
+    }
+
+    if (session && dependencies.eventRepository.touchEventInventory) {
+      await dependencies.eventRepository.touchEventInventory(eventId, organizationId, { session });
+    }
+
+    const ticketType = await dependencies.ticketTypeRepository.updateTicketTypeByIdAndEvent(
+      ticketTypeId,
+      eventId,
+      organizationId,
+      payload,
+      { session }
+    );
+    if (!ticketType) {
+      return {
+        error: "Ticket inventory changed while this update was being saved. Refresh and try again.",
+        statusCode: HTTP_STATUS.CONFLICT,
+      };
+    }
+
+    return { ticketType: mapTicketTypeResponse(ticketType, { event: currentEvent }) };
+  });
 }
 
 export async function getEventTicketTypes(organizationId, actorUserId, eventId, query = {}, dependencies = defaultDependencies) {
@@ -279,13 +369,23 @@ export async function getEventTicketTypes(organizationId, actorUserId, eventId, 
 
   const pagination = buildPaginationOptions(query, { page: 1, limit: 50, sortBy: "position", sortOrder: 1 });
   const filter = { event: eventId, organization: organizationId };
-  const [ticketTypes, totalItems] = await Promise.all([
+  const [ticketTypes, totalItems, inventoryTotals] = await Promise.all([
     dependencies.ticketTypeRepository.findTicketTypes(filter, pagination),
     dependencies.ticketTypeRepository.countTicketTypes(filter),
+    getTicketInventoryTotals(eventId, organizationId, dependencies),
   ]);
 
   return {
     ticketTypes: ticketTypes.map((ticketType) => mapTicketTypeResponse(ticketType, { event: context.event })),
+    inventory: {
+      eventCapacity: Number(context.event.capacity || 0),
+      allocatedQuantity: Number(inventoryTotals.allocatedQuantity || 0),
+      issuedQuantity: Number(inventoryTotals.issuedQuantity || 0),
+      unallocatedQuantity: Math.max(
+        0,
+        Number(context.event.capacity || 0) - Number(inventoryTotals.allocatedQuantity || 0)
+      ),
+    },
     pagination: buildPaginationMeta(totalItems, pagination),
   };
 }

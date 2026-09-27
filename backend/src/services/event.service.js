@@ -8,6 +8,7 @@ import * as eventRepository from "../repositories/event.repository.js";
 import * as eventManagerAssignmentRepository from "../repositories/eventManagerAssignment.repository.js";
 import * as eventStatusHistoryRepository from "../repositories/eventStatusHistory.repository.js";
 import * as organizationRepository from "../repositories/organization.repository.js";
+import * as ticketTypeRepository from "../repositories/ticketType.repository.js";
 import * as notificationService from "./notification.service.js";
 import { buildPaginationMeta, buildPaginationOptions, escapeRegex } from "../utils/query.util.js";
 import { hasOrganizationPermission } from "../utils/organizationPermission.util.js";
@@ -22,6 +23,7 @@ const defaultDependencies = {
   eventManagerAssignmentRepository,
   eventStatusHistoryRepository,
   organizationRepository,
+  ticketTypeRepository,
   notificationService,
   mongoose,
 };
@@ -621,6 +623,30 @@ export async function updateOrganizationEvent(
     };
   }
 
+  if (updateData.capacity !== undefined) {
+    const totals = dependencies.ticketTypeRepository?.getTicketInventoryTotals
+      ? await dependencies.ticketTypeRepository.getTicketInventoryTotals(eventId, organizationId)
+      : { allocatedQuantity: 0, issuedQuantity: 0 };
+    const issuedQuantity = Math.max(
+      Number(currentEvent.allocatedTicketQuantity || 0),
+      Number(totals.issuedQuantity || 0)
+    );
+
+    if (Number(updateData.capacity) < issuedQuantity) {
+      return {
+        error: "Event capacity cannot be lower than the number of tickets already issued.",
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+      };
+    }
+
+    if (Number(updateData.capacity) < Number(totals.allocatedQuantity || 0)) {
+      return {
+        error: "Event capacity cannot be lower than total ticket allocation. Increase the capacity or reduce ticket allocations first.",
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+      };
+    }
+  }
+
   if (updateData.slug) {
     const existingEvent = await dependencies.eventRepository.findEventByOrganizationAndSlug(
       organizationId,
@@ -637,6 +663,15 @@ export async function updateOrganizationEvent(
   }
 
   const updatedEvent = await dependencies.eventRepository.updateEventByIdAndOrganization(eventId, organizationId, updateData);
+
+  if (!updatedEvent) {
+    return {
+      error: updateData.capacity !== undefined
+        ? "Event capacity changed while tickets were being reserved. Refresh and try again."
+        : "Event not found",
+      statusCode: updateData.capacity !== undefined ? HTTP_STATUS.CONFLICT : HTTP_STATUS.NOT_FOUND,
+    };
+  }
 
   return {
     event: mapEventResponse(updatedEvent),

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import TicketType from "../models/ticketType.model.js";
 import { trustedOperator } from "../utils/trustedFilter.util.js";
 
@@ -24,6 +25,31 @@ export async function countTicketTypes(filter = {}, options = {}) {
   return applySession(TicketType.countDocuments(filter), options);
 }
 
+export async function getTicketInventoryTotals(eventId, organizationId, options = {}) {
+  const pipeline = [
+    {
+      $match: {
+        event: new mongoose.Types.ObjectId(eventId),
+        organization: new mongoose.Types.ObjectId(organizationId),
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        allocatedQuantity: { $sum: "$quantity" },
+        issuedQuantity: { $sum: "$soldQuantity" },
+      },
+    },
+  ];
+  let query = TicketType.aggregate(pipeline);
+  if (options.session) query = query.session(options.session);
+  const [totals] = await query;
+  return {
+    allocatedQuantity: Number(totals?.allocatedQuantity || 0),
+    issuedQuantity: Number(totals?.issuedQuantity || 0),
+  };
+}
+
 export async function findTicketTypeByIdAndEvent(ticketTypeId, eventId, organizationId, options = {}) {
   return applySession(
     TicketType.findOne({
@@ -36,13 +62,19 @@ export async function findTicketTypeByIdAndEvent(ticketTypeId, eventId, organiza
 }
 
 export async function updateTicketTypeByIdAndEvent(ticketTypeId, eventId, organizationId, updateData, options = {}) {
+  const filter = {
+    _id: ticketTypeId,
+    event: eventId,
+    organization: organizationId,
+  };
+
+  if (updateData.quantity !== undefined) {
+    filter.soldQuantity = trustedOperator({ $lte: updateData.quantity });
+  }
+
   return applySession(
     TicketType.findOneAndUpdate(
-      {
-        _id: ticketTypeId,
-        event: eventId,
-        organization: organizationId,
-      },
+      filter,
       updateData,
       {
         new: true,
