@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BarChart3, Building2, CreditCard, LayoutDashboard, Ticket, Users } from "lucide-react";
+import { Activity, BarChart3, Building2, CreditCard, ShoppingBag, Ticket, Users } from "lucide-react";
 import Card from "../../components/ui/Card";
 import EmptyState from "../../components/common/EmptyState";
 import ErrorState from "../../components/common/ErrorState";
@@ -10,7 +10,8 @@ import Avatar from "../../components/dashboard/Avatar";
 import StatusBadge from "../../components/dashboard/StatusBadge";
 import Button from "../../components/ui/Button";
 import { SuperAdminDashboardSkeleton } from "../../components/dashboard/DashboardLoadingStates";
-import { formatDate, formatMoney, formatNumber } from "../../utils/formatters";
+import EventPerformanceSection from "../../components/analytics/EventPerformanceSection";
+import { formatDate, formatDateTime, formatMoney, formatNumber } from "../../utils/formatters";
 import { DASHBOARD_STAT_KEYS } from "../../constants/dashboard.constants";
 import { ROUTE_PATHS } from "../../routes/routePaths";
 import { useSuperAdminDashboardStore } from "../../store/useSuperAdminDashboardStore";
@@ -27,23 +28,27 @@ const statCards = [
     icon: Building2,
   },
   {
-    key: DASHBOARD_STAT_KEYS.ACTIVE_ORGANIZATIONS,
-    label: "Active Organizations",
-    icon: LayoutDashboard,
-  },
-  {
     key: DASHBOARD_STAT_KEYS.REVENUE,
-    label: "Gross Sales",
+    label: "Gross Ticket Sales",
     icon: CreditCard,
-    helper: "Successful ticket orders",
   },
   {
     key: DASHBOARD_STAT_KEYS.EVENTS,
-    label: "Events",
+    label: "Total Events",
     icon: Ticket,
-    helper: "Platform events",
+  },
+  {
+    key: DASHBOARD_STAT_KEYS.ACTIVE_EVENTS,
+    label: "Active Events",
+    icon: Activity,
   },
 ];
+
+const activityIcons = {
+  ORGANIZATION_CREATED: Building2,
+  EVENT_CREATED: Ticket,
+  TICKET_PURCHASED: ShoppingBag,
+};
 
 function DashboardListItem({ title, subtitle, status, meta, avatarName, avatarSrc, actionLabel, onAction }) {
   return (
@@ -91,9 +96,9 @@ function SuperAdminDashboardPage() {
     return <ErrorState title="Dashboard unavailable" message={error} onRetry={fetchDashboard} />;
   }
 
-  const recentOrganizations = overview?.recentOrganizations || [];
-  const recentUsers = overview?.recentUsers || [];
+  const recentActivity = overview?.recentActivity || [];
   const analyticsSummary = overview?.platformAnalytics?.summary || {};
+  const topEvents = overview?.platformAnalytics?.topEvents || [];
   const showLoadingState = !overview && (!hasTriggeredLoad || isLoading);
 
   if (showLoadingState) {
@@ -124,7 +129,7 @@ function SuperAdminDashboardPage() {
           const value = card.key === DASHBOARD_STAT_KEYS.REVENUE
             ? analyticsSummary.grossSales
             : card.key === DASHBOARD_STAT_KEYS.EVENTS
-              ? analyticsSummary.events
+              ? overview?.totalEvents
               : overview?.[card.key];
 
           return (
@@ -133,37 +138,53 @@ function SuperAdminDashboardPage() {
               icon={card.icon}
               label={card.label}
               value={card.key === DASHBOARD_STAT_KEYS.REVENUE ? formatMoney(value, analyticsSummary.currency) : formatNumber(value)}
-              helperText={card.helper}
               loading={showLoadingState}
             />
           );
         })}
       </div>
 
+      <Card className="border-slate-800/70 bg-slate-950/85">
+        <SectionHeader
+          eyebrow="Event performance"
+          title="Top-performing events"
+          description="All-time gross sales, ticket demand, and attendance from successful ticket orders."
+          className="mb-5"
+          actions={[{ label: "Open analytics", icon: BarChart3, onClick: () => navigate(ROUTE_PATHS.SUPER_ADMIN_ANALYTICS) }]}
+        />
+        <EventPerformanceSection events={topEvents} pagination={{}} allowDrillDown={false} />
+      </Card>
+
       <div className="grid gap-6 xl:grid-cols-2">
         <Card className="border-slate-800/70 bg-slate-950/85">
           <SectionHeader
             eyebrow="Recent activity"
-            title="Recent Organizations"
-            description="The latest organizations created on the platform."
+            title="Platform activity"
+            description="Recent organization, event, and successful ticket-purchase activity."
             className="mb-5"
           />
 
           <div className="space-y-3">
-            {recentOrganizations.length > 0 ? (
-              recentOrganizations.map((organization) => (
-                <DashboardListItem
-                  key={organization._id}
-                  title={organization.organizationName}
-                  subtitle={organization.primaryAdmin ? `${organization.primaryAdmin.firstName} ${organization.primaryAdmin.lastName}` : "No admin assigned"}
-                  status={organization.status}
-                  meta={formatDate(organization.createdAt)}
-                  avatarName={organization.organizationName}
-                  avatarSrc={organization.logo?.url}
-                />
-              ))
+            {recentActivity.length > 0 ? (
+              recentActivity.map((item) => {
+                const Icon = activityIcons[item.type] || Activity;
+                return (
+                  <div key={item.id} className="flex items-start gap-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                    <div className="shrink-0 rounded-xl bg-app-500/10 p-2 text-app-300 ring-1 ring-app-500/20">
+                      <Icon className="h-4 w-4" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                        <p className="text-sm font-semibold text-white">{item.title}</p>
+                        <p className="shrink-0 text-xs text-slate-500">{formatDateTime(item.occurredAt)}</p>
+                      </div>
+                      <p className="mt-1 text-sm leading-5 text-slate-400">{item.description}</p>
+                    </div>
+                  </div>
+                );
+              })
             ) : (
-              <EmptyState title="No organizations yet" message="Organizations will appear here once they are created." />
+              <EmptyState title="No recent activity" message="Platform activity will appear here as organizations, events, and ticket sales are recorded." />
             )}
           </div>
         </Card>
@@ -194,67 +215,6 @@ function SuperAdminDashboardPage() {
             ) : (
               <EmptyState title="No suspended organizations" message="Suspended organizations will appear here for access management." />
             )}
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="border-slate-800/70 bg-slate-950/85">
-          <SectionHeader
-            eyebrow="Users"
-            title="Recent Users"
-            description="A quick look at the latest platform accounts."
-            className="mb-5"
-          />
-
-          <div className="space-y-3">
-            {recentUsers.length > 0 ? (
-              recentUsers.map((user) => (
-                <DashboardListItem
-                  key={user._id}
-                  title={`${user.firstName} ${user.lastName}`}
-                  subtitle={user.email}
-                  status={user.accountStatus}
-                  meta={user.role}
-                  avatarName={`${user.firstName} ${user.lastName}`}
-                />
-              ))
-            ) : (
-              <EmptyState title="No users yet" message="User accounts will appear here as they join the platform." />
-            )}
-          </div>
-        </Card>
-
-        <Card className="border-slate-800/70 bg-slate-950/85">
-          <SectionHeader
-            eyebrow="Platform metrics"
-            title="High-level snapshot"
-            description="All-time ticket transaction and attendance totals."
-            className="mb-5"
-            actions={[{ label: "Open analytics", icon: BarChart3, onClick: () => navigate(ROUTE_PATHS.SUPER_ADMIN_ANALYTICS) }]}
-          />
-
-          <div className="grid grid-cols-2 gap-2 sm:gap-3">
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Net revenue</p>
-              <p className="mt-2 text-2xl font-semibold text-emerald-300">{formatMoney(analyticsSummary.netRevenue || 0, analyticsSummary.currency)}</p>
-              <p className="mt-1 text-sm text-slate-500">Gross sales less successful refunds</p>
-            </div>
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Events</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{formatNumber(analyticsSummary.events || 0)}</p>
-              <p className="mt-1 text-sm text-slate-500">Platform event total</p>
-            </div>
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Tickets sold</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{formatNumber(analyticsSummary.ticketsSold || 0)}</p>
-              <p className="mt-1 text-sm text-slate-500">Attached to successful orders</p>
-            </div>
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Attendance</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{formatNumber(analyticsSummary.attendance || 0)}</p>
-              <p className="mt-1 text-sm text-slate-500">Recorded check-ins</p>
-            </div>
           </div>
         </Card>
       </div>

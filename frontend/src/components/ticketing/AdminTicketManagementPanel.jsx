@@ -211,7 +211,13 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
         )}
       </div>
 
-      <Modal open={modalOpen} title={editingTicketType ? "Edit ticket type" : "Create ticket type"} onClose={() => setModalOpen(false)} className="max-w-3xl">
+      <Modal
+        open={modalOpen}
+        title={editingTicketType ? "Edit ticket type" : "Create ticket type"}
+        onClose={() => setModalOpen(false)}
+        closeOnBackdrop={false}
+        className="max-w-3xl"
+      >
         <form className="space-y-4" onSubmit={handleSave}>
           {formError ? <p className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{formError}</p> : null}
           <div className="grid gap-4 md:grid-cols-2">
@@ -230,7 +236,6 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
             <Input label="Max per order" type="number" min="1" value={form.maxPerOrder} onChange={(event) => updateField("maxPerOrder", event.target.value)} />
             <Input label="Sale starts" type="datetime-local" value={form.saleStartsAt} onChange={(event) => updateField("saleStartsAt", event.target.value)} />
             <Input label="Sale ends" type="datetime-local" value={form.saleEndsAt} onChange={(event) => updateField("saleEndsAt", event.target.value)} />
-            <Input label="Position" type="number" min="0" value={form.position} onChange={(event) => updateField("position", event.target.value)} />
             <label className="block space-y-2">
               <span className="text-sm font-medium text-slate-200">Status</span>
               <select value={form.status} onChange={(event) => updateField("status", event.target.value)} className="h-11 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 text-sm text-slate-100 outline-none focus:border-app-500 focus:ring-2 focus:ring-app-500/20">

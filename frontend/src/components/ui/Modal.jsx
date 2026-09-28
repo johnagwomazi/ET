@@ -5,7 +5,7 @@ import Button from "./Button";
 import { classNames } from "../../utils/classNames";
 import { useDialogAccessibility } from "../../hooks/useDialogAccessibility";
 
-function Modal({ open, title, children, onClose, footer, className }) {
+function Modal({ open, title, children, onClose, footer, className, closeOnBackdrop = true }) {
   const titleId = useId();
   const dialogRef = useDialogAccessibility(open, onClose);
 
@@ -17,7 +17,7 @@ function Modal({ open, title, children, onClose, footer, className }) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center app-overlay p-3 sm:p-4"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
+        if (closeOnBackdrop && event.target === event.currentTarget) {
           onClose?.();
         }
       }}

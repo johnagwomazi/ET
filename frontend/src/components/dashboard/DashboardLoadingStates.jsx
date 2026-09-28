@@ -50,16 +50,6 @@ function ListRowSkeleton({ compact = false }) {
   );
 }
 
-function MetricsSkeletonCard({ titleWidth = "w-24" }) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-      <Skeleton className="h-3 w-24 rounded-full" />
-      <Skeleton className="mt-3 h-8 w-24 rounded-xl" />
-      <Skeleton className={`mt-2 h-4 ${titleWidth} rounded-full`} />
-    </div>
-  );
-}
-
 export function SuperAdminDashboardSkeleton() {
   return (
     <div className="space-y-6" aria-busy="true" aria-label="Loading super admin dashboard">
@@ -71,39 +61,20 @@ export function SuperAdminDashboardSkeleton() {
         ))}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="border-slate-800/70 bg-slate-950/85 p-6">
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <Skeleton className="h-3 w-32 rounded-full" />
-              <Skeleton className="h-6 w-48 rounded-xl" />
-              <SkeletonText className="h-4 w-80 max-w-full" />
-            </div>
-
-            <div className="space-y-3">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <ListRowSkeleton key={`recent-organization-skeleton-${index}`} />
-              ))}
-            </div>
+      <Card className="border-slate-800/70 bg-slate-950/85 p-6">
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-32 rounded-full" />
+            <Skeleton className="h-6 w-48 rounded-xl" />
+            <SkeletonText className="h-4 w-80 max-w-full" />
           </div>
-        </Card>
-
-        <Card className="border-slate-800/70 bg-slate-950/85 p-6">
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <Skeleton className="h-3 w-28 rounded-full" />
-              <Skeleton className="h-6 w-52 rounded-xl" />
-              <SkeletonText className="h-4 w-[28rem] max-w-full" />
-            </div>
-
-            <div className="space-y-3">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <ListRowSkeleton key={`pending-organization-skeleton-${index}`} />
-              ))}
-            </div>
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <ListRowSkeleton key={`event-performance-skeleton-${index}`} />
+            ))}
           </div>
-        </Card>
-      </div>
+        </div>
+      </Card>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card className="border-slate-800/70 bg-slate-950/85 p-6">
@@ -116,7 +87,7 @@ export function SuperAdminDashboardSkeleton() {
 
             <div className="space-y-3">
               {Array.from({ length: 4 }).map((_, index) => (
-                <ListRowSkeleton key={`recent-user-skeleton-${index}`} />
+                <ListRowSkeleton key={`platform-activity-skeleton-${index}`} />
               ))}
             </div>
           </div>
@@ -130,11 +101,10 @@ export function SuperAdminDashboardSkeleton() {
               <SkeletonText className="h-4 w-[26rem] max-w-full" />
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <MetricsSkeletonCard />
-              <MetricsSkeletonCard />
-              <MetricsSkeletonCard />
-              <MetricsSkeletonCard />
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <ListRowSkeleton key={`suspended-organization-skeleton-${index}`} />
+              ))}
             </div>
           </div>
         </Card>

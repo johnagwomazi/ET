@@ -59,7 +59,7 @@ export const DEFAULT_TABLE_PAGE_SIZE = 10;
 export const DASHBOARD_STAT_KEYS = {
   USERS: "totalUsers",
   ORGANIZATIONS: "totalOrganizations",
-  ACTIVE_ORGANIZATIONS: "activeOrganizations",
+  ACTIVE_EVENTS: "activeEvents",
   REVENUE: "totalRevenue",
   EVENTS: "totalEvents",
 };
