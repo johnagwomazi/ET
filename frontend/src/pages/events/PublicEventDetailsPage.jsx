@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import toast from "react-hot-toast";
 import {
   ArrowLeft,
   CalendarDays,
@@ -10,6 +11,7 @@ import {
   Tag,
   Building2,
   Info,
+  Copy,
 } from "lucide-react";
 import BackButton from "../../components/layout/BackButton";
 import Avatar from "../../components/dashboard/Avatar";
@@ -24,6 +26,7 @@ import { formatDate, formatDateTime, formatNumber } from "../../utils/formatters
 import PublicTicketSelectionPanel from "../../components/ticketing/PublicTicketSelectionPanel";
 import { getSafeExternalUrl } from "../../utils/externalUrl";
 import { getEventImageUrl } from "../../utils/eventImage";
+import { getPublicEventPath, getPublicEventUrl } from "../../utils/eventUrl";
 
 function formatTime(value) {
   if (!value) {
@@ -188,6 +191,7 @@ function PublicEventDetailsError({ title, message, onRetry }) {
 }
 
 function PublicEventDetailsPage() {
+  const navigate = useNavigate();
   const params = useParams();
   const eventId = params.eventId;
 
@@ -226,6 +230,10 @@ function PublicEventDetailsPage() {
       try {
         const response = await getPublicEventById(eventId, { signal });
         const nextEvent = response?.event || null;
+        if (nextEvent?.slug && nextEvent.slug !== eventId) {
+          navigate(getPublicEventPath(nextEvent), { replace: true });
+        }
+
 
         setEvent(nextEvent);
         setBannerFailed(false);
@@ -251,7 +259,7 @@ function PublicEventDetailsPage() {
     loadEvent().catch(() => {});
 
     return () => controller.abort();
-  }, [eventId, reloadToken]);
+  }, [eventId, navigate, reloadToken]);
 
   const location = useMemo(() => getLocationLines(event), [event]);
   const socialLinks = useMemo(() => getSocialLinks(event?.organization?.socialLinks), [event?.organization?.socialLinks]);
@@ -262,6 +270,7 @@ function PublicEventDetailsPage() {
   const capacityLabel = useMemo(() => formatNumber(event?.capacity || 0), [event?.capacity]);
   const isPostponed = event?.status === "POSTPONED";
   const scheduleLabel = useMemo(() => {
+  const isEnded = Boolean(event?.hasEnded || (event?.endAt && new Date(event.endAt) <= new Date()));
     if (!event) {
       return "TBA";
     }
@@ -269,6 +278,19 @@ function PublicEventDetailsPage() {
     return `${formatDate(event.startAt)} at ${formatTime(event.startAt)}`;
   }, [event]);
 
+
+  async function handleCopyLink() {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard unavailable");
+      }
+
+      await navigator.clipboard.writeText(getPublicEventUrl(event));
+      toast.success("Event link copied");
+    } catch {
+      toast.error("Unable to copy the event link");
+    }
+  }
   if (isLoading && !event) {
     return (
       <div className="min-h-screen app-shell">
@@ -312,7 +334,13 @@ function PublicEventDetailsPage() {
     <div className="min-h-screen app-shell">
       <main className="pb-10">
         <PageContainer className="py-6 sm:py-8">
-          <BackButton to={ROUTE_PATHS.HOME} label="Back to discovery" />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <BackButton to={ROUTE_PATHS.HOME} label="Back to discovery" />
+            <Button variant="secondary" size="sm" onClick={handleCopyLink}>
+              <Copy className="h-4 w-4" />
+              Copy link
+            </Button>
+          </div>
         </PageContainer>
 
         <PageContainer className="space-y-6">
@@ -347,6 +375,11 @@ function PublicEventDetailsPage() {
                     {event.category ? (
                       <span className="rounded-full border border-slate-700 bg-slate-950/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-200">
                         {event.category}
+                    {isEnded ? (
+                      <span className="rounded-full border border-rose-400/30 bg-rose-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-rose-100">
+                        Event Ended
+                      </span>
+                    ) : null}
                       </span>
                     ) : null}
                   </div>
@@ -369,6 +402,21 @@ function PublicEventDetailsPage() {
           {isPostponed && event?.lifecycle?.reason ? (
             <Card className="border-amber-500/20 bg-amber-500/10">
               <div className="flex items-start gap-3">
+          {isEnded ? (
+            <Card className="border-rose-500/20 bg-rose-500/10">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-rose-500/15 p-2 text-rose-300 ring-1 ring-rose-500/20">
+                  <Info className="h-4 w-4" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-rose-100">Event Ended</p>
+                  <p className="text-sm leading-6 text-rose-50/85">
+                    This event remains available for reference, but ticket sales are closed.
+                  </p>
+                </div>
+              </div>
+            </Card>
+          ) : null}
                 <div className="rounded-xl bg-amber-500/15 p-2 text-amber-300 ring-1 ring-amber-500/20">
                   <Info className="h-4 w-4" />
                 </div>

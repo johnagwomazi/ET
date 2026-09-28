@@ -139,6 +139,10 @@ const eventSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
+    slugAliases: {
+      type: [{ type: String, trim: true, lowercase: true }],
+      default: () => [],
+    },
     description: {
       type: String,
       default: "",
@@ -231,15 +235,8 @@ eventSchema.pre("validate", function normalizeEventData(next) {
   next();
 });
 
-eventSchema.index(
-  {
-    organization: 1,
-    slug: 1,
-  },
-  {
-    unique: true,
-  }
-);
+eventSchema.index({ slug: 1 }, { unique: true });
+eventSchema.index({ slugAliases: 1 }, { unique: true, sparse: true });
 
 eventSchema.index({
   organization: 1,

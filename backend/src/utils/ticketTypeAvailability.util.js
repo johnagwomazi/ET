@@ -1,5 +1,6 @@
 import { EVENT_STATUS } from "../constants/eventStatus.constants.js";
 import { TICKET_TYPE_STATUS } from "../constants/ticketing.constants.js";
+import { hasEventEnded } from "./event.util.js";
 
 const TICKET_SALES_EVENT_STATUSES = new Set([
   EVENT_STATUS.PUBLISHED,
@@ -20,13 +21,13 @@ function timestamp(value) {
   return Number.isFinite(result) ? result : null;
 }
 
-export function eventPermitsTicketSales(event) {
-  return TICKET_SALES_EVENT_STATUSES.has(event?.status);
+export function eventPermitsTicketSales(event, now = new Date()) {
+  return TICKET_SALES_EVENT_STATUSES.has(event?.status) && !hasEventEnded(event, now);
 }
 
 export function isTicketTypeSalesActive(ticketType, event, now = new Date()) {
   if (!ticketType || ticketType.status !== TICKET_TYPE_STATUS.ACTIVE) return false;
-  if (!eventPermitsTicketSales(event)) return false;
+  if (!eventPermitsTicketSales(event, now)) return false;
 
   const currentTime = timestamp(now);
   const saleStartsAt = timestamp(ticketType.saleStartsAt);
@@ -42,7 +43,7 @@ export function isTicketTypeSalesActive(ticketType, event, now = new Date()) {
 }
 
 export function getTicketTypeAvailability(ticketType, event, now = new Date()) {
-  if (!ticketType || ticketType.status !== TICKET_TYPE_STATUS.ACTIVE || !eventPermitsTicketSales(event)) {
+  if (!ticketType || ticketType.status !== TICKET_TYPE_STATUS.ACTIVE || !eventPermitsTicketSales(event, now)) {
     return TICKET_AVAILABILITY.INACTIVE;
   }
 

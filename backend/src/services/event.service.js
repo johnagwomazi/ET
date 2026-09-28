@@ -12,7 +12,7 @@ import * as ticketTypeRepository from "../repositories/ticketType.repository.js"
 import * as notificationService from "./notification.service.js";
 import { buildPaginationMeta, buildPaginationOptions, escapeRegex } from "../utils/query.util.js";
 import { hasOrganizationPermission } from "../utils/organizationPermission.util.js";
-import { buildEventSlug } from "../utils/event.util.js";
+import { buildEventSlug, isEventSlugInputValid, isReservedEventSlug } from "../utils/event.util.js";
 import { mapEventResponse } from "../utils/eventResponse.util.js";
 import { mapEventStatusHistoryResponse } from "../utils/eventStatusHistoryResponse.util.js";
 
@@ -52,6 +52,44 @@ function normalizeString(value) {
   return value.trim();
 }
 
+async function findSlugClaim(dependencies, organizationId, slug, eventId = null) {
+  if (typeof dependencies.eventRepository.findEventBySlugOrAlias === "function") {
+    return dependencies.eventRepository.findEventBySlugOrAlias(slug, eventId);
+  }
+
+  return dependencies.eventRepository.findEventByOrganizationAndSlug(
+    organizationId,
+    slug,
+    eventId
+  );
+}
+
+async function allocateUniqueEventSlug(dependencies, organizationId, sourceValue) {
+  const normalizedBase = buildEventSlug(sourceValue);
+  const baseSlug = isReservedEventSlug(normalizedBase)
+    ? `${normalizedBase}-event`
+    : normalizedBase;
+
+  for (let suffix = 1; suffix <= 10_000; suffix += 1) {
+    const candidate = suffix === 1 ? baseSlug : `${baseSlug}-${suffix}`;
+    const existingEvent = await findSlugClaim(dependencies, organizationId, candidate);
+
+    if (!existingEvent) {
+      return candidate;
+    }
+  }
+
+  const error = new Error("Unable to generate a unique event URL");
+  error.statusCode = HTTP_STATUS.CONFLICT;
+  throw error;
+}
+
+function slugConflictResult() {
+  return {
+    error: "This event URL is already in use",
+    statusCode: HTTP_STATUS.CONFLICT,
+  };
+}
 function isValidDateValue(value) {
   return value instanceof Date && !Number.isNaN(value.getTime());
 }
@@ -101,8 +139,10 @@ function buildEventCreateData(organizationId, actorUserId, payload) {
   };
 }
 
-function buildEventUpdateData(payload) {
-  if (payload.startAt !== undefined || payload.endAt !== undefined) {
+function buildEventUpdateData(payload, currentEvent) {
+  const hasScheduleUpdate = payload.startAt !== undefined || payload.endAt !== undefined;
+
+  if (hasScheduleUpdate && currentEvent.status !== EVENT_STATUS.DRAFT) {
     return {
       error: "Event date and time changes must use lifecycle operations",
       statusCode: HTTP_STATUS.BAD_REQUEST,
@@ -116,9 +156,14 @@ function buildEventUpdateData(payload) {
   }
 
   if (payload.slug !== undefined) {
+    if (!isEventSlugInputValid(payload.slug)) {
+      return {
+        error: "Choose a valid event URL that is not reserved",
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+      };
+    }
+
     updateData.slug = buildEventSlug(payload.slug);
-  } else if (payload.eventName !== undefined) {
-    updateData.slug = buildEventSlug(payload.eventName);
   }
 
   if (payload.description !== undefined) {
@@ -149,11 +194,10 @@ function buildEventUpdateData(payload) {
     updateData.capacity = payload.capacity;
   }
 
-  if (
-    updateData.startAt !== undefined &&
-    updateData.endAt !== undefined &&
-    updateData.endAt <= updateData.startAt
-  ) {
+  const nextStartAt = updateData.startAt || currentEvent.startAt;
+  const nextEndAt = updateData.endAt || currentEvent.endAt;
+
+  if (hasScheduleUpdate && nextEndAt <= nextStartAt) {
     return {
       error: "End date and time must be after start date and time",
       statusCode: HTTP_STATUS.BAD_REQUEST,
@@ -565,16 +609,41 @@ export async function createOrganizationEvent(organizationId, actorUserId, paylo
   }
 
   const createData = buildEventCreateData(organizationId, actorUserId, payload);
-  const existingEvent = await dependencies.eventRepository.findEventByOrganizationAndSlug(organizationId, createData.slug);
+  const providedSlug = normalizeString(payload.slug);
 
-  if (existingEvent) {
+  if (providedSlug && !isEventSlugInputValid(providedSlug)) {
     return {
-      error: "An event with this slug already exists in this organization",
+      error: "Choose a valid event URL that is not reserved",
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+    };
+  }
+
+  if (providedSlug) {
+    const existingEvent = await findSlugClaim(dependencies, organizationId, createData.slug);
+    if (existingEvent) return slugConflictResult();
+  }
+
+  let event = null;
+  for (let attempt = 0; attempt < 5 && !event; attempt += 1) {
+    if (!providedSlug) {
+      createData.slug = await allocateUniqueEventSlug(dependencies, organizationId, createData.eventName);
+    }
+
+    try {
+      event = await dependencies.eventRepository.createEvent(createData);
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+      if (providedSlug) return slugConflictResult();
+    }
+  }
+
+  if (!event) {
+    return {
+      error: "Unable to generate a unique event URL",
       statusCode: HTTP_STATUS.CONFLICT,
     };
   }
 
-  const event = await dependencies.eventRepository.createEvent(createData);
   const createdEvent = event?._id
     ? await dependencies.eventRepository.findEventByIdAndOrganization(event._id, organizationId)
     : event;
@@ -611,7 +680,7 @@ export async function updateOrganizationEvent(
     };
   }
 
-  const updateData = buildEventUpdateData(payload);
+  const updateData = buildEventUpdateData(payload, currentEvent);
 
   if (updateData.error) {
     return updateData;
@@ -647,19 +716,15 @@ export async function updateOrganizationEvent(
     }
   }
 
-  if (updateData.slug) {
-    const existingEvent = await dependencies.eventRepository.findEventByOrganizationAndSlug(
-      organizationId,
-      updateData.slug,
-      eventId
-    );
+  if (updateData.slug && updateData.slug !== currentEvent.slug) {
+    const existingEvent = await findSlugClaim(dependencies, organizationId, updateData.slug, eventId);
 
-    if (existingEvent) {
-      return {
-        error: "An event with this slug already exists in this organization",
-        statusCode: HTTP_STATUS.CONFLICT,
-      };
-    }
+    if (existingEvent) return slugConflictResult();
+
+    updateData.slugAliases = Array.from(new Set([
+      ...(Array.isArray(currentEvent.slugAliases) ? currentEvent.slugAliases.map(String) : []),
+      currentEvent.slug,
+    ])).filter((alias) => alias && alias !== updateData.slug);
   }
 
   const updatedEvent = await dependencies.eventRepository.updateEventByIdAndOrganization(eventId, organizationId, updateData);

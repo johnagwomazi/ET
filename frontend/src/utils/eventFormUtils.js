@@ -163,6 +163,7 @@ function createBaseSchema({ includeSchedule = true } = {}) {
     .object({
       eventName: z.string().trim().min(1, "Event name is required").max(120, "Event name must be 120 characters or less"),
       description: optionalDescriptionSchema,
+      slug: z.string().trim().max(160, "Event URL must be 160 characters or less").optional().or(z.literal("")),
       category: optionalCategorySchema,
       bannerFile: optionalBannerFileSchema,
       venueName: optionalTextSchema,
@@ -230,13 +231,14 @@ export function createEventFormSchema() {
   return createBaseSchema({ includeSchedule: true });
 }
 
-export function editEventFormSchema() {
-  return createBaseSchema({ includeSchedule: false });
+export function editEventFormSchema({ includeSchedule = false } = {}) {
+  return createBaseSchema({ includeSchedule });
 }
 
 export function buildEventFormValues(event = null) {
   return {
     eventName: event?.eventName || "",
+    slug: event?.slug || "",
     description: event?.description || "",
     category: event?.category || "",
     bannerFile: null,
@@ -255,7 +257,7 @@ export function buildEventFormValues(event = null) {
   };
 }
 
-export function buildEventPayload(values = {}, mode = "create") {
+export function buildEventPayload(values = {}, mode = "create", { includeSchedule = mode === "create" } = {}) {
   const payload = {
     eventName: normalizeOptionalValue(values.eventName),
     description: normalizeOptionalValue(values.description),
@@ -264,12 +266,17 @@ export function buildEventPayload(values = {}, mode = "create") {
   };
 
   const venue = buildVenue(values);
+  const slug = normalizeOptionalValue(values.slug);
+  if (slug) {
+    payload.slug = slug;
+  }
+
 
   if (Object.keys(venue).length > 0) {
     payload.venue = venue;
   }
 
-  if (mode === "create") {
+  if (includeSchedule) {
     const startAt = combineDateAndTime(values.eventDate, values.startTime);
     const endAt = combineDateAndTime(values.eventDate, values.endTime);
 

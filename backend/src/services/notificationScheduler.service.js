@@ -3,6 +3,7 @@ import { NOTIFICATION_DEFAULTS } from "../constants/notification.constants.js";
 import logger from "../lib/logger.js";
 import {
   processDueEventReminders,
+  processEndedEventCompletionReminders,
   retryPendingNotificationEmails,
 } from "./notification.service.js";
 
@@ -13,11 +14,12 @@ export async function runNotificationWorker() {
   if (workerRunning) return { skipped: true };
   workerRunning = true;
   try {
-    const [reminders, emailRetries] = await Promise.all([
+    const [reminders, completionReminders, emailRetries] = await Promise.all([
       processDueEventReminders(),
+      processEndedEventCompletionReminders(),
       retryPendingNotificationEmails(),
     ]);
-    return { reminders, emailRetries };
+    return { reminders, completionReminders, emailRetries };
   } catch (error) {
     logger.error(`Notification worker failed: ${error.message || error}`);
     return { error: true };

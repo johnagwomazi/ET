@@ -1,4 +1,5 @@
 import { EVENT_STATUS } from "../constants/eventStatus.constants.js";
+import { hasEventEnded } from "./event.util.js";
 
 export const PUBLIC_DISCOVERY_STATUSES = [EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED];
 
@@ -28,12 +29,16 @@ function sanitizeLogo(logo) {
   };
 }
 
-export function isPubliclyDiscoverableEvent(event) {
+export function isPublicEventStatus(event) {
   if (!event) {
     return false;
   }
 
   return PUBLIC_DISCOVERY_STATUSES.includes(event.status);
+}
+
+export function isPubliclyDiscoverableEvent(event, now = new Date()) {
+  return isPublicEventStatus(event) && !hasEventEnded(event, now);
 }
 
 export function mapPublicOrganizationResponse(organizationDocument) {
@@ -96,6 +101,7 @@ export function mapPublicEventResponse(eventDocument) {
     capacity: Number.isFinite(Number(event.capacity)) ? Number(event.capacity) : 0,
     status: event.status || EVENT_STATUS.DRAFT,
     isFeatured: Boolean(event.isFeatured),
+    hasEnded: hasEventEnded(event),
     featuredAt: event.featuredAt || null,
     lifecycle: {
       reason: event.lifecycle?.reason || null,

@@ -414,6 +414,8 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
     return { error: "Not authorized", statusCode: HTTP_STATUS.UNAUTHORIZED };
   }
 
+  const event = await dependencies.eventRepository.findPublicEventById(payload.eventId);
+
   if (payload.idempotencyKey) {
     const existingOrder = await dependencies.orderRepository.findOrderByCustomerAndIdempotencyKey(customerId, payload.idempotencyKey);
     if (existingOrder) {
@@ -429,6 +431,10 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
             reused: true,
           },
         };
+      }
+
+      if (!event || !eventPermitsTicketSales(event)) {
+        return { error: "Event has ended and is no longer available for checkout", statusCode: HTTP_STATUS.BAD_REQUEST };
       }
 
       if (!existingOrder.metadata?.authorizationUrl || !existingOrder.metadata?.accessCode) {
@@ -449,8 +455,6 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
       };
     }
   }
-
-  const event = await dependencies.eventRepository.findPublicEventById(payload.eventId);
 
   if (!event || !eventPermitsTicketSales(event)) {
     return { error: "Event is not available for checkout", statusCode: HTTP_STATUS.BAD_REQUEST };

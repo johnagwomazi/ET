@@ -386,6 +386,11 @@ function EventLifecyclePanel({ event, canManageLifecycle = false, onEventUpdated
 
   const availableActions = useMemo(() => getAvailableActions(event), [event]);
   const hasActions = availableActions.length > 0;
+  const hasEndedAwaitingCompletion = Boolean(
+    ["PUBLISHED", "POSTPONED"].includes(event?.status)
+    && event?.endAt
+    && new Date(event.endAt) <= new Date()
+  );
 
   async function loadHistory({ quiet = false } = {}) {
     if (!eventId || !canManageLifecycle) {
@@ -472,6 +477,22 @@ function EventLifecyclePanel({ event, canManageLifecycle = false, onEventUpdated
 
   return (
     <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+      {hasEndedAwaitingCompletion ? (
+        <Card className="border-amber-500/20 bg-amber-500/10 xl:col-span-2">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+              <div>
+                <p className="font-semibold text-amber-100">This event has ended</p>
+                <p className="mt-1 text-sm leading-6 text-amber-50/80">Mark it as completed when you're ready. Event records and analytics remain available.</p>
+              </div>
+            </div>
+            <Button onClick={() => setSelectedAction("complete")} disabled={isActionSubmitting}>
+              Mark as Completed
+            </Button>
+          </div>
+        </Card>
+      ) : null}
       <Card className="border-slate-800/70 bg-slate-950/85">
         <div className="flex flex-col gap-4 border-b border-slate-800/70 pb-4">
           <div className="flex items-start justify-between gap-3">

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getPublicEventPath } from "../../utils/eventUrl";
 import { Link } from "react-router-dom";
 import { BadgeCheck, CalendarDays, MapPin, ReceiptText, Ticket } from "lucide-react";
 import Button from "../../components/ui/Button";
@@ -49,7 +50,7 @@ function HistoryCard({ record }) {
               <h2 className="mt-3 text-xl font-semibold text-white">{event?.eventName || "Event activity"}</h2>
               <p className="mt-1 text-sm text-slate-400">{record.ticketTypeDetails?.name || "Ticket type unavailable"}</p>
             </div>
-            {record.event ? <Button as={Link} to={`/events/${record.event}`} variant="secondary" size="sm">View Event</Button> : null}
+            {record.event ? <Button as={Link} to={getPublicEventPath(record.eventDetails || record.event)} variant="secondary" size="sm">View Event</Button> : null}
           </div>
 
           <div className="grid gap-3 text-sm sm:grid-cols-2">

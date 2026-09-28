@@ -22,6 +22,7 @@ import ticketingRoutes from "../src/routes/ticketing.routes.js";
 import { buildPaymentCallbackUrl } from "../src/utils/payment.util.js";
 import {
   getTicketTypeAvailability,
+  eventPermitsTicketSales,
   getEffectiveTicketTypeStatus,
   isTicketTypeSalesActive,
   TICKET_AVAILABILITY,
@@ -590,6 +591,12 @@ test("ticket sales status follows event lifecycle and the current sales period w
   assert.equal(isTicketTypeSalesActive(ticketType, { status: EVENT_STATUS.POSTPONED }, now), true);
   assert.equal(getEffectiveTicketTypeStatus(ticketType, { status: EVENT_STATUS.COMPLETED }, now), TICKET_TYPE_STATUS.INACTIVE);
   assert.equal(getEffectiveTicketTypeStatus(ticketType, { status: EVENT_STATUS.CANCELED }, now), TICKET_TYPE_STATUS.INACTIVE);
+  assert.equal(eventPermitsTicketSales({
+    status: EVENT_STATUS.PUBLISHED,
+    endAt: new Date("2026-09-24T11:59:59.000Z"),
+  }, now), false);
+  assert.equal(getEffectiveTicketTypeStatus(ticketType, { status: EVENT_STATUS.PUBLISHED, endAt: new Date("2026-09-24T11:59:59.000Z") }, now), TICKET_TYPE_STATUS.INACTIVE);
+
 
   ticketType.saleStartsAt = new Date("2026-09-24T13:00:00.000Z");
   assert.equal(getEffectiveTicketTypeStatus(ticketType, { status: EVENT_STATUS.PUBLISHED }, now), TICKET_TYPE_STATUS.INACTIVE);
@@ -1873,4 +1880,33 @@ test("a five-ticket checkout remains one purchase with quantity five", async () 
   assert.equal(sales.orders.length, 1);
   assert.equal(sales.orders[0].items[0].quantity, 5);
   assert.equal(state.tickets.length, 5);
+});
+
+test("checkout authoritatively rejects a published event after its actual end time", async () => {
+  let initializationCalls = 0;
+  const { dependencies, state } = createDependencies({
+    paystackService: {
+      async initializeTransaction() {
+        initializationCalls += 1;
+        throw new Error("Paystack must not be called for an ended event");
+      },
+    },
+  });
+  state.event.endAt = new Date(Date.now() - 1000);
+
+  const result = await ticketingService.createCheckoutOrder(
+    ids.customer,
+    {
+      eventId: ids.event,
+      customerInfo: { name: "Ada Buyer", phone: "+2348012345678", email: "ada@example.com" },
+      items: [{ ticketTypeId: ids.ticketType, quantity: 1 }],
+      idempotencyKey: "ended-event-checkout",
+    },
+    dependencies
+  );
+
+  assert.equal(result.statusCode, 400);
+  assert.match(result.error, /not available|ended/i);
+  assert.equal(initializationCalls, 0);
+  assert.equal(state.ticketType.soldQuantity, 2);
 });

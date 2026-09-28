@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getPublicEventPath } from "../../utils/eventUrl";
 import { Link } from "react-router-dom";
 import { CalendarDays, Gift, MapPin, QrCode, Ticket } from "lucide-react";
 
@@ -49,7 +50,7 @@ function EventidorTicketCard({ ticket, active, onAssign, showPurchase = true }) 
               </div>
               <div className="flex flex-wrap gap-2">
                 {canAssign ? <Button variant="secondary" size="sm" onClick={() => onAssign?.(ticket)}><Gift className="h-4 w-4" />{ticket.assignment?.isAssigned ? "Reassign" : "Assign"}</Button> : null}
-                {ticket.event ? <Button as={Link} to={`/events/${ticket.event}`} variant="secondary" size="sm">View Event</Button> : null}
+                {ticket.event ? <Button as={Link} to={getPublicEventPath(ticket.eventDetails || ticket.event)} variant="secondary" size="sm">View Event</Button> : null}
               </div>
             </div>
 

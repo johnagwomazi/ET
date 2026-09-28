@@ -6,7 +6,7 @@ import StatusBadge from "../dashboard/StatusBadge";
 import { Skeleton } from "../common/Skeleton";
 import { formatDate } from "../../utils/formatters";
 import { classNames } from "../../utils/classNames";
-import { ROUTE_PATHS } from "../../routes/routePaths";
+import { getPublicEventPath } from "../../utils/eventUrl";
 import { getEventImageUrl } from "../../utils/eventImage";
 
 function formatEventTime(value) {
@@ -32,7 +32,7 @@ function getVenueLabel(event) {
 
 function PublicEventCard({ event, className, spotlight = false }) {
   const [imageFailed, setImageFailed] = useState(false);
-  const eventHref = ROUTE_PATHS.PUBLIC_EVENT_DETAILS.replace(":eventId", event?.id || "");
+  const eventHref = getPublicEventPath(event);
   const imageUrl = getEventImageUrl(event);
 
   return (

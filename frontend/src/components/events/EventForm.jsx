@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { CalendarDays, Image as ImageIcon, MapPin, PencilLine, Save, X } from "lucide-react";
+import { CalendarDays, Copy, Image as ImageIcon, MapPin, PencilLine, Save, X } from "lucide-react";
 import Card from "../ui/Card";
 import Button from "../ui/Button";
 import Input from "../ui/Input";
@@ -21,6 +21,7 @@ import {
 } from "../../utils/eventFormUtils";
 import { formatDateTime } from "../../utils/formatters";
 import { getEventImageUrl } from "../../utils/eventImage";
+import { getPublicEventUrl, normalizeEventSlug } from "../../utils/eventUrl";
 
 const fieldErrorToFieldMap = {
   "Event name is required": "eventName",
@@ -29,7 +30,9 @@ const fieldErrorToFieldMap = {
   "Category must be 80 characters or less": "category",
   "Banner must be a JPG, PNG, or WebP image": "bannerFile",
   "Banner image must be 5 MB or smaller": "bannerFile",
-  "An event with this slug already exists in this organization": "eventName",
+  "This event URL is already in use": "slug",
+  "Choose a valid event URL that is not reserved": "slug",
+  "Event URL must be 160 characters or less": "slug",
   "Capacity cannot be negative": "capacity",
   "Capacity must be a whole number": "capacity",
   "Capacity must be at least 1": "capacity",
@@ -74,10 +77,15 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
   const navigate = useNavigate();
   const isEditMode = mode === "edit";
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const eventStatus = initialEvent?.status || "DRAFT";
+  const canEditSchedule = !isEditMode || eventStatus === "DRAFT";
   const [submitError, setSubmitError] = useState(null);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
 
-  const schema = useMemo(() => (isEditMode ? editEventFormSchema() : createEventFormSchema()), [isEditMode]);
+  const schema = useMemo(
+    () => (isEditMode ? editEventFormSchema({ includeSchedule: canEditSchedule }) : createEventFormSchema()),
+    [canEditSchedule, isEditMode]
+  );
   const defaultValues = useMemo(() => getEventFormDefaultValues(initialEvent), [initialEvent]);
 
   const {
@@ -99,6 +107,10 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
   const bannerFiles = watch("bannerFile");
   const bannerFile = getEventBannerFile({ bannerFile: bannerFiles });
   const storedBannerUrl = getEventImageUrl(initialEvent);
+  const slugValue = watch("slug");
+  const eventNameValue = watch("eventName");
+  const previewSlug = normalizeEventSlug(slugValue || eventNameValue);
+  const shareableUrl = previewSlug ? getPublicEventUrl(previewSlug) : "";
   const [previewUrl, setPreviewUrl] = useState(storedBannerUrl);
 
   useEffect(() => {
@@ -142,9 +154,22 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
   async function submit(values) {
     setIsSubmitting(true);
     setSubmitError(null);
+  async function copyShareableUrl() {
+    try {
+      if (!shareableUrl || !navigator.clipboard?.writeText) {
+        throw new Error("Clipboard unavailable");
+      }
+
+      await navigator.clipboard.writeText(shareableUrl);
+      toast.success("Event link copied");
+    } catch {
+      toast.error("Unable to copy the event link");
+    }
+  }
+
 
     try {
-      const payload = buildEventPayload(values, mode);
+      const payload = buildEventPayload(values, mode, { includeSchedule: canEditSchedule });
       const selectedBanner = getEventBannerFile(values);
       const response = isEditMode
         ? await eventService.updateEvent(initialEvent?._id || initialEvent?.id, payload, selectedBanner)
@@ -177,8 +202,6 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
     }
   }
 
-  const eventStatus = initialEvent?.status || "DRAFT";
-
   return (
     <>
       <form className="space-y-6" onSubmit={handleSubmit(submit)}>
@@ -200,7 +223,7 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
               </h2>
               <p className="max-w-3xl text-sm leading-6 text-slate-400">
                 {isEditMode
-                  ? "Update the event details below. The original schedule remains locked."
+                  ? canEditSchedule ? "Update this draft's details, schedule, shareable URL, venue, and capacity." : "Update event details and its shareable URL. Published schedule changes use lifecycle actions."
                   : "Provide the event information that will be saved as a draft and can be refined later."}
               </p>
             </div>
@@ -228,6 +251,25 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
                   error={errors.eventName?.message}
                   {...register("eventName")}
                 />
+
+                <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                  <Input
+                    label="Shareable event URL"
+                    placeholder="spring-music-festival"
+                    error={errors.slug?.message}
+                    helperText="Lowercase letters, numbers, and hyphens. Reserved or existing URLs cannot be used."
+                    {...register("slug")}
+                  />
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="min-w-0 break-all text-xs text-slate-400">
+                      {shareableUrl || "Your Eventidor URL will appear here."}
+                    </p>
+                    <Button type="button" variant="secondary" size="sm" disabled={!shareableUrl} onClick={copyShareableUrl}>
+                      <Copy className="h-4 w-4" />
+                      Copy link
+                    </Button>
+                  </div>
+                </div>
 
                 <Input
                   label="Category"
@@ -269,9 +311,9 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-white">Schedule</p>
                   <p className="text-sm leading-6 text-slate-400">
-                    {isEditMode
-                      ? "Schedule fields cannot be changed after creation."
-                      : "Choose the event date and start/end time before creating the draft."}
+                    {canEditSchedule
+                      ? "Draft schedule changes are saved as normal edits and do not postpone the event."
+                      : "Published schedule changes must use the existing postponement lifecycle action."}
                   </p>
                 </div>
               </div>
@@ -281,29 +323,29 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
                   label="Event date"
                   type="date"
                   error={errors.eventDate?.message}
-                  disabled={isEditMode}
-                  helperText={isEditMode ? "Locked after creation" : "Required"}
+                  disabled={!canEditSchedule}
+                  helperText={canEditSchedule ? "Required" : "Use Postpone to change a published schedule"}
                   {...register("eventDate")}
                 />
                 <Input
                   label="Start time"
                   type="time"
                   error={errors.startTime?.message}
-                  disabled={isEditMode}
-                  helperText={isEditMode ? "Locked after creation" : "Required"}
+                  disabled={!canEditSchedule}
+                  helperText={canEditSchedule ? "Required" : "Use Postpone to change a published schedule"}
                   {...register("startTime")}
                 />
                 <Input
                   label="End time"
                   type="time"
                   error={errors.endTime?.message}
-                  disabled={isEditMode}
-                  helperText={isEditMode ? "Locked after creation" : "Must be after start time"}
+                  disabled={!canEditSchedule}
+                  helperText={canEditSchedule ? "Must be after start time" : "Use Postpone to change a published schedule"}
                   {...register("endTime")}
                 />
               </div>
 
-              {isEditMode ? (
+              {isEditMode && !canEditSchedule ? (
                 <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/70 px-4 py-3 text-sm text-slate-400">
                   Current schedule: {formatDateTime(initialEvent?.startAt)} to {formatDateTime(initialEvent?.endAt)}
                 </div>

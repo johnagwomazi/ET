@@ -84,6 +84,7 @@ test("public discovery still returns featured and trending event collections", a
   const sanitizedFilter = calls.findPublicEvents[0].filter;
   mongoose.sanitizeFilter(sanitizedFilter);
   assert.deepEqual(sanitizedFilter.status.$in, [EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED]);
+  assert.ok(sanitizedFilter.endAt.$gt instanceof Date);
 });
 
 test("public event details returns a published event with public fields only", async () => {
@@ -151,8 +152,8 @@ test("public event details hides draft events", async () => {
   assert.equal(result.statusCode, 404);
 });
 
-test("public event details hides canceled and completed events", async () => {
-  for (const status of [EVENT_STATUS.CANCELED, EVENT_STATUS.COMPLETED]) {
+test("public event details hides canceled events", async () => {
+  for (const status of [EVENT_STATUS.CANCELED]) {
     const { dependencies } = buildDiscoveryDependencies({
       publicEvent: createDocument({
         _id: "event_1",
@@ -213,4 +214,78 @@ test("public event details returns not found for missing events", async () => {
 
   assert.equal(result.error, "Event not found");
   assert.equal(result.statusCode, 404);
+});
+
+test("ended and completed events remain directly accessible but are marked ended", async () => {
+  for (const status of [EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED, EVENT_STATUS.COMPLETED]) {
+    const { dependencies } = buildDiscoveryDependencies({
+      publicEvent: createDocument({
+        _id: "event_ended",
+        eventName: "Past Summit",
+        slug: "past-summit",
+        description: "A completed public event.",
+        category: "Conference",
+        startAt: new Date("2025-01-01T09:00:00.000Z"),
+        endAt: new Date("2025-01-01T18:00:00.000Z"),
+        capacity: 100,
+        status,
+        lifecycle: {},
+        venue: { name: "Main Hall", address: { city: "Lagos" } },
+        organization: createDocument({ _id: "org_1", organizationName: "Events Org" }),
+      }),
+    });
+
+    const result = await getPublicEventById("past-summit", dependencies);
+    assert.equal(result.error, undefined);
+    assert.equal(result.event.hasEnded, true);
+  }
+});
+
+test("historical slug aliases resolve to the canonical event URL", async () => {
+  const publicEvent = createDocument({
+    _id: "event_1",
+    eventName: "Annual Product Summit",
+    slug: "annual-product-summit",
+    slugAliases: ["annual-event-summit"],
+    description: "A public summit.",
+    category: "Conference",
+    startAt: new Date("2027-10-01T09:00:00.000Z"),
+    endAt: new Date("2027-10-01T18:00:00.000Z"),
+    capacity: 500,
+    status: EVENT_STATUS.PUBLISHED,
+    lifecycle: {},
+    venue: { name: "Main Hall", address: { city: "Lagos" } },
+    organization: createDocument({ _id: "org_1", organizationName: "Events Org" }),
+  });
+  const { dependencies } = buildDiscoveryDependencies();
+  dependencies.eventRepository.findPublicEventByIdentifier = async () => publicEvent;
+
+  const result = await getPublicEventById("annual-event-summit", dependencies);
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.canonicalSlug, "annual-product-summit");
+  assert.equal(result.shouldRedirect, true);
+});
+
+test("canonical slug lookups do not request a redirect", async () => {
+  const publicEvent = createDocument({
+    _id: "event_1",
+    eventName: "Annual Product Summit",
+    slug: "annual-product-summit",
+    description: "A public summit.",
+    category: "Conference",
+    startAt: new Date("2027-10-01T09:00:00.000Z"),
+    endAt: new Date("2027-10-01T18:00:00.000Z"),
+    capacity: 500,
+    status: EVENT_STATUS.PUBLISHED,
+    lifecycle: {},
+    venue: { name: "Main Hall", address: { city: "Lagos" } },
+    organization: createDocument({ _id: "org_1", organizationName: "Events Org" }),
+  });
+  const { dependencies } = buildDiscoveryDependencies();
+  dependencies.eventRepository.findPublicEventByIdentifier = async () => publicEvent;
+
+  const result = await getPublicEventById("annual-product-summit", dependencies);
+
+  assert.equal(result.shouldRedirect, false);
 });

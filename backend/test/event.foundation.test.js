@@ -8,6 +8,7 @@ import {
   eventCreateSchema,
   eventIdParamSchema,
   eventListQuerySchema,
+  publicEventIdentifierParamSchema,
   eventUpdateSchema,
   eventStatusSchema,
 } from "../src/validators/event.validator.js";
@@ -73,13 +74,17 @@ test("event model rejects invalid capacity and date ranges", async () => {
   });
 });
 
-test("event model keeps slug uniqueness scoped to organization", () => {
+test("event model keeps current slugs and historical aliases globally unique", () => {
   const indexes = Event.schema.indexes();
-  const scopedSlugIndex = indexes.find(([definition, options]) => {
-    return definition.organization === 1 && definition.slug === 1 && options.unique === true;
+  const slugIndex = indexes.find(([definition, options]) => {
+    return definition.slug === 1 && options.unique === true;
+  });
+  const aliasIndex = indexes.find(([definition, options]) => {
+    return definition.slugAliases === 1 && options.unique === true && options.sparse === true;
   });
 
-  assert.ok(scopedSlugIndex);
+  assert.ok(slugIndex);
+  assert.ok(aliasIndex);
 });
 
 test("event validator accepts a valid create payload", () => {
@@ -143,6 +148,12 @@ test("event validator accepts valid event ids and rejects invalid ones", () => {
   assert.equal(invalidResult.success, false);
 });
 
+test("public event identifier validator accepts both ids and clean slugs", () => {
+  assert.equal(publicEventIdentifierParamSchema.safeParse({ eventId: "507f1f77bcf86cd799439011" }).success, true);
+  assert.equal(publicEventIdentifierParamSchema.safeParse({ eventId: "annual-event-summit" }).success, true);
+  assert.equal(publicEventIdentifierParamSchema.safeParse({ eventId: "../admin" }).success, false);
+});
+
 test("event validator update schema keeps lifecycle fields out of the structural update payload", () => {
   const result = eventUpdateSchema.safeParse({
     eventName: "Updated Event Name",
@@ -160,13 +171,13 @@ test("event validator update schema rejects lifecycle status updates", () => {
   assert.equal(result.success, false);
 });
 
-test("event validator update schema rejects direct schedule changes", () => {
+test("event validator update schema accepts draft schedule changes for service-level lifecycle checks", () => {
   const result = eventUpdateSchema.safeParse({
     startAt: "2026-10-01T09:00:00.000Z",
     endAt: "2026-10-01T18:00:00.000Z",
   });
 
-  assert.equal(result.success, false);
+  assert.equal(result.success, true);
 });
 
 function eventSchemaPathRef(pathName) {

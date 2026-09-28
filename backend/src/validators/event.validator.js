@@ -4,6 +4,7 @@ import { EVENT_STATUS } from "../constants/eventStatus.constants.js";
 const urlOrEmptySchema = z.union([z.string().trim().url("Please provide a valid URL"), z.literal("")]).optional();
 const mongoIdSchema = z.string().trim().regex(/^[0-9a-fA-F]{24}$/, "Invalid event id");
 const mongoUserIdSchema = z.string().trim().regex(/^[0-9a-fA-F]{24}$/, "Invalid user id");
+const publicEventIdentifierSchema = z.string().trim().min(1).max(160).regex(/^[a-zA-Z0-9-]+$/, "Invalid event identifier");
 
 export const eventStatusSchema = z.enum(Object.values(EVENT_STATUS));
 export const eventIdParamSchema = z
@@ -11,6 +12,12 @@ export const eventIdParamSchema = z
     eventId: mongoIdSchema,
   })
   .strict();
+export const publicEventIdentifierParamSchema = z
+  .object({
+    eventId: publicEventIdentifierSchema,
+  })
+  .strict();
+
 
 export const eventManagerIdParamSchema = z
   .object({
@@ -147,5 +154,11 @@ export const eventUpdateSchema = z
     banner: eventBannerSchema,
     venue: eventVenueSchema,
     capacity: capacitySchema.optional(),
+    startAt: startAtSchema.optional(),
+    endAt: endAtSchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine((data) => !data.startAt || !data.endAt || data.endAt > data.startAt, {
+    message: "End date and time must be after start date and time",
+    path: ["endAt"],
+  });

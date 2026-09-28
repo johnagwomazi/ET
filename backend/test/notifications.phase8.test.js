@@ -151,6 +151,7 @@ function createDependencies(options = {}) {
     eventRepository: {
       async findEventsStartingBetween() { return options.upcomingEvents || []; },
     },
+      async findEventsEndedBefore() { return options.endedEvents || []; },
     eventManagerAssignmentRepository: {
       async findEventManagers() { return options.assignments || []; },
     },
@@ -397,4 +398,35 @@ test("email template escapes stored content and uses only allowlisted navigation
   assert.doesNotMatch(template.html, /<script>/);
   assert.doesNotMatch(template.html, /evil\.example/);
   assert.match(template.html, /&lt;script&gt;/);
+});
+
+test("ended-event completion reminder is persisted and emailed only once", async () => {
+  const endedEvent = event({
+    status: EVENT_STATUS.PUBLISHED,
+    endAt: new Date("2026-09-01T10:00:00.000Z"),
+    createdBy: ids.manager,
+    organization: { _id: ids.organization, primaryAdmin: ids.admin },
+  });
+  const state = createDependencies({ endedEvents: [endedEvent] });
+  let query;
+  state.dependencies.eventRepository.findEventsEndedBefore = async (endAt, statuses) => {
+    query = { endAt, statuses };
+    return [endedEvent];
+  };
+
+  await notificationService.processEndedEventCompletionReminders(
+    new Date("2026-09-02T10:00:00.000Z"),
+    state.dependencies
+  );
+  await notificationService.processEndedEventCompletionReminders(
+    new Date("2026-09-02T11:00:00.000Z"),
+    state.dependencies
+  );
+
+  assert.deepEqual(query.statuses, [EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED]);
+  assert.equal(state.notifications.length, 1);
+  assert.equal(state.notifications[0].recipient, ids.admin);
+  assert.equal(state.notifications[0].type, NOTIFICATION_TYPE.EVENT_COMPLETION_REQUIRED);
+  assert.equal(state.sentEmails.length, 1);
+  assert.equal(endedEvent.status, EVENT_STATUS.PUBLISHED);
 });

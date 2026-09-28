@@ -1,5 +1,5 @@
 import envConfig from "../config/env.config.js";
-import { NOTIFICATION_NAVIGATION_KEY } from "../constants/notification.constants.js";
+import { NOTIFICATION_NAVIGATION_KEY, NOTIFICATION_TYPE } from "../constants/notification.constants.js";
 
 function escapeHtml(value) {
   return String(value || "")
@@ -32,7 +32,10 @@ function buildActionUrl(navigation) {
 export function buildNotificationEmail(notification, recipient = {}) {
   const recipientName = recipient.firstName || "there";
   const actionUrl = buildActionUrl(notification.navigation);
-  const actionLabel = notification.navigation?.key === NOTIFICATION_NAVIGATION_KEY.CUSTOMER_TICKETS
+  const isCompletionReminder = notification.type === NOTIFICATION_TYPE.EVENT_COMPLETION_REQUIRED;
+  const actionLabel = isCompletionReminder
+    ? "Review event"
+    : notification.navigation?.key === NOTIFICATION_NAVIGATION_KEY.CUSTOMER_TICKETS
     ? "View tickets"
     : "View details";
   const text = [
@@ -41,7 +44,7 @@ export function buildNotificationEmail(notification, recipient = {}) {
     notification.message,
     ...(actionUrl ? ["", `${actionLabel}: ${actionUrl}`] : []),
     "",
-    "This is an operational message from Events.",
+    isCompletionReminder ? "The Eventidor Team" : "This is an operational message from Events.",
   ].join("\n");
   const actionMarkup = actionUrl
     ? `<p style="margin:24px 0"><a href="${escapeHtml(actionUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:6px;font-weight:600">${actionLabel}</a></p>`
@@ -55,12 +58,12 @@ export function buildNotificationEmail(notification, recipient = {}) {
   <body style="margin:0;background:#0f172a;color:#e2e8f0;font-family:Arial,sans-serif">
     <div style="max-width:600px;margin:0 auto;padding:28px 18px">
       <div style="border:1px solid #1e293b;background:#111827;padding:28px">
-        <p style="margin:0 0 18px;color:#60a5fa;font-size:13px;font-weight:700;text-transform:uppercase">Events</p>
+        <p style="margin:0 0 18px;color:#60a5fa;font-size:13px;font-weight:700;text-transform:uppercase">${isCompletionReminder ? "Eventidor" : "Events"}</p>
         <h1 style="margin:0 0 18px;color:#ffffff;font-size:24px;line-height:1.3">${escapeHtml(notification.title)}</h1>
         <p style="margin:0 0 14px;color:#cbd5e1;line-height:1.7">Hello ${escapeHtml(recipientName)},</p>
         <p style="margin:0;color:#cbd5e1;line-height:1.7">${escapeHtml(notification.message)}</p>
         ${actionMarkup}
-        <p style="margin:24px 0 0;border-top:1px solid #1e293b;padding-top:18px;color:#64748b;font-size:12px;line-height:1.6">This is an operational message from Events.</p>
+        <p style="margin:24px 0 0;border-top:1px solid #1e293b;padding-top:18px;color:#64748b;font-size:12px;line-height:1.6">${isCompletionReminder ? "The Eventidor Team" : "This is an operational message from Events."}</p>
       </div>
     </div>
   </body>

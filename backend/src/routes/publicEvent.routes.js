@@ -2,7 +2,7 @@ import express from "express";
 import * as eventDiscoveryController from "../controllers/eventDiscovery.controller.js";
 import * as ticketingController from "../controllers/ticketing.controller.js";
 import { validate } from "../middleware/validate.middleware.js";
-import { eventIdParamSchema } from "../validators/event.validator.js";
+import { eventIdParamSchema, publicEventIdentifierParamSchema } from "../validators/event.validator.js";
 import { publicEventDiscoveryQuerySchema } from "../validators/publicEventDiscovery.validator.js";
 
 const publicEventRouter = express.Router();
@@ -21,7 +21,7 @@ publicEventRouter.get(
 
 publicEventRouter.get(
   "/:eventId",
-  validate(eventIdParamSchema, "params"),
+  validate(publicEventIdentifierParamSchema, "params"),
   eventDiscoveryController.getPublicEventById
 );
 

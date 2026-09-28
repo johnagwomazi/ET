@@ -348,6 +348,29 @@ export async function sendEventReminderNotifications(event, dependencies = defau
   }), dependencies);
 }
 
+export async function sendEventCompletionReminder(event, dependencies = defaultDependencies) {
+  if (![EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED].includes(event?.status)) {
+    return { skipped: true, reason: "EVENT_NOT_ELIGIBLE" };
+  }
+
+  const eventId = getDocumentId(event);
+  const recipient = event.organization?.primaryAdmin || event.createdBy;
+  if (!eventId || !recipient) return { skipped: true, reason: "ORGANIZER_UNAVAILABLE" };
+
+  return createNotificationForUser({
+    recipient,
+    allowedRoles: [USER_ROLES.ADMIN],
+    organization: event.organization,
+    type: NOTIFICATION_TYPE.EVENT_COMPLETION_REQUIRED,
+    title: "Your event has ended - mark it as completed",
+    message: `${eventName(event)} has reached its scheduled end time. Your event records, ticket sales, attendees, and analytics remain available. Review the event and mark it as completed when you're ready.`,
+    relatedEntity: { type: NOTIFICATION_ENTITY_TYPE.EVENT, id: eventId },
+    navigation: { key: NOTIFICATION_NAVIGATION_KEY.ORGANIZATION_EVENT, params: { eventId } },
+    metadata: { eventName: eventName(event), eventId, endAt: event.endAt || null },
+    deduplicationKey: `${NOTIFICATION_TYPE.EVENT_COMPLETION_REQUIRED}:EVENT:${eventId}`,
+  }, dependencies);
+}
+
 export async function sendManagerAssignedNotification(manager, event, assignment, dependencies = defaultDependencies) {
   const eventId = getDocumentId(event);
   return createNotificationForUser({
@@ -425,6 +448,15 @@ export async function processDueEventReminders(now = new Date(), dependencies = 
   const endAt = new Date(now.getTime() + leadMs);
   const events = await dependencies.eventRepository.findEventsStartingBetween(startAt, endAt, [EVENT_STATUS.PUBLISHED]);
   const results = await Promise.allSettled(events.map((event) => sendEventReminderNotifications(event, dependencies)));
+  return { eventsScanned: events.length, completed: results.filter((result) => result.status === "fulfilled").length };
+}
+
+export async function processEndedEventCompletionReminders(now = new Date(), dependencies = defaultDependencies) {
+  const events = await dependencies.eventRepository.findEventsEndedBefore(
+    now,
+    [EVENT_STATUS.PUBLISHED, EVENT_STATUS.POSTPONED]
+  );
+  const results = await Promise.allSettled(events.map((event) => sendEventCompletionReminder(event, dependencies)));
   return { eventsScanned: events.length, completed: results.filter((result) => result.status === "fulfilled").length };
 }
 

@@ -43,6 +43,7 @@ function PublicTicketSelectionPanel({ event }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const salesEnded = Boolean(event?.hasEnded || (event?.endAt && new Date(event.endAt) <= new Date()));
   useEffect(() => {
     const controller = new AbortController();
 
@@ -65,12 +66,16 @@ function PublicTicketSelectionPanel({ event }) {
       }
     }
 
-    if (event?.id) {
+    if (event?.id && !salesEnded) {
       loadTicketTypes();
+    } else {
+      setTicketTypes([]);
+      setQuantities({});
+      setIsLoading(false);
     }
 
     return () => controller.abort();
-  }, [event?.id]);
+  }, [event?.id, salesEnded]);
 
   const selectedItems = useMemo(
     () => ticketTypes
@@ -128,11 +133,13 @@ function PublicTicketSelectionPanel({ event }) {
         </div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-app-300">Tickets</p>
-          <h2 className="mt-1 text-xl font-semibold text-white">Select tickets</h2>
+          <h2 className="mt-1 text-xl font-semibold text-white">{salesEnded ? "Ticket sales ended" : "Select tickets"}</h2>
         </div>
       </div>
 
-      {isLoading ? (
+      {salesEnded ? (
+        <EmptyState title="Event Ended" message="This event has ended and ticket purchasing is no longer available." />
+      ) : isLoading ? (
         <div className="space-y-3">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-28 rounded-2xl" />)}</div>
       ) : error ? (
         <ErrorState title="Tickets unavailable" message={error} />
@@ -186,7 +193,7 @@ function PublicTicketSelectionPanel({ event }) {
 
       <div className="flex flex-col gap-3 border-t border-slate-800 pt-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-400">Selected total: <span className="font-semibold text-white">{formatMoney(total, currency)}</span></p>
-        <Button onClick={continueToCheckout} disabled={selectedItems.length === 0}>Continue</Button>
+        <Button onClick={continueToCheckout} disabled={salesEnded || selectedItems.length === 0}>Continue</Button>
       </div>
     </Card>
   );

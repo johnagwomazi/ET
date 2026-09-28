@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { EVENT_STATUS } from "../constants/eventStatus.constants.js";
 import * as eventRepository from "../repositories/event.repository.js";
 import { buildPaginationMeta, buildPaginationOptions, escapeRegex } from "../utils/query.util.js";
 import {
@@ -166,11 +167,12 @@ function buildLocationFilter(query = {}) {
   return filter;
 }
 
-function buildVisibilityFilter(query = {}) {
+function buildVisibilityFilter(query = {}, now = new Date()) {
   const filter = {
     status: mongoose.trusted({
       $in: PUBLIC_DISCOVERY_STATUSES,
     }),
+    endAt: mongoose.trusted({ $gt: now }),
   };
 
   if (query.featured === true) {
@@ -221,13 +223,13 @@ function mapPublicEvents(events = []) {
   return events.map(mapPublicEventResponse).filter(Boolean);
 }
 
-async function loadSpotlightEvents(dependencies = defaultDependencies) {
+async function loadSpotlightEvents(dependencies = defaultDependencies, now = new Date()) {
   const spotlightVisibilityFilter = {
     status: mongoose.trusted({
       $in: PUBLIC_DISCOVERY_STATUSES,
     }),
+    endAt: mongoose.trusted({ $gt: now }),
   };
-
   const [featuredEvents, trendingEvents] = await Promise.all([
     dependencies.eventRepository.findPublicEvents(
       {
@@ -260,13 +262,14 @@ async function loadSpotlightEvents(dependencies = defaultDependencies) {
 }
 
 export async function discoverPublicEvents(query = {}, dependencies = defaultDependencies) {
+  const now = new Date();
   const pagination = buildPaginationOptions(query, {
     page: 1,
     limit: DEFAULT_DISCOVERY_LIMIT,
     sortBy: "startAt",
     sortOrder: 1,
   });
-  const visibilityFilter = buildVisibilityFilter(query);
+  const visibilityFilter = buildVisibilityFilter(query, now);
   const searchFilter = buildSearchFilter(query.search);
   const hasSearch = Boolean(searchFilter);
   const sort = resolveSort(query, hasSearch);
@@ -279,11 +282,11 @@ export async function discoverPublicEvents(query = {}, dependencies = defaultDep
       limit: pagination.limit,
     }),
     dependencies.eventRepository.countPublicEvents(filter),
-    loadSpotlightEvents(dependencies),
+    loadSpotlightEvents(dependencies, now),
   ]);
 
   const mappedEvents = events.map((event) => {
-    if (!isPubliclyDiscoverableEvent(event)) {
+    if (!isPubliclyDiscoverableEvent(event, now)) {
       return null;
     }
 
@@ -299,9 +302,12 @@ export async function discoverPublicEvents(query = {}, dependencies = defaultDep
 }
 
 export async function getPublicEventById(eventId, dependencies = defaultDependencies) {
-  const event = await dependencies.eventRepository.findPublicEventById(eventId);
+  const event = typeof dependencies.eventRepository.findPublicEventByIdentifier === "function"
+    ? await dependencies.eventRepository.findPublicEventByIdentifier(eventId)
+    : await dependencies.eventRepository.findPublicEventById(eventId);
+  const detailStatuses = [...PUBLIC_DISCOVERY_STATUSES, EVENT_STATUS.COMPLETED];
 
-  if (!event || !isPubliclyDiscoverableEvent(event)) {
+  if (!event || !detailStatuses.includes(event.status)) {
     return {
       error: "Event not found",
       statusCode: 404,
@@ -310,5 +316,7 @@ export async function getPublicEventById(eventId, dependencies = defaultDependen
 
   return {
     event: mapPublicEventResponse(event),
+    canonicalSlug: event.slug,
+    shouldRedirect: eventId !== event.slug,
   };
 }

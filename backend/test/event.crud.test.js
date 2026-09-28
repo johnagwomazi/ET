@@ -211,7 +211,7 @@ test("event service returns paginated organization events", async () => {
   assert.equal(calls.findEvents[0].options.sortOrder, 1);
 });
 
-test("event service updates event slugs when the name changes", async () => {
+test("event service preserves a stable event slug when the name changes", async () => {
   const { dependencies, calls } = buildDependencies({
     eventById: createDocument({
       _id: "event_1",
@@ -225,7 +225,7 @@ test("event service updates event slugs when the name changes", async () => {
     updatedEvent: createDocument({
       _id: "event_1",
       eventName: "Annual Product Summit",
-      slug: "annual-product-summit",
+      slug: "annual-event-summit",
       status: EVENT_STATUS.DRAFT,
       organization: createDocument({ _id: "org_1", status: "APPROVED", isDeleted: false, primaryAdmin: "user_1" }),
       createdBy: createDocument({ _id: "user_1", role: USER_ROLES.ADMIN, organization: "org_1" }),
@@ -242,10 +242,10 @@ test("event service updates event slugs when the name changes", async () => {
     dependencies
   );
 
-  assert.equal(result.event.slug, "annual-product-summit");
-  assert.equal(calls.findEventByOrganizationAndSlug.length, 1);
+  assert.equal(result.event.slug, "annual-event-summit");
+  assert.equal(calls.findEventByOrganizationAndSlug.length, 0);
   assert.equal(calls.updateEventByIdAndOrganization.length, 1);
-  assert.equal(calls.updateEventByIdAndOrganization[0].updateData.slug, "annual-product-summit");
+  assert.equal(calls.updateEventByIdAndOrganization[0].updateData.slug, undefined);
 });
 
 test("published event capacity can increase but cannot drop below issued tickets or ticket allocations", async () => {
@@ -381,4 +381,147 @@ test("event service blocks deleting non-draft events", async () => {
 
   assert.equal(result.error, "Only draft events can be deleted");
   assert.equal(result.statusCode, 400);
+});
+
+test("automatic event slugs use a globally unique numeric suffix", async () => {
+  const { dependencies } = buildDependencies();
+  dependencies.eventRepository.findEventBySlugOrAlias = async (slug) => (
+    slug === "annual-event-summit" ? { _id: "another_event" } : null
+  );
+
+  const result = await createOrganizationEvent(
+    "org_1",
+    "user_1",
+    {
+      eventName: "Annual Event Summit",
+      startAt: new Date("2026-10-01T09:00:00.000Z"),
+      endAt: new Date("2026-10-01T18:00:00.000Z"),
+      capacity: 300,
+    },
+    dependencies
+  );
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.event.slug, "annual-event-summit-2");
+});
+
+test("custom event slug changes retain the previous slug as a redirect alias", async () => {
+  const currentEvent = createDocument({
+    _id: "event_1",
+    eventName: "Annual Event Summit",
+    slug: "annual-event-summit",
+    slugAliases: ["summit-legacy"],
+    status: EVENT_STATUS.DRAFT,
+    startAt: new Date("2026-10-01T09:00:00.000Z"),
+    endAt: new Date("2026-10-01T18:00:00.000Z"),
+    organization: createDocument({ _id: "org_1", status: "APPROVED", isDeleted: false, primaryAdmin: "user_1" }),
+    createdBy: createDocument({ _id: "user_1", role: USER_ROLES.ADMIN, organization: "org_1" }),
+  });
+  const { dependencies, calls } = buildDependencies({
+    eventById: currentEvent,
+    eventBySlug: null,
+  });
+
+  const result = await updateOrganizationEvent(
+    "org_1",
+    "user_1",
+    "event_1",
+    { slug: "Annual Product Summit" },
+    dependencies
+  );
+
+  assert.equal(result.error, undefined);
+  assert.equal(calls.updateEventByIdAndOrganization[0].updateData.slug, "annual-product-summit");
+  assert.deepEqual(
+    calls.updateEventByIdAndOrganization[0].updateData.slugAliases,
+    ["summit-legacy", "annual-event-summit"]
+  );
+});
+
+test("custom event slugs reject reserved and already-claimed URLs", async () => {
+  const reserved = buildDependencies();
+  const reservedResult = await createOrganizationEvent(
+    "org_1",
+    "user_1",
+    {
+      eventName: "Discover",
+      slug: "discover",
+      startAt: new Date("2026-10-01T09:00:00.000Z"),
+      endAt: new Date("2026-10-01T18:00:00.000Z"),
+      capacity: 50,
+    },
+    reserved.dependencies
+  );
+  assert.equal(reservedResult.statusCode, 400);
+
+  const claimed = buildDependencies();
+  claimed.dependencies.eventRepository.findEventBySlugOrAlias = async () => ({ _id: "another_event" });
+  const claimedResult = await createOrganizationEvent(
+    "org_1",
+    "user_1",
+    {
+      eventName: "Different Name",
+      slug: "annual-event-summit",
+      startAt: new Date("2026-10-01T09:00:00.000Z"),
+      endAt: new Date("2026-10-01T18:00:00.000Z"),
+      capacity: 50,
+    },
+    claimed.dependencies
+  );
+  assert.equal(claimedResult.statusCode, 409);
+});
+
+test("draft schedules can be edited normally without lifecycle transitions", async () => {
+  const currentEvent = createDocument({
+    _id: "event_1",
+    eventName: "Draft Summit",
+    slug: "draft-summit",
+    status: EVENT_STATUS.DRAFT,
+    startAt: new Date("2026-10-01T09:00:00.000Z"),
+    endAt: new Date("2026-10-01T18:00:00.000Z"),
+    organization: createDocument({ _id: "org_1", status: "APPROVED", isDeleted: false, primaryAdmin: "user_1" }),
+    createdBy: createDocument({ _id: "user_1", role: USER_ROLES.ADMIN, organization: "org_1" }),
+  });
+  const { dependencies, calls } = buildDependencies({ eventById: currentEvent });
+  const nextStartAt = new Date("2026-11-01T09:00:00.000Z");
+  const nextEndAt = new Date("2026-11-01T18:00:00.000Z");
+
+  const result = await updateOrganizationEvent(
+    "org_1",
+    "user_1",
+    "event_1",
+    { startAt: nextStartAt, endAt: nextEndAt },
+    dependencies
+  );
+
+  assert.equal(result.error, undefined);
+  assert.equal(calls.updateEventByIdAndOrganization.length, 1);
+  assert.equal(calls.updateEventByIdAndOrganization[0].updateData.startAt, nextStartAt);
+  assert.equal(calls.updateEventByIdAndOrganization[0].updateData.endAt, nextEndAt);
+});
+
+test("published schedules still require the existing lifecycle flow", async () => {
+  const { dependencies, calls } = buildDependencies({
+    eventById: createDocument({
+      _id: "event_1",
+      eventName: "Published Summit",
+      slug: "published-summit",
+      status: EVENT_STATUS.PUBLISHED,
+      startAt: new Date("2026-10-01T09:00:00.000Z"),
+      endAt: new Date("2026-10-01T18:00:00.000Z"),
+      organization: createDocument({ _id: "org_1", status: "APPROVED", isDeleted: false, primaryAdmin: "user_1" }),
+      createdBy: createDocument({ _id: "user_1", role: USER_ROLES.ADMIN, organization: "org_1" }),
+    }),
+  });
+
+  const result = await updateOrganizationEvent(
+    "org_1",
+    "user_1",
+    "event_1",
+    { startAt: new Date("2026-11-01T09:00:00.000Z") },
+    dependencies
+  );
+
+  assert.match(result.error, /lifecycle operations/i);
+  assert.equal(calls.updateEventByIdAndOrganization.length, 0);
 });

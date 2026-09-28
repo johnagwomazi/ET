@@ -11,7 +11,9 @@
     "migrate:event-banners": "node scripts/migrate-event-banners-to-cloudinary.js",
     "migrate:event-banners:apply": "node scripts/migrate-event-banners-to-cloudinary.js --apply",
     "migrate:ticket-identifiers": "node scripts/migrate-ticket-identifiers.js",
-    "migrate:ticket-identifiers:apply": "node scripts/migrate-ticket-identifiers.js --apply"
+    "migrate:ticket-identifiers:apply": "node scripts/migrate-ticket-identifiers.js --apply",
+    "migrate:event-slugs": "node scripts/migrate-event-slugs.js",
+    "migrate:event-slugs:apply": "node scripts/migrate-event-slugs.js --apply"
   },
   "keywords": [
     "events",

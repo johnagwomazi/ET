@@ -9,7 +9,7 @@ const PUBLIC_EVENT_POPULATE = {
 };
 
 const PUBLIC_EVENT_SELECT =
-  "eventName slug description category banner startAt endAt capacity status isFeatured featuredAt lifecycle venue organization createdAt updatedAt";
+  "eventName slug slugAliases description category banner startAt endAt capacity status isFeatured featuredAt lifecycle venue organization createdAt updatedAt";
 
 function buildEventQuery(query) {
   return Event.find(query)
@@ -79,6 +79,18 @@ export async function findEventByOrganizationAndSlug(organizationId, slug, event
   const filter = {
     organization: organizationId,
     slug,
+  };
+
+  if (eventId) {
+    filter._id = mongoose.trusted({ $ne: eventId });
+  }
+
+  return Event.findOne(filter);
+}
+
+export async function findEventBySlugOrAlias(slug, eventId = null) {
+  const filter = {
+    $or: [{ slug }, { slugAliases: slug }],
   };
 
   if (eventId) {
@@ -172,18 +184,28 @@ export async function findPublicEvents(filter = {}, options = {}) {
   );
 }
 
-export async function findPublicEventById(eventId, options = {}) {
+export async function findPublicEventByIdentifier(identifier, options = {}) {
+  const identifiers = [{ slug: identifier }, { slugAliases: identifier }];
+
+  if (mongoose.isValidObjectId(identifier)) {
+    identifiers.unshift({ _id: identifier });
+  }
+
   return applySession(
     Event.findOne({
-      _id: eventId,
+      $or: identifiers,
       status: mongoose.trusted({
-        $in: PUBLIC_DISCOVERY_STATUSES,
+        $in: [...PUBLIC_DISCOVERY_STATUSES, "COMPLETED"],
       }),
     })
       .select(PUBLIC_EVENT_SELECT)
       .populate(PUBLIC_EVENT_POPULATE),
     options
   );
+}
+
+export async function findPublicEventById(eventId, options = {}) {
+  return findPublicEventByIdentifier(eventId, options);
 }
 
 export async function findEventsStartingBetween(startAt, endAt, statuses = []) {
@@ -196,6 +218,22 @@ export async function findEventsStartingBetween(startAt, endAt, statuses = []) {
   }
 
   return Event.find(filter).populate("organization").sort({ startAt: 1 });
+}
+
+export async function findEventsEndedBefore(endAt, statuses = [], limit = 100) {
+  const filter = {
+    endAt: mongoose.trusted({ $lte: endAt }),
+  };
+
+  if (statuses.length) {
+    filter.status = mongoose.trusted({ $in: statuses });
+  }
+
+  return Event.find(filter)
+    .populate("organization")
+    .populate("createdBy")
+    .sort({ endAt: 1 })
+    .limit(limit);
 }
 
 export async function reserveEventTicketCapacity(eventId, organizationId, quantity, options = {}) {
