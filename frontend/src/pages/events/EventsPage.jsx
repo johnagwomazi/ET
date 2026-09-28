@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
-import { CalendarDays, Filter, ListFilter, RefreshCw, Users } from "lucide-react";
+import { CalendarDays, Filter, ListFilter, RefreshCw, TicketCheck, Tickets, Users } from "lucide-react";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import EmptyState from "../../components/common/EmptyState";
@@ -189,34 +189,19 @@ function buildColumns(scope) {
   return columns;
 }
 
-function buildSummaryCards(scope, pagination, events) {
-  const pageLabel = pagination?.totalPages ? `${pagination.page} of ${pagination.totalPages}` : `${pagination.page} of 1`;
-
+function buildSummaryCards(scope, pagination, events, summary) {
+  if (scope !== "manager") {
+    return [
+      { label: "Total events", value: formatNumber(summary.totalEvents || 0), icon: CalendarDays },
+      { label: "Tickets sold", value: formatNumber(summary.ticketsSold || 0), icon: Tickets },
+      { label: "Tickets available", value: formatNumber(summary.ticketsAvailable || 0), icon: TicketCheck },
+    ];
+  }
   return [
-    {
-      label: scope === "manager" ? "Assigned events" : "Total events",
-      value: formatNumber(pagination.totalItems || 0),
-      helperText: scope === "manager" ? "Events assigned to you" : "Events in this organization",
-      icon: CalendarDays,
-    },
-    {
-      label: "Current page",
-      value: pageLabel,
-      helperText: "Server pagination state",
-      icon: ListFilter,
-    },
-    {
-      label: "Visible rows",
-      value: formatNumber(events.length),
-      helperText: "Events loaded in this view",
-      icon: Users,
-    },
-    {
-      label: scope === "manager" ? "Assignment" : "Filters",
-      value: scope === "manager" ? "Assigned only" : "Organization",
-      helperText: scope === "manager" ? "Only assigned events are shown" : "Search and status filters are enabled",
-      icon: Filter,
-    },
+    { label: "Assigned events", value: formatNumber(pagination.totalItems || 0), icon: CalendarDays },
+    { label: "Current page", value: pagination?.totalPages ? `${pagination.page} of ${pagination.totalPages}` : "1 of 1", icon: ListFilter },
+    { label: "Visible rows", value: formatNumber(events.length), icon: Users },
+    { label: "Assignment", value: "Assigned only", icon: Filter },
   ];
 }
 
@@ -225,6 +210,7 @@ function EventsPage({ scope = "organization" }) {
   const { hasPermission } = useOrganizationPermissions();
   const canCreateEvents = hasPermission(ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE);
   const [events, setEvents] = useState([]);
+  const [summary, setSummary] = useState({ totalEvents: 0, ticketsSold: 0, ticketsAvailable: 0 });
   const [pagination, setPagination] = useState({ page: 1, limit: TABLE_QUERY_LIMIT, totalItems: 0, totalPages: 0 });
   const [query, setQuery] = useState(isManager ? managerInitialQuery : orgInitialQuery);
   const [searchValue, setSearchValue] = useState(isManager ? "" : orgInitialQuery.search);
@@ -271,6 +257,7 @@ function EventsPage({ scope = "organization" }) {
       if (controller.signal.aborted) return null;
 
       setEvents(response?.events || []);
+      if (!isManager) setSummary(response?.summary || { totalEvents: 0, ticketsSold: 0, ticketsAvailable: 0 });
       setPagination(response?.pagination || { page: 1, limit: TABLE_QUERY_LIMIT, totalItems: 0, totalPages: 0 });
       return response;
     } catch (loadError) {
@@ -339,7 +326,7 @@ function EventsPage({ scope = "organization" }) {
   }
 
   const columns = useMemo(() => buildColumns(scope), [scope]);
-  const summaryCards = useMemo(() => buildSummaryCards(scope, pagination, events), [scope, pagination, events]);
+  const summaryCards = useMemo(() => buildSummaryCards(scope, pagination, events, summary), [scope, pagination, events, summary]);
 
   if (error && events.length === 0) {
     return (
@@ -393,14 +380,13 @@ function EventsPage({ scope = "organization" }) {
         ]}
       />
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-1 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className={`grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-2 ${isManager ? "xl:grid-cols-4" : "lg:grid-cols-3"}`}>
         {summaryCards.map((card) => (
           <StatCard
             key={card.label}
             icon={card.icon}
             label={card.label}
             value={card.value}
-            helperText={card.helperText}
             loading={isLoading && events.length === 0}
           />
         ))}

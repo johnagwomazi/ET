@@ -313,6 +313,17 @@ export async function updateOrganizationMemberRole(req, res) {
   }
 }
 
+export async function updateManagerEventAssignments(req, res) {
+  try {
+    if (!req.organizationId) return res.status(HTTP_STATUS.FORBIDDEN).json(errorResponse("Organization access is required"));
+    const result = await organizationMemberService.updateManagerEventAssignments(req.organizationId, req.auth.userId, req.params.memberId, req.body);
+    if (result.error) return sendServiceError(res, result);
+    return res.status(HTTP_STATUS.OK).json(successResponse("Manager assignments updated", result));
+  } catch (error) {
+    console.log(error);
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
+  }
+}
 export async function removeOrganizationMember(req, res) {
   try {
     if (!req.organizationId) {

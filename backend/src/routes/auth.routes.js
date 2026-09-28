@@ -8,6 +8,7 @@ import {
   forgotPasswordSchema,
   googleAuthenticationSchema,
   googleRegistrationSchema,
+  invitationTokenParamSchema,
   loginSchema,
   organizerRegisterSchema,
   resendVerificationSchema,
@@ -33,10 +34,12 @@ authRouter.post("/verify-email/resend", recoveryLimiter, validate(resendVerifica
 authRouter.patch("/verify-email", recoveryLimiter, validate(updateVerificationEmailSchema), authController.updateVerificationEmail);
 authRouter.post("/forgot-password", recoveryLimiter, validate(forgotPasswordSchema), authController.forgotPassword);
 authRouter.post("/reset-password", recoveryLimiter, validate(resetPasswordSchema), authController.resetPassword);
+authRouter.get("/invitations/:token", validate(invitationTokenParamSchema, "params"), authController.getOrganizationInvitation);
 
 authRouter.use(protectRoute);
 
 authRouter.get("/me", authController.getCurrentUser);
+authRouter.post("/invitations/:token/accept", validate(invitationTokenParamSchema, "params"), authController.acceptOrganizationInvitation);
 authRouter.post("/logout", authController.logout);
 authRouter.patch("/change-password", validate(changePasswordSchema), authController.changePassword);
 

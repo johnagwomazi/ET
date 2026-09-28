@@ -77,6 +77,14 @@ export async function findManagerAssignments(userId, options = {}) {
   return applySession(query, options);
 }
 
+export async function findActiveAssignmentsByUsers(userIds, options = {}) {
+  return applySession(
+    EventManagerAssignment.find({ user: { $in: userIds }, removedAt: null })
+      .populate({ path: "event", select: "eventName status startAt endAt" })
+      .sort({ assignedAt: -1 }),
+    options
+  );
+}
 export async function countManagerAssignments(userId) {
   return EventManagerAssignment.countDocuments({
     user: userId,
@@ -123,6 +131,13 @@ export async function deactivateEventManagerAssignment(eventId, userId, removedB
   );
 }
 
+export async function deactivateManagerAssignments(userId, removedBy, options = {}) {
+  return EventManagerAssignment.updateMany(
+    { user: userId, removedAt: null },
+    { $set: { removedAt: new Date(), removedBy } },
+    { session: options.session }
+  );
+}
 export async function deleteAssignmentsByEvent(eventId, options = {}) {
   return applySession(
     EventManagerAssignment.deleteMany({

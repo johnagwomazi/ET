@@ -1,16 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import {
-  ArrowRight,
-  Activity,
-  Building2,
-  Clock3,
-  ShieldAlert,
-  UserCheck,
-  Users,
-  UserX,
-} from "lucide-react";
+import { CalendarDays, Clock3, TicketCheck, Tickets, WalletCards } from "lucide-react";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import StatCard from "../components/dashboard/StatCard";
@@ -20,345 +10,86 @@ import StatusBadge from "../components/dashboard/StatusBadge";
 import Avatar from "../components/dashboard/Avatar";
 import SectionHeader from "../components/dashboard/SectionHeader";
 import { OrganizationDashboardSkeleton } from "../components/dashboard/DashboardLoadingStates";
-import { ROUTE_PATHS } from "../routes/routePaths";
 import { useSessionStore } from "../store/useSessionStore";
 import { useOrganizationContextStore } from "../store/useOrganizationContextStore";
 import * as organizationService from "../services/organization.service";
-import { formatDateTime, formatNumber } from "../utils/formatters";
+import { formatDateTime, formatMoney, formatNumber } from "../utils/formatters";
 
-const QUICK_ACTION_ROUTE_MAP = {
-  "/organizations/me": ROUTE_PATHS.ORGANIZATION_PROFILE,
-  "/organizations/me/settings": ROUTE_PATHS.ORGANIZATION_SETTINGS,
-};
-
-function getGreeting() {
+function greeting() {
   const hour = new Date().getHours();
-
-  if (hour < 12) {
-    return "Good morning";
-  }
-
-  if (hour < 18) {
-    return "Good afternoon";
-  }
-
-  return "Good evening";
+  return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 }
 
-function getDisplayName(user) {
-  return `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "there";
-}
-
-function getStatCards(stats = {}) {
-  return [
-    {
-      label: "Total members",
-      value: formatNumber(stats.totalMembers || 0),
-      helperText: "All organization members",
-      icon: Users,
-    },
-    {
-      label: "Active members",
-      value: formatNumber(stats.activeMembers || 0),
-      helperText: "Accounts currently active",
-      icon: UserCheck,
-    },
-    {
-      label: "Suspended members",
-      value: formatNumber(stats.suspendedMembers || 0),
-      helperText: "Accounts currently suspended",
-      icon: ShieldAlert,
-    },
-    {
-      label: "Pending verification",
-      value: formatNumber(stats.pendingVerificationMembers || 0),
-      helperText: "Waiting for email verification",
-      icon: Clock3,
-    },
-    {
-      label: "Inactive members",
-      value: formatNumber(stats.inactiveMembers || 0),
-      helperText: "Accounts marked inactive",
-      icon: UserX,
-    },
-  ];
+function timeUntil(value) {
+  const milliseconds = new Date(value).getTime() - Date.now();
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return "Starting now";
+  const days = Math.floor(milliseconds / 86400000);
+  const hours = Math.floor((milliseconds % 86400000) / 3600000);
+  if (days > 0) return `${days}d ${hours}h to go`;
+  const minutes = Math.max(1, Math.floor((milliseconds % 3600000) / 60000));
+  return `${hours}h ${minutes}m to go`;
 }
 
 function OrganizationDashboardPage() {
-  const navigate = useNavigate();
   const currentUser = useSessionStore((state) => state.currentUser);
-  const organizationContext = useOrganizationContextStore((state) => state.organization);
-
+  const contextOrganization = useOrganizationContextStore((state) => state.organization);
   const [dashboard, setDashboard] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
 
-  const organization = dashboard?.organization || organizationContext || null;
-  const stats = dashboard?.stats || {};
-  const recentActivity = dashboard?.recentActivity || [];
-  const quickActions = dashboard?.quickActions || [];
-  const supportedQuickActions = useMemo(
-    () => quickActions.filter((action) => QUICK_ACTION_ROUTE_MAP[action.path]),
-    [quickActions]
-  );
-
-  async function loadDashboard({ quiet = false, signal } = {}) {
-    const hasExistingDashboard = Boolean(dashboard);
-
-    if (quiet) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
-
-    setError(null);
-
+  async function load(quiet = false) {
+    quiet ? setRefreshing(true) : setLoading(true);
+    setError("");
     try {
-      const response = await organizationService.getMyOrganizationDashboard({ signal });
-      if (signal?.aborted) return;
-      setDashboard(response || null);
-    } catch (loadError) {
-      if (loadError?.name === "AbortError") return;
-
-      setError("The organization dashboard could not be loaded. Please try again.");
-
-      if (quiet || hasExistingDashboard) {
-        toast.error("The dashboard could not be refreshed. Please try again.");
-      }
+      setDashboard(await organizationService.getMyOrganizationDashboard());
+    } catch (requestError) {
+      setError(requestError.message || "The dashboard could not be loaded");
+      if (quiet) toast.error("The dashboard could not be refreshed");
     } finally {
-      if (!signal?.aborted) {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
+      setLoading(false);
+      setRefreshing(false);
     }
   }
 
-  useEffect(() => {
-    const controller = new AbortController();
-    loadDashboard({ signal: controller.signal });
+  useEffect(() => { load(); }, []);
+  const organization = dashboard?.organization || contextOrganization || {};
+  const stats = dashboard?.stats || {};
+  const topEvents = dashboard?.topEvents || [];
+  const maxTickets = Math.max(1, ...topEvents.map((event) => Number(event.ticketsSold || 0)));
+  const cards = useMemo(() => [
+    { label: "Total events", value: formatNumber(stats.totalEvents), icon: CalendarDays },
+    { label: "Tickets sold", value: formatNumber(stats.ticketsSold), icon: Tickets },
+    { label: "Net revenue", value: formatMoney(stats.revenue, stats.currency), icon: WalletCards },
+    { label: "Upcoming events", value: formatNumber(stats.upcomingEvents), icon: TicketCheck },
+  ], [stats]);
 
-    return () => controller.abort();
-  }, []);
-
-  const statCards = useMemo(() => getStatCards(stats), [stats]);
-
-  const summaryFields = useMemo(
-    () => [
-      { label: "Organization", value: organization?.name || organization?.organizationName || "Organization" },
-      { label: "Business email", value: organization?.businessEmail || "Not provided" },
-      { label: "Business phone", value: organization?.businessPhone || "Not provided" },
-      { label: "Created", value: formatDateTime(organization?.createdAt) },
-      { label: "Approved", value: formatDateTime(organization?.approvedAt) },
-      { label: "Primary admin", value: organization?.primaryAdmin ? `${organization.primaryAdmin.firstName || ""} ${organization.primaryAdmin.lastName || ""}`.trim() : "Unassigned" },
-    ],
-    [organization]
-  );
-
-  if (isLoading && !dashboard) {
-    return <OrganizationDashboardSkeleton />;
-  }
-
-  if (error && !dashboard) {
-    return (
-      <ErrorState
-        title="Unable to load dashboard"
-        message={error}
-        onRetry={() => {
-          loadDashboard();
-        }}
-      />
-    );
-  }
+  if (loading && !dashboard) return <OrganizationDashboardSkeleton />;
+  if (error && !dashboard) return <ErrorState title="Unable to load dashboard" message={error} onRetry={() => load()} />;
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <SectionHeader
-        eyebrow="Organization overview"
-        title="Dashboard"
-        description="A quick snapshot of your organization's current activity and member status."
-        actions={[
-          {
-            label: isRefreshing ? "Refreshing..." : "Refresh",
-            variant: "secondary",
-            onClick: () => loadDashboard({ quiet: true }),
-            isLoading: isRefreshing,
-            loadingText: "Refreshing...",
-          },
-        ]}
-      />
-
+      <SectionHeader eyebrow={greeting()} title={organization.name || organization.organizationName || "Dashboard"} description="Your organization performance at a glance." actions={[{ label: refreshing ? "Refreshing..." : "Refresh", variant: "secondary", onClick: () => load(true), isLoading: refreshing }]} />
       <Card className="border-slate-800/70 bg-slate-950/85">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-4">
-            <Avatar
-              name={organization?.name || organization?.organizationName}
-              src={organization?.logo?.url}
-              size="lg"
-              className="h-16 w-16 shrink-0"
-            />
-            <div className="min-w-0 space-y-2">
-              <div className="space-y-1">
-                <p className="text-sm text-slate-400">
-                  {getGreeting()}, {getDisplayName(currentUser)}
-                </p>
-                <h2 className="truncate text-xl font-semibold text-white sm:text-2xl">
-                  {organization?.name || organization?.organizationName || "Your organization"}
-                </h2>
-                <p className="max-w-2xl text-sm leading-6 text-slate-400">
-                  Here's what's happening with your organization right now.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge status={organization?.status} />
-                <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  {currentUser?.role || "Member"}
-                </span>
-                <span className="rounded-full border border-slate-800 bg-slate-950/60 px-3 py-1 text-xs text-slate-400">
-                  {organization?.businessEmail || "No business email"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:min-w-[20rem]">
-            <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 sm:rounded-2xl sm:p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Organization status</p>
-              <div className="mt-2">
-                <StatusBadge status={organization?.status} />
-              </div>
-            </div>
-            <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 sm:rounded-2xl sm:p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Members</p>
-              <p className="mt-2 text-lg font-semibold text-white sm:text-2xl">{formatNumber(stats.totalMembers || 0)}</p>
-            </div>
-          </div>
-        </div>
+        <div className="flex items-center gap-4"><Avatar name={organization.name} src={organization.logo?.url} size="lg" /><div className="min-w-0"><p className="truncate text-xl font-semibold text-white">{organization.name || "Your organization"}</p><div className="mt-2 flex flex-wrap items-center gap-2"><StatusBadge status={organization.status} /><span className="text-sm text-slate-400">{currentUser?.firstName || "Admin"}</span></div></div></div>
       </Card>
+      {error ? <Card className="border-rose-500/20 bg-rose-500/10"><div className="flex items-center justify-between gap-3"><p className="text-sm text-rose-200">{error}</p><Button size="sm" variant="secondary" onClick={() => load(true)}>Retry</Button></div></Card> : null}
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 xl:grid-cols-4">{cards.map((card) => <StatCard key={card.label} {...card} loading={loading} />)}</div>
 
-      {error && dashboard ? (
-        <Card className="border-rose-500/20 bg-rose-500/10">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-rose-200">Dashboard refresh failed</p>
-              <p className="text-sm text-rose-100/80">{error}</p>
-            </div>
-            <Button variant="secondary" size="sm" onClick={() => loadDashboard({ quiet: true })}>
-              Try again
-            </Button>
-          </div>
-        </Card>
-      ) : null}
-
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-1 sm:gap-4 md:grid-cols-2 xl:grid-cols-5">
-        {statCards.map((card) => (
-          <StatCard
-            key={card.label}
-            icon={card.icon}
-            label={card.label}
-            value={card.value}
-            helperText={card.helperText}
-            loading={isLoading && !dashboard}
-          />
-        ))}
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-6 xl:grid-cols-2">
         <Card className="border-slate-800/70 bg-slate-950/85">
-          <div className="flex items-center justify-between gap-3 border-b border-slate-800/70 pb-4">
-            <div>
-              <p className="text-sm font-semibold text-white">Organization overview</p>
-              <p className="text-sm text-slate-400">Key organization details.</p>
-            </div>
-            <Building2 className="h-5 w-5 text-app-300" aria-hidden="true" />
-          </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {summaryFields.map((field) => (
-              <div key={field.label} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{field.label}</p>
-                <p className="mt-2 text-sm text-slate-200">{field.value}</p>
-              </div>
-            ))}
-          </div>
+          <div className="border-b border-slate-800 pb-4"><h2 className="font-semibold text-white">Upcoming events</h2><p className="mt-1 text-sm text-slate-400">Your next published events.</p></div>
+          <div className="mt-4 space-y-3">{dashboard?.upcomingEvents?.length ? dashboard.upcomingEvents.map((event) => <div key={event.id} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-medium text-white">{event.eventName}</p><p className="mt-1 text-sm text-slate-400">{formatDateTime(event.startAt)}</p></div><span className="shrink-0 rounded-full bg-app-500/10 px-3 py-1 text-xs font-medium text-app-200">{timeUntil(event.startAt)}</span></div></div>) : <EmptyState title="No upcoming events" message="Published future events will appear here." />}</div>
         </Card>
-
         <Card className="border-slate-800/70 bg-slate-950/85">
-          <div className="flex items-center justify-between gap-3 border-b border-slate-800/70 pb-4">
-            <div>
-              <p className="text-sm font-semibold text-white">Quick actions</p>
-              <p className="text-sm text-slate-400">Available organization shortcuts.</p>
-            </div>
-            <Activity className="h-5 w-5 text-app-300" aria-hidden="true" />
-          </div>
-
-          <div className="mt-5 grid gap-3">
-            {supportedQuickActions.length > 0 ? (
-              supportedQuickActions.map((action) => {
-                const targetRoute = QUICK_ACTION_ROUTE_MAP[action.path];
-
-                return (
-                  <button
-                    key={action.label}
-                    type="button"
-                    onClick={() => navigate(targetRoute)}
-                    className="flex items-center justify-between rounded-2xl border border-slate-800 px-4 py-3 text-left text-sm text-slate-200 transition hover:border-app-500/30 hover:bg-slate-900"
-                  >
-                    <span className="min-w-0">
-                      <span className="block font-medium">{action.label}</span>
-                      <span className="block text-xs text-slate-500">Open now</span>
-                    </span>
-                    <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  </button>
-                );
-              })
-            ) : (
-              <EmptyState
-                title="No quick actions"
-                message="No dashboard shortcuts are available for your account."
-              />
-            )}
-          </div>
+          <div className="border-b border-slate-800 pb-4"><h2 className="font-semibold text-white">Top event performance</h2><p className="mt-1 text-sm text-slate-400">Ticket sales across your leading events.</p></div>
+          <div className="mt-5 space-y-4">{topEvents.length ? topEvents.map((event) => <div key={event.id}><div className="mb-2 flex justify-between gap-3 text-sm"><span className="truncate text-slate-200">{event.eventName}</span><span className="text-slate-400">{formatNumber(event.ticketsSold)}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-app-400" style={{ width: `${Math.max(event.ticketsSold ? 4 : 0, (Number(event.ticketsSold || 0) / maxTickets) * 100)}%` }} /></div></div>) : <EmptyState title="No sales yet" message="Ticket performance will appear after sales are recorded." />}</div>
         </Card>
       </div>
 
       <Card className="border-slate-800/70 bg-slate-950/85">
-        <div className="flex items-center justify-between gap-3 border-b border-slate-800/70 pb-4">
-          <div>
-            <p className="text-sm font-semibold text-white">Recent activity</p>
-            <p className="text-sm text-slate-400">Recent organization and member activity.</p>
-          </div>
-          <Clock3 className="h-5 w-5 text-app-300" aria-hidden="true" />
-        </div>
-
-        <div className="mt-5">
-          {recentActivity.length > 0 ? (
-            <div className="grid gap-3">
-              {recentActivity.map((activity) => (
-                <div
-                  key={`${activity.type}-${activity.occurredAt}`}
-                  className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4"
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-white">{activity.title}</p>
-                      <p className="text-sm leading-6 text-slate-400">{activity.description || "No additional details provided."}</p>
-                    </div>
-                    <p className="shrink-0 text-xs uppercase tracking-[0.18em] text-slate-500">
-                      {formatDateTime(activity.occurredAt)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="No recent activity"
-              message="There has not been any recent organization activity yet."
-            />
-          )}
-        </div>
+        <div className="flex items-center justify-between border-b border-slate-800 pb-4"><div><h2 className="font-semibold text-white">Recent activity</h2><p className="mt-1 text-sm text-slate-400">The latest three recorded organization activities.</p></div><Clock3 className="h-5 w-5 text-app-300" /></div>
+        <div className="mt-4 space-y-3">{dashboard?.recentActivity?.length ? dashboard.recentActivity.map((activity) => <div key={activity.id || `${activity.type}-${activity.occurredAt}`} className="flex flex-col justify-between gap-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-4 sm:flex-row"><div><p className="text-sm font-medium text-white">{activity.title}</p><p className="mt-1 text-sm text-slate-400">{activity.description}</p></div><p className="shrink-0 text-xs text-slate-500">{formatDateTime(activity.occurredAt)}</p></div>) : <EmptyState title="No recent activity" message="Recorded event, order, and member activity will appear here." />}</div>
       </Card>
     </div>
   );

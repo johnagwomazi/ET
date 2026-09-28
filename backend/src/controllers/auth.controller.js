@@ -1,6 +1,7 @@
 import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
 import { AUTH_COOKIE_NAMES } from "../constants/auth.constants.js";
 import * as authService from "../services/auth.service.js";
+import * as organizationMemberService from "../services/organizationMember.service.js";
 import { errorResponse, successResponse } from "../utils/apiResponse.js";
 import { clearAuthCookies, setAccessTokenCookie, setAuthCookies } from "../utils/authCookie.util.js";
 
@@ -246,6 +247,27 @@ export async function resetPassword(req, res) {
   }
 }
 
+export async function getOrganizationInvitation(req, res) {
+  try {
+    const result = await organizationMemberService.getOrganizationInvitation(req.params.token);
+    if (result.error) return res.status(result.statusCode || HTTP_STATUS.BAD_REQUEST).json(errorResponse(result.error));
+    return res.status(HTTP_STATUS.OK).json(successResponse("Operation successful", result));
+  } catch (error) {
+    console.log(error);
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
+  }
+}
+
+export async function acceptOrganizationInvitation(req, res) {
+  try {
+    const result = await organizationMemberService.acceptOrganizationInvitation(req.params.token, req.auth.userId);
+    if (result.error) return res.status(result.statusCode || HTTP_STATUS.BAD_REQUEST).json(errorResponse(result.error));
+    return res.status(HTTP_STATUS.OK).json(successResponse("Invitation accepted", result));
+  } catch (error) {
+    console.log(error);
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse("Something went wrong"));
+  }
+}
 export async function changePassword(req, res) {
   try {
     const result = await authService.changePassword(req.auth.userId, req.body);

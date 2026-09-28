@@ -100,6 +100,11 @@ export async function updateOrganizationMemberRole(memberId, payload) {
   return unwrapResponse(response);
 }
 
+export async function updateManagerEventAssignments(memberId, payload) {
+  const response = await patch(buildMyOrganizationPath(`/members/${memberId}/event-assignments`), payload);
+  return unwrapResponse(response);
+}
+
 export async function removeOrganizationMember(memberId) {
   const response = await remove(buildMyOrganizationPath(`/members/${memberId}`));
 

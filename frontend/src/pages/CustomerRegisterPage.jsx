@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import AuthCard from "../components/layout/AuthCard";
 import AuthHeader from "../components/layout/AuthHeader";
@@ -18,6 +18,9 @@ import { savePendingVerification } from "../utils/pendingAuth";
 
 function CustomerRegisterPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const invitationToken = searchParams.get("invitation");
+  const invitationPath = invitationToken ? `/invitations/${invitationToken}` : null;
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -47,7 +50,7 @@ function CustomerRegisterPage() {
         sentAt: Date.now(),
       });
       toast.success(result.verificationEmailSent ? "Verification code sent to your email." : "Account created. Email delivery is not configured.");
-      navigate(`${ROUTE_PATHS.VERIFY_EMAIL}?email=${encodeURIComponent(values.email.trim())}`);
+      navigate(`${ROUTE_PATHS.VERIFY_EMAIL}?email=${encodeURIComponent(values.email.trim())}${invitationToken ? `&invitation=${encodeURIComponent(invitationToken)}` : ""}`);
     } catch (error) {
       toast.error(error.message || "Something went wrong");
     } finally {
@@ -89,9 +92,9 @@ function CustomerRegisterPage() {
           <div className="flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-slate-600">
             <span className="h-px flex-1 bg-slate-800" />or<span className="h-px flex-1 bg-slate-800" />
           </div>
-          <GoogleAuthButton accountType={USER_ROLES.CUSTOMER} />
+          <GoogleAuthButton accountType={USER_ROLES.CUSTOMER} returnTo={invitationPath} />
           <p className="text-center text-sm text-slate-400">
-            Already registered? <Link to={ROUTE_PATHS.LOGIN} className="font-medium text-app-300 hover:text-app-200">Sign in</Link>
+            Already registered? <Link to={ROUTE_PATHS.LOGIN} state={invitationPath ? { from: invitationPath } : undefined} className="font-medium text-app-300 hover:text-app-200">Sign in</Link>
           </p>
         </div>
       </AuthCard>

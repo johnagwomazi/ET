@@ -1,4 +1,4 @@
-import { UserMinus, UserCog } from "lucide-react";
+import { CalendarRange, UserMinus, UserCog } from "lucide-react";
 
 function getOrganizationMemberId(member) {
   const memberId = member?.id || member?._id || null;
@@ -26,6 +26,10 @@ export function buildOrganizationMemberActionItems(member, handlers, permissions
 
   if (!member || isProtectedOrganizationMember(member, currentUserId)) {
     return items;
+  }
+
+  if (member.role === "MANAGER" && permissions?.canManageAssignments) {
+    items.push({ label: "Manage events", icon: CalendarRange, onClick: () => handlers?.onManageAssignments?.(member) });
   }
 
   if (permissions?.canUpdateRole) {

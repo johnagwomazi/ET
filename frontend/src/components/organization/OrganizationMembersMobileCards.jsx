@@ -24,8 +24,10 @@ function Field({ label, value }) {
 function OrganizationMembersMobileCards({
   members = [],
   isLoading = false,
+  onManageAssignments,
   onChangeRole,
   onRemove,
+  canManageAssignments = false,
   canUpdateRole = false,
   canRemoveMember = false,
   currentUserId,
@@ -65,10 +67,12 @@ function OrganizationMembersMobileCards({
     ? buildOrganizationMemberActionItems(
         activeMember,
         {
-          onChangeRole,
+          onManageAssignments,
+  onChangeRole,
           onRemove,
         },
         {
+          canManageAssignments,
           canUpdateRole,
           canRemoveMember,
         },
@@ -105,6 +109,7 @@ function OrganizationMembersMobileCards({
 
                 <div className="grid gap-3">
                   <Field label="Role" value={getOrganizationRoleLabel(member.role)} />
+                  {member.role === "MANAGER" ? <Field label="Assigned events" value={`${member.assignedEvents?.length || 0} event(s)`} /> : null}
                   <Field label="Joined" value={formatDate(member.joinedAt)} />
                 </div>
 

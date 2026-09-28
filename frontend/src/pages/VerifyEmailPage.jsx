@@ -19,6 +19,8 @@ import {
 function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
   const [pending, setPending] = useState(() => getPendingVerification());
+  const invitationToken = searchParams.get("invitation");
+  const invitationPath = invitationToken ? `/invitations/${invitationToken}` : null;
   const initialEmail = searchParams.get("email") || pending?.email || "";
   const initialCooldown = Math.max(0, 60 - Math.floor((Date.now() - (pending?.sentAt || 0)) / 1000));
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -117,7 +119,7 @@ function VerifyEmailPage() {
         {isVerified ? (
           <div className="space-y-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-200">
             <p className="font-medium">Your email is verified. You can now sign in.</p>
-            <Button as={Link} to={ROUTE_PATHS.LOGIN} className="w-full">Continue to sign in</Button>
+            <Button as={Link} to={ROUTE_PATHS.LOGIN} state={invitationPath ? { from: invitationPath } : undefined} className="w-full">Continue to sign in</Button>
           </div>
         ) : (
           <>

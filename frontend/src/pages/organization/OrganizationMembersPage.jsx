@@ -20,6 +20,7 @@ import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useOrganizationPermissions } from "../../hooks/useOrganizationPermissions";
 import { useSessionStore } from "../../store/useSessionStore";
 import * as organizationService from "../../services/organization.service";
+import * as eventService from "../../services/event.service";
 import { formatDate } from "../../utils/formatters";
 import { getOrganizationRoleLabel, getOrganizationRoleOptions } from "../../constants/organizationRoles.constants";
 import { ORGANIZATION_PERMISSIONS } from "../../constants/organizationPermissions.constants";
@@ -105,8 +106,13 @@ function OrganizationMembersPage() {
   const [inviteErrors, setInviteErrors] = useState({});
   const [inviteForm, setInviteForm] = useState({
     email: "",
-    role: "",
+    role: "MANAGER",
+    eventIds: [],
   });
+  const [organizationEvents, setOrganizationEvents] = useState([]);
+  const [assignmentMember, setAssignmentMember] = useState(null);
+  const [assignmentEventIds, setAssignmentEventIds] = useState([]);
+  const [isUpdatingAssignments, setIsUpdatingAssignments] = useState(false);
   const [roleMember, setRoleMember] = useState(null);
   const [roleForm, setRoleForm] = useState({
     role: "",
@@ -146,6 +152,19 @@ function OrganizationMembersPage() {
 
   useEffect(() => {
     loadMembers().catch(() => {});
+    async function loadAssignableEvents() {
+      const allEvents = [];
+      let page = 1;
+      let totalPages = 1;
+      do {
+        const response = await eventService.getOrganizationEvents({ page, limit: 100, sortBy: "startAt", sortOrder: "asc" });
+        allEvents.push(...(response?.events || []));
+        totalPages = response?.pagination?.totalPages || 1;
+        page += 1;
+      } while (page <= totalPages);
+      setOrganizationEvents(allEvents.filter((event) => ["DRAFT", "PUBLISHED", "POSTPONED"].includes(event.status)));
+    }
+    loadAssignableEvents().catch(() => setOrganizationEvents([]));
   }, []);
 
   useEffect(() => {
@@ -196,7 +215,8 @@ function OrganizationMembersPage() {
     setInviteErrors({});
     setInviteForm({
       email: "",
-      role: "",
+      role: "MANAGER",
+      eventIds: [],
     });
     setIsInviteOpen(true);
   }
@@ -206,6 +226,29 @@ function OrganizationMembersPage() {
     setInviteErrors({});
   }
 
+  function openAssignmentModal(member) {
+    setAssignmentMember(member);
+    setAssignmentEventIds((member.assignedEvents || []).map((event) => String(event.id)));
+  }
+
+  function toggleAssignment(eventId) {
+    setAssignmentEventIds((current) => current.includes(eventId) ? current.filter((id) => id !== eventId) : [...current, eventId]);
+  }
+
+  async function handleUpdateAssignments() {
+    if (!assignmentMember) return;
+    setIsUpdatingAssignments(true);
+    try {
+      await organizationService.updateManagerEventAssignments(assignmentMember.id, { eventIds: assignmentEventIds });
+      toast.success("Manager assignments updated");
+      setAssignmentMember(null);
+      await loadMembers();
+    } catch (updateError) {
+      toast.error(updateError.message || "Unable to update assignments");
+    } finally {
+      setIsUpdatingAssignments(false);
+    }
+  }
   function openRoleModal(member) {
     setRoleMember(member);
     setRoleForm({
@@ -257,6 +300,9 @@ function OrganizationMembersPage() {
     if (!inviteForm.role) {
       nextErrors.role = "Role is required";
     }
+    if (inviteForm.role === "MANAGER" && inviteForm.eventIds.length === 0) {
+      nextErrors.eventIds = "Select at least one event";
+    }
 
     setInviteErrors(nextErrors);
     return nextErrors;
@@ -292,9 +338,10 @@ function OrganizationMembersPage() {
       await organizationService.inviteOrganizationMember({
         email: inviteForm.email.trim(),
         role: inviteForm.role,
+        eventIds: inviteForm.role === "MANAGER" ? inviteForm.eventIds : [],
       });
 
-      toast.success("Member invited successfully");
+      toast.success("Invitation sent successfully");
       closeInviteMemberModal();
       await loadMembers();
     } catch (inviteError) {
@@ -418,6 +465,11 @@ function OrganizationMembersPage() {
       render: (member) => <StatusBadge status={member.accountStatus} />,
     },
     {
+      key: "assignments",
+      label: "Assigned events",
+      sortable: false,
+      render: (member) => member.role === "MANAGER" ? `${member.assignedEvents?.length || 0} event(s)` : "—",
+    },    {
       key: "joinedAt",
       label: "Joined",
       sortable: true,
@@ -432,10 +484,12 @@ function OrganizationMembersPage() {
         const actionItems = buildOrganizationMemberActionItems(
           member,
           {
+            onManageAssignments: openAssignmentModal,
             onChangeRole: openRoleModal,
             onRemove: openRemoveDialog,
           },
           {
+            canManageAssignments: canUpdateMemberRole,
             canUpdateRole: canUpdateMemberRole,
             canRemoveMember: canRemoveMembers,
           },
@@ -514,8 +568,10 @@ function OrganizationMembersPage() {
       <OrganizationMembersMobileCards
         members={members}
         isLoading={isLoading}
+        onManageAssignments={openAssignmentModal}
         onChangeRole={openRoleModal}
         onRemove={openRemoveDialog}
+        canManageAssignments={canUpdateMemberRole}
         canUpdateRole={canUpdateMemberRole}
         canRemoveMember={canRemoveMembers}
         currentUserId={currentUserId}
@@ -556,10 +612,37 @@ function OrganizationMembersPage() {
             error={inviteErrors.role}
             helperText="Choose the role this member should receive."
           />
+          {inviteForm.role === "MANAGER" ? (
+            <FormField label="Assigned events" error={inviteErrors.eventIds} helperText="Select one or more events this manager can access.">
+              <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-3">
+                {organizationEvents.map((event) => (
+                  <label key={event._id || event.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-900">
+                    <input type="checkbox" checked={inviteForm.eventIds.includes(String(event._id || event.id))} onChange={() => updateInviteField("eventIds", inviteForm.eventIds.includes(String(event._id || event.id)) ? inviteForm.eventIds.filter((id) => id !== String(event._id || event.id)) : [...inviteForm.eventIds, String(event._id || event.id)])} className="h-4 w-4 accent-violet-500" />
+                    <span className="min-w-0 truncate text-sm text-slate-200">{event.eventName}</span>
+                  </label>
+                ))}
+                {!organizationEvents.length ? <p className="text-sm text-slate-500">No assignable events are available.</p> : null}
+              </div>
+            </FormField>
+          ) : null}
         </form>
       </Modal>
 
+
       <Modal
+        open={Boolean(assignmentMember)}
+        title="Manage event assignments"
+        onClose={() => setAssignmentMember(null)}
+        className="max-w-xl"
+        footer={<div className="flex justify-end gap-3"><Button variant="ghost" onClick={() => setAssignmentMember(null)}>Cancel</Button><Button onClick={handleUpdateAssignments} isLoading={isUpdatingAssignments}>Save assignments</Button></div>}
+      >
+        <div className="max-h-72 space-y-2 overflow-y-auto">
+          {organizationEvents.map((event) => {
+            const eventId = String(event._id || event.id);
+            return <label key={eventId} className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-800 p-3 hover:bg-slate-900"><input type="checkbox" checked={assignmentEventIds.includes(eventId)} onChange={() => toggleAssignment(eventId)} className="h-4 w-4 accent-violet-500" /><span className="text-sm text-slate-200">{event.eventName}</span></label>;
+          })}
+        </div>
+      </Modal>      <Modal
         open={Boolean(roleMember)}
         title="Change member role"
         onClose={closeRoleModal}

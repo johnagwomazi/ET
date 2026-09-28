@@ -56,6 +56,10 @@ export const resetPasswordSchema = z
     path: ["confirmPassword"],
   });
 
+export const invitationTokenParamSchema = z.object({
+  token: z.string().trim().min(20, "Invitation token is required"),
+});
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, "Current password is required"),

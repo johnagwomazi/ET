@@ -119,7 +119,12 @@ export const organizationMemberInviteSchema = z
   .object({
     email: z.string().trim().min(1, "Email is required").email("Please provide a valid email"),
     role: organizationMemberRoleSchema,
+    eventIds: z.array(objectIdSchema).max(100, "You can assign up to 100 events").optional(),
   })
+  .strict();
+
+export const organizationMemberAssignmentsSchema = z
+  .object({ eventIds: z.array(objectIdSchema).max(100, "You can assign up to 100 events") })
   .strict();
 
 export const organizationMemberRoleUpdateSchema = z

@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
 import { EVENT_STATUS } from "../constants/eventStatus.constants.js";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants.js";
+import * as analyticsRepository from "../repositories/analytics.repository.js";
 import * as authRepository from "../repositories/auth.repository.js";
 import * as eventAttendanceRepository from "../repositories/eventAttendance.repository.js";
 import * as eventRepository from "../repositories/event.repository.js";
@@ -17,6 +18,7 @@ import { mapEventResponse } from "../utils/eventResponse.util.js";
 import { mapEventStatusHistoryResponse } from "../utils/eventStatusHistoryResponse.util.js";
 
 const defaultDependencies = {
+  analyticsRepository,
   authRepository,
   eventAttendanceRepository,
   eventRepository,
@@ -559,14 +561,24 @@ export async function getOrganizationEvents(organizationId, actorUserId, query, 
     sortBy: "createdAt",
   });
   const filter = buildEventFilter(organizationId, query);
-  const [events, totalItems] = await Promise.all([
+  const [events, totalItems, overview] = await Promise.all([
     dependencies.eventRepository.findEvents(filter, pagination),
     dependencies.eventRepository.countEvents(filter),
+    dependencies.analyticsRepository?.getScopeOverview
+      ? dependencies.analyticsRepository.getScopeOverview({ organizationId }, {})
+      : Promise.resolve({ eventCount: 0, inventory: {} }),
   ]);
+  const allocated = Number(overview.inventory?.sellableInventory || 0);
+  const issued = Number(overview.inventory?.reservedInventory || 0);
 
   return {
     events: mapEventListResponse(events),
     pagination: buildPaginationMeta(totalItems, pagination),
+    summary: {
+      totalEvents: dependencies.analyticsRepository?.getScopeOverview ? Number(overview.eventCount || 0) : Number(totalItems || 0),
+      ticketsSold: issued,
+      ticketsAvailable: Math.max(0, allocated - issued),
+    },
   };
 }
 

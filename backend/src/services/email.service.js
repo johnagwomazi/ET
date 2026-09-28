@@ -145,6 +145,24 @@ export function buildEmailVerificationEmail({ firstName, code, expiresInMinutes 
   };
 }
 
+export function buildOrganizationInvitationEmail({ organizationName, inviterName, role, eventNames = [], invitationUrl, expiresAt }) {
+  const events = eventNames.length ? eventNames.join(", ") : "No event assignments";
+  const expiry = new Intl.DateTimeFormat("en-NG", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Lagos" }).format(new Date(expiresAt));
+  const paragraphs = [
+    `${inviterName || "An organization admin"} invited you to join ${organizationName || "an organization"} as ${String(role || "member").toLowerCase()}.`,
+    "Sign in with this email address, or create an Eventidor account first, then accept the invitation.",
+  ];
+  const rows = [["Organization", organizationName || "Organization"], ["Role", role || "Member"], ["Assigned events", events], ["Expires", expiry]];
+  return {
+    subject: `Invitation to join ${organizationName || "an organization"} on Eventidor`,
+    text: `You have been invited to join ${organizationName || "an organization"} on Eventidor.\n\nRole: ${role}\nAssigned events: ${events}\nExpires: ${expiry}\n\nAccept invitation: ${invitationUrl}`,
+    html: emailLayout({ heading: "You are invited to Eventidor", greeting: "there", paragraphs, rows, cta: { label: "ACCEPT INVITATION", url: invitationUrl }, footerNote: "This secure invitation link can only be used by the invited email address." }),
+  };
+}
+
+export async function sendOrganizationInvitationEmail(input) {
+  return sendTransactionalEmail({ to: input.to, ...buildOrganizationInvitationEmail(input) });
+}
 export async function sendPurchaseConfirmationEmail(input) {
   return sendTransactionalEmail({ to: input.to, ...buildPurchaseConfirmationEmail(input) });
 }

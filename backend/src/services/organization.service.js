@@ -662,47 +662,40 @@ export async function updateMyOrganizationSettings(organizationId, settingsData)
 }
 
 export async function getOrganizationDashboard(organizationId) {
-  if (!organizationId) {
-    return {
-      error: "Organization access is required",
-      statusCode: HTTP_STATUS.FORBIDDEN,
-    };
-  }
-
+  if (!organizationId) return { error: "Organization access is required", statusCode: HTTP_STATUS.FORBIDDEN };
   const organization = await organizationRepository.findOrganizationDetailsById(organizationId);
+  if (!organization) return { error: "Organization not found", statusCode: HTTP_STATUS.NOT_FOUND };
 
-  if (!organization) {
-    return {
-      error: "Organization not found",
-      statusCode: HTTP_STATUS.NOT_FOUND,
-    };
-  }
-
-  const [memberStats, recentMemberDocuments] = await Promise.all([
-    userRepository.getOrganizationMemberStatistics(organizationId),
-    userRepository.findOrganizationRecentMemberActivity(organizationId, 5),
+  const now = new Date();
+  const organizationFilter = { organization: organizationId };
+  const upcomingFilter = {
+    organization: organizationId,
+    status: EVENT_STATUS.PUBLISHED,
+    startAt: trustedOperator({ $gt: now }),
+  };
+  const [rawOverview, upcomingEvents, topPerformance, recentMembers, recentEvents, recentOrders] = await Promise.all([
+    analyticsRepository.getScopeOverview({ organizationId }, {}),
+    eventRepository.findEvents(upcomingFilter, { limit: 3, sortBy: "startAt", sortOrder: 1 }),
+    analyticsRepository.getEventPerformance({ organizationId }, {}, { page: 1, limit: 5, skip: 0, sortBy: "ticketsSold", sortOrder: "desc" }),
+    userRepository.findOrganizationRecentMemberActivity(organizationId, 3),
+    eventRepository.findEvents(organizationFilter, { limit: 3, sortBy: "createdAt", sortOrder: -1 }),
+    orderRepository.findOrders(organizationFilter, { limit: 3, sortBy: "createdAt", sortOrder: -1 }),
   ]);
-
-  const organizationSummary = buildOrganizationDashboardSummary(organization);
-  const recentActivity = buildRecentActivity(organization, recentMemberDocuments);
+  const analytics = buildAnalyticsSummary(rawOverview);
+  const issued = Number(rawOverview.inventory?.reservedInventory || 0);
 
   return {
-    organization: organizationSummary,
-    stats: memberStats,
-    recentActivity,
-    quickActions: [
-      {
-        label: "Manage Organization",
-        path: "/organizations/me",
-      },
-      {
-        label: "Manage Members",
-        path: "/organizations/me/members",
-      },
-      {
-        label: "Organization Settings",
-        path: "/organizations/me/settings",
-      },
-    ],
+    organization: buildOrganizationDashboardSummary(organization),
+    stats: {
+      totalEvents: Number(analytics.events || 0),
+      ticketsSold: issued,
+      revenue: Number(analytics.netRevenue || 0),
+      currency: analytics.currency || DEFAULT_CURRENCY,
+      upcomingEvents: upcomingEvents.length,
+      ticketsAvailable: Number(analytics.ticketsRemaining || 0),
+    },
+    upcomingEvents: upcomingEvents.map(mapOrganizationEventPerformance),
+    topEvents: (topPerformance.items || []).map(mapOrganizationEventPerformance),
+    recentActivity: buildOrganizationDetailsActivity(organization, recentMembers, recentEvents, recentOrders, []).slice(0, 3),
   };
 }

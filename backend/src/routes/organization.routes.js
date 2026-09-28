@@ -11,6 +11,7 @@ import { requireOrganizationPermission } from "../middleware/organizationPermiss
 import {
   organizationProfileUpdateSchema,
   organizationMemberIdParamSchema,
+  organizationMemberAssignmentsSchema,
   organizationMemberInviteSchema,
   organizationMemberListQuerySchema,
   organizationMemberRoleUpdateSchema,
@@ -194,6 +195,13 @@ organizationRouter.post(
   organizationController.inviteOrganizationMember
 );
 
+organizationRouter.patch(
+  "/me/members/:memberId/event-assignments",
+  requireOrganizationPermission(ORGANIZATION_PERMISSIONS.MEMBERS_UPDATE_ROLE),
+  validate(organizationMemberIdParamSchema, "params"),
+  validate(organizationMemberAssignmentsSchema),
+  organizationController.updateManagerEventAssignments
+);
 organizationRouter.patch(
   "/me/members/:memberId/role",
   requireOrganizationPermission(ORGANIZATION_PERMISSIONS.MEMBERS_UPDATE_ROLE),

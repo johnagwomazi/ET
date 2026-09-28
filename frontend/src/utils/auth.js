@@ -84,6 +84,7 @@ export function getPostLoginRouteForUser(user, requestedPath) {
   }
 
   const pathname = safeRequestedPath.split(/[?#]/)[0];
+  if (pathname.startsWith("/invitations/")) return safeRequestedPath;
   const allowedPrefixes = RETURN_PATH_PREFIXES[user?.role] || [];
   const canReturn = allowedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
 

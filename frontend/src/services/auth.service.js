@@ -70,6 +70,14 @@ export async function resetPassword(payload) {
   return extractData(response);
 }
 
+export async function getOrganizationInvitation(token) {
+  return extractData(await get(`/auth/invitations/${encodeURIComponent(token)}`, { skipAuthRefresh: true }));
+}
+
+export async function acceptOrganizationInvitation(token) {
+  return extractData(await post(`/auth/invitations/${encodeURIComponent(token)}/accept`, {}));
+}
+
 export async function changePassword(payload) {
   const response = await patch("/auth/change-password", payload);
   return extractData(response);
