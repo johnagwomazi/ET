@@ -111,6 +111,9 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
   const eventNameValue = watch("eventName");
   const previewSlug = normalizeEventSlug(slugValue || eventNameValue);
   const shareableUrl = previewSlug ? getPublicEventUrl(previewSlug) : "";
+  const persistedShareableUrl = isEditMode && initialEvent?.slug
+    ? getPublicEventUrl(initialEvent.slug)
+    : "";
   const [previewUrl, setPreviewUrl] = useState(storedBannerUrl);
 
   useEffect(() => {
@@ -151,21 +154,22 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
     return fieldErrorToFieldMap[errorMessage] || null;
   }
 
-  async function submit(values) {
-    setIsSubmitting(true);
-    setSubmitError(null);
   async function copyShareableUrl() {
     try {
-      if (!shareableUrl || !navigator.clipboard?.writeText) {
+      if (!persistedShareableUrl || !navigator.clipboard?.writeText) {
         throw new Error("Clipboard unavailable");
       }
 
-      await navigator.clipboard.writeText(shareableUrl);
+      await navigator.clipboard.writeText(persistedShareableUrl);
       toast.success("Event link copied");
     } catch {
       toast.error("Unable to copy the event link");
     }
   }
+
+  async function submit(values) {
+    setIsSubmitting(true);
+    setSubmitError(null);
 
 
     try {
@@ -264,10 +268,12 @@ function EventForm({ mode = "create", initialEvent = null, onCancel }) {
                     <p className="min-w-0 break-all text-xs text-slate-400">
                       {shareableUrl || "Your Eventidor URL will appear here."}
                     </p>
-                    <Button type="button" variant="secondary" size="sm" disabled={!shareableUrl} onClick={copyShareableUrl}>
-                      <Copy className="h-4 w-4" />
-                      Copy link
-                    </Button>
+                    {persistedShareableUrl ? (
+                      <Button type="button" variant="secondary" size="sm" onClick={copyShareableUrl}>
+                        <Copy className="h-4 w-4" />
+                        Copy link
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
 

@@ -27,6 +27,7 @@ import PublicTicketSelectionPanel from "../../components/ticketing/PublicTicketS
 import { getSafeExternalUrl } from "../../utils/externalUrl";
 import { getEventImageUrl } from "../../utils/eventImage";
 import { getPublicEventPath, getPublicEventUrl } from "../../utils/eventUrl";
+import { isEventEnded } from "../../utils/eventAvailability";
 
 function formatTime(value) {
   if (!value) {
@@ -269,8 +270,8 @@ function PublicEventDetailsPage() {
   );
   const capacityLabel = useMemo(() => formatNumber(event?.capacity || 0), [event?.capacity]);
   const isPostponed = event?.status === "POSTPONED";
+  const isEnded = isEventEnded(event);
   const scheduleLabel = useMemo(() => {
-  const isEnded = Boolean(event?.hasEnded || (event?.endAt && new Date(event.endAt) <= new Date()));
     if (!event) {
       return "TBA";
     }
@@ -375,11 +376,11 @@ function PublicEventDetailsPage() {
                     {event.category ? (
                       <span className="rounded-full border border-slate-700 bg-slate-950/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-200">
                         {event.category}
+                      </span>
+                    ) : null}
                     {isEnded ? (
                       <span className="rounded-full border border-rose-400/30 bg-rose-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-rose-100">
                         Event Ended
-                      </span>
-                    ) : null}
                       </span>
                     ) : null}
                   </div>
@@ -402,6 +403,17 @@ function PublicEventDetailsPage() {
           {isPostponed && event?.lifecycle?.reason ? (
             <Card className="border-amber-500/20 bg-amber-500/10">
               <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-amber-500/15 p-2 text-amber-300 ring-1 ring-amber-500/20">
+                  <Info className="h-4 w-4" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-amber-100">Event postponed</p>
+                  <p className="text-sm leading-6 text-amber-50/85">{event.lifecycle.reason}</p>
+                </div>
+              </div>
+            </Card>
+          ) : null}
+
           {isEnded ? (
             <Card className="border-rose-500/20 bg-rose-500/10">
               <div className="flex items-start gap-3">
@@ -413,16 +425,6 @@ function PublicEventDetailsPage() {
                   <p className="text-sm leading-6 text-rose-50/85">
                     This event remains available for reference, but ticket sales are closed.
                   </p>
-                </div>
-              </div>
-            </Card>
-          ) : null}
-                <div className="rounded-xl bg-amber-500/15 p-2 text-amber-300 ring-1 ring-amber-500/20">
-                  <Info className="h-4 w-4" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-amber-100">Event postponed</p>
-                  <p className="text-sm leading-6 text-amber-50/85">{event.lifecycle.reason}</p>
                 </div>
               </div>
             </Card>

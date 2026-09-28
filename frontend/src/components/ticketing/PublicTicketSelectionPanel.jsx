@@ -12,6 +12,7 @@ import { MARKETPLACE_BUYER_ROLES } from "../../constants/roles.constants";
 import { useSessionStore } from "../../store/useSessionStore";
 import { formatDateTime, formatMoney } from "../../utils/formatters";
 import { saveCheckoutSelection } from "../../utils/checkoutStorage";
+import { isEventEnded } from "../../utils/eventAvailability";
 import * as ticketingService from "../../services/ticketing.service";
 
 function isPurchasable(ticketType) {
@@ -43,7 +44,7 @@ function PublicTicketSelectionPanel({ event }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const salesEnded = Boolean(event?.hasEnded || (event?.endAt && new Date(event.endAt) <= new Date()));
+  const salesEnded = isEventEnded(event);
   useEffect(() => {
     const controller = new AbortController();
 

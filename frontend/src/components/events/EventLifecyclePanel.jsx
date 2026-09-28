@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CalendarDays, Clock3, History, RefreshCw, RotateCw, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CalendarDays, Clock3, Copy, ExternalLink, History, RefreshCw, RotateCw, ShieldAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import Card from "../ui/Card";
 import Button from "../ui/Button";
@@ -9,6 +9,8 @@ import StatusBadge from "../dashboard/StatusBadge";
 import { Skeleton, SkeletonText } from "../common/Skeleton";
 import { formatDateTime, formatStatusLabel } from "../../utils/formatters";
 import * as eventService from "../../services/event.service";
+import { getPublicEventUrl } from "../../utils/eventUrl";
+import { isEventEnded } from "../../utils/eventAvailability";
 
 const ACTION_LABELS = {
   publish: "Publish",
@@ -104,21 +106,13 @@ function getAvailableActions(event) {
   }
 
   const currentStatus = event.status;
-  const currentEndAt = event.endAt ? new Date(event.endAt) : null;
-  const hasEnded = currentEndAt instanceof Date && !Number.isNaN(currentEndAt.getTime()) && currentEndAt <= new Date();
 
   if (currentStatus === "DRAFT") {
     return ["publish"];
   }
 
   if (currentStatus === "PUBLISHED") {
-    const actions = ["postpone", "cancel"];
-
-    if (hasEnded) {
-      actions.push("complete");
-    }
-
-    return actions;
+    return ["postpone", "complete", "cancel"];
   }
 
   if (currentStatus === "POSTPONED") {
@@ -377,6 +371,7 @@ function LifecycleActionDialog({
 
 function EventLifecyclePanel({ event, canManageLifecycle = false, onEventUpdated }) {
   const eventId = event?._id || event?.id || null;
+  const canonicalEventUrl = event?.slug ? getPublicEventUrl(event) : "";
   const [history, setHistory] = useState([]);
   const [historyPagination, setHistoryPagination] = useState(null);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -388,8 +383,7 @@ function EventLifecyclePanel({ event, canManageLifecycle = false, onEventUpdated
   const hasActions = availableActions.length > 0;
   const hasEndedAwaitingCompletion = Boolean(
     ["PUBLISHED", "POSTPONED"].includes(event?.status)
-    && event?.endAt
-    && new Date(event.endAt) <= new Date()
+    && isEventEnded(event)
   );
 
   async function loadHistory({ quiet = false } = {}) {
@@ -468,6 +462,19 @@ function EventLifecyclePanel({ event, canManageLifecycle = false, onEventUpdated
       toast.error(message);
     } finally {
       setIsActionSubmitting(false);
+    }
+  }
+
+  async function copyEventLink() {
+    try {
+      if (!canonicalEventUrl || !navigator.clipboard?.writeText) {
+        throw new Error("Clipboard unavailable");
+      }
+
+      await navigator.clipboard.writeText(canonicalEventUrl);
+      toast.success("Link copied");
+    } catch {
+      toast.error("Unable to copy the event link");
     }
   }
 
@@ -553,6 +560,29 @@ function EventLifecyclePanel({ event, canManageLifecycle = false, onEventUpdated
               </div>
             </div>
           )}
+
+          {canonicalEventUrl ? (
+            <div className="border-t border-slate-800/70 pt-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-app-300">Event Link</p>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <a
+                  href={canonicalEventUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="min-w-0 flex-1 break-all rounded-xl border border-slate-800 bg-slate-950/70 px-4 py-3 text-sm text-app-300 transition hover:border-app-500/50 hover:text-app-200"
+                >
+                  <span className="inline-flex items-start gap-2">
+                    <ExternalLink className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{canonicalEventUrl}</span>
+                  </span>
+                </a>
+                <Button type="button" variant="secondary" size="sm" onClick={copyEventLink} className="justify-center sm:shrink-0">
+                  <Copy className="h-4 w-4" />
+                  Copy Link
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       </Card>
 
