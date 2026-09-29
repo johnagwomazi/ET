@@ -30,6 +30,12 @@ const defaultDependencies = {
   mongoose,
 };
 
+const EVENT_URL_UNIQUE_INDEXES = [
+  "slug_1",
+  "slugAliases_1",
+  "organization_1_slug_1",
+];
+
 function getDocumentId(document) {
   if (!document) {
     return null;
@@ -66,7 +72,25 @@ async function findSlugClaim(dependencies, organizationId, slug, eventId = null)
   );
 }
 
-async function allocateUniqueEventSlug(dependencies, organizationId, sourceValue) {
+function isEventUrlDuplicateKeyError(error) {
+  if (error?.code !== 11000) {
+    return false;
+  }
+
+  const duplicateFields = new Set([
+    ...Object.keys(error?.keyPattern || {}),
+    ...Object.keys(error?.keyValue || {}),
+  ]);
+
+  if (duplicateFields.has("slug") || duplicateFields.has("slugAliases")) {
+    return true;
+  }
+
+  const message = String(error?.message || "");
+  return EVENT_URL_UNIQUE_INDEXES.some((indexName) => message.includes(indexName));
+}
+
+async function allocateUniqueEventSlug(dependencies, organizationId, sourceValue, excludedSlugs = new Set()) {
   const normalizedBase = buildEventSlug(sourceValue);
   const baseSlug = isReservedEventSlug(normalizedBase)
     ? `${normalizedBase}-event`
@@ -74,6 +98,9 @@ async function allocateUniqueEventSlug(dependencies, organizationId, sourceValue
 
   for (let suffix = 1; suffix <= 10_000; suffix += 1) {
     const candidate = suffix === 1 ? baseSlug : `${baseSlug}-${suffix}`;
+    if (excludedSlugs.has(candidate)) {
+      continue;
+    }
     const existingEvent = await findSlugClaim(dependencies, organizationId, candidate);
 
     if (!existingEvent) {
@@ -636,16 +663,23 @@ export async function createOrganizationEvent(organizationId, actorUserId, paylo
   }
 
   let event = null;
+  const attemptedSlugs = new Set();
   for (let attempt = 0; attempt < 5 && !event; attempt += 1) {
     if (!providedSlug) {
-      createData.slug = await allocateUniqueEventSlug(dependencies, organizationId, createData.eventName);
+      createData.slug = await allocateUniqueEventSlug(
+        dependencies,
+        organizationId,
+        createData.eventName,
+        attemptedSlugs
+      );
     }
 
     try {
       event = await dependencies.eventRepository.createEvent(createData);
     } catch (error) {
-      if (error?.code !== 11000) throw error;
+      if (!isEventUrlDuplicateKeyError(error)) throw error;
       if (providedSlug) return slugConflictResult();
+      attemptedSlugs.add(createData.slug);
     }
   }
 

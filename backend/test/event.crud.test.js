@@ -405,6 +405,97 @@ test("automatic event slugs use a globally unique numeric suffix", async () => {
   assert.equal(result.event.slug, "annual-event-summit-2");
 });
 
+test("automatic event slugs advance through first, second, and third candidates", async () => {
+  const { dependencies } = buildDependencies();
+  const claimedSlugs = new Set();
+
+  dependencies.eventRepository.findEventBySlugOrAlias = async (slug) => (
+    claimedSlugs.has(slug) ? { _id: `event-${slug}` } : null
+  );
+  dependencies.eventRepository.createEvent = async (eventData) => {
+    claimedSlugs.add(eventData.slug);
+    return createDocument({ _id: `event-${claimedSlugs.size}`, ...eventData });
+  };
+
+  const payload = {
+    eventName: "Annual Event Summit",
+    startAt: new Date("2026-10-01T09:00:00.000Z"),
+    endAt: new Date("2026-10-01T18:00:00.000Z"),
+    capacity: 300,
+  };
+  const first = await createOrganizationEvent("org_1", "user_1", payload, dependencies);
+  const second = await createOrganizationEvent("org_1", "user_1", payload, dependencies);
+  const third = await createOrganizationEvent("org_1", "user_1", payload, dependencies);
+
+  assert.equal(first.event.slug, "annual-event-summit");
+  assert.equal(second.event.slug, "annual-event-summit-2");
+  assert.equal(third.event.slug, "annual-event-summit-3");
+});
+
+test("slug duplicate retries advance candidates without waiting for query visibility", async () => {
+  const { dependencies } = buildDependencies();
+  const attemptedSlugs = [];
+  dependencies.eventRepository.findEventBySlugOrAlias = async () => null;
+  dependencies.eventRepository.createEvent = async (eventData) => {
+    attemptedSlugs.push(eventData.slug);
+    if (attemptedSlugs.length < 3) {
+      const error = new Error("duplicate key error index: slug_1");
+      error.code = 11000;
+      error.keyPattern = { slug: 1 };
+      throw error;
+    }
+    return createDocument({ _id: "event_3", ...eventData });
+  };
+
+  const result = await createOrganizationEvent(
+    "org_1",
+    "user_1",
+    {
+      eventName: "Annual Event Summit",
+      startAt: new Date("2026-10-01T09:00:00.000Z"),
+      endAt: new Date("2026-10-01T18:00:00.000Z"),
+      capacity: 300,
+    },
+    dependencies
+  );
+
+  assert.equal(result.event.slug, "annual-event-summit-3");
+  assert.deepEqual(attemptedSlugs, [
+    "annual-event-summit",
+    "annual-event-summit-2",
+    "annual-event-summit-3",
+  ]);
+});
+
+test("unrelated duplicate keys fail immediately instead of exhausting slug retries", async () => {
+  const { dependencies } = buildDependencies();
+  let createAttempts = 0;
+  dependencies.eventRepository.findEventBySlugOrAlias = async () => null;
+  dependencies.eventRepository.createEvent = async () => {
+    createAttempts += 1;
+    const error = new Error("duplicate key error index: unrelated_reference_1");
+    error.code = 11000;
+    error.keyPattern = { unrelatedReference: 1 };
+    throw error;
+  };
+
+  await assert.rejects(
+    createOrganizationEvent(
+      "org_1",
+      "user_1",
+      {
+        eventName: "Annual Event Summit",
+        startAt: new Date("2026-10-01T09:00:00.000Z"),
+        endAt: new Date("2026-10-01T18:00:00.000Z"),
+        capacity: 300,
+      },
+      dependencies
+    ),
+    /unrelated_reference_1/
+  );
+  assert.equal(createAttempts, 1);
+});
+
 test("custom event slug changes retain the previous slug as a redirect alias", async () => {
   const currentEvent = createDocument({
     _id: "event_1",
