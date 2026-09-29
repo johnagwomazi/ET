@@ -87,6 +87,24 @@ test("event model keeps current slugs and historical aliases globally unique", (
   assert.ok(aliasIndex);
 });
 
+test("event model omits empty slug aliases and preserves populated history", () => {
+  const baseData = {
+    eventName: "Annual Event Summit",
+    slug: "annual-event-summit",
+    organization: new mongoose.Types.ObjectId(),
+    createdBy: new mongoose.Types.ObjectId(),
+    startAt: new Date("2026-10-01T09:00:00.000Z"),
+    endAt: new Date("2026-10-01T18:00:00.000Z"),
+    capacity: 300,
+  };
+  const withoutHistory = new Event(baseData);
+  const withHistory = new Event({ ...baseData, slugAliases: ["annual-summit"] });
+
+  assert.equal(withoutHistory.slugAliases, undefined);
+  assert.equal(Object.hasOwn(withoutHistory.toObject(), "slugAliases"), false);
+  assert.deepEqual([...withHistory.slugAliases], ["annual-summit"]);
+});
+
 test("event validator accepts a valid create payload", () => {
   const {
     organization,

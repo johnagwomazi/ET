@@ -141,7 +141,7 @@ const eventSchema = new mongoose.Schema(
     },
     slugAliases: {
       type: [{ type: String, trim: true, lowercase: true }],
-      default: () => [],
+      default: undefined,
     },
     description: {
       type: String,
@@ -232,6 +232,9 @@ const eventSchema = new mongoose.Schema(
 
 eventSchema.pre("validate", function normalizeEventData(next) {
   this.slug = buildEventSlug(this.slug || this.eventName, this._id);
+  if (Array.isArray(this.slugAliases) && this.slugAliases.length === 0) {
+    this.slugAliases = undefined;
+  }
   next();
 });
 

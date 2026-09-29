@@ -62,7 +62,9 @@ export async function migrateEventSlugs({ apply = false } = {}) {
       updates.push({
         updateOne: {
           filter: { _id: event._id },
-          update: { $set: { slug, slugAliases } },
+          update: slugAliases.length
+            ? { $set: { slug, slugAliases } }
+            : { $set: { slug }, $unset: { slugAliases: "" } },
         },
       });
     }

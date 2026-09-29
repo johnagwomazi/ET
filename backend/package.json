@@ -13,7 +13,9 @@
     "migrate:ticket-identifiers": "node scripts/migrate-ticket-identifiers.js",
     "migrate:ticket-identifiers:apply": "node scripts/migrate-ticket-identifiers.js --apply",
     "migrate:event-slugs": "node scripts/migrate-event-slugs.js",
-    "migrate:event-slugs:apply": "node scripts/migrate-event-slugs.js --apply"
+    "migrate:event-slugs:apply": "node scripts/migrate-event-slugs.js --apply",
+    "migrate:empty-event-slug-aliases": "node scripts/migrate-empty-event-slug-aliases.js",
+    "migrate:empty-event-slug-aliases:apply": "node scripts/migrate-empty-event-slug-aliases.js --apply"
   },
   "keywords": [
     "events",
