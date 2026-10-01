@@ -1,13 +1,7 @@
-import { API_URL } from "../constants/app.constants";
+import { BACKEND_ORIGIN } from "../constants/app.constants";
 
 function getApiOrigin() {
-  if (!API_URL) return "";
-
-  try {
-    return new URL(API_URL).origin;
-  } catch {
-    return "";
-  }
+  return BACKEND_ORIGIN;
 }
 
 export function getEventImageUrl(eventOrUrl) {
