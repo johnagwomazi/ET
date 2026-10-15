@@ -53,6 +53,8 @@ const PublicEventDetailsPage = lazy(() => import("../pages/events/PublicEventDet
 const NotFoundPage = lazy(() => import("../pages/NotFoundPage"));
 const GuestTicketPage = lazy(() => import("../pages/GuestTicketPage"));
 const InvitationPage = lazy(() => import("../pages/InvitationPage"));
+const CouponManagementPage = lazy(() => import("../pages/coupons/CouponManagementPage"));
+const CustomerRewardsPage = lazy(() => import("../pages/customer/CustomerRewardsPage"));
 
 const router = createBrowserRouter([
   {
@@ -100,6 +102,10 @@ const router = createBrowserRouter([
               {
                 path: ROUTE_PATHS.CUSTOMER_HISTORY,
                 element: <CustomerHistoryPage />,
+              },
+              {
+                path: ROUTE_PATHS.CUSTOMER_REWARDS,
+                element: <CustomerRewardsPage />,
               },
               {
                 path: ROUTE_PATHS.CUSTOMER_ORDERS,
@@ -305,6 +311,16 @@ const router = createBrowserRouter([
                 ),
               },
               {
+                path: ROUTE_PATHS.ORGANIZATION_COUPONS,
+                element: (
+                  <RoleRoute allowedRoles={[USER_ROLES.ADMIN]}>
+                    <PermissionRoute permission={ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE}>
+                      <CouponManagementPage mode="organization" />
+                    </PermissionRoute>
+                  </RoleRoute>
+                ),
+              },
+              {
                 path: ROUTE_PATHS.ORGANIZATION_PROFILE,
                 element: (
                   <PermissionRoute permission={ORGANIZATION_PERMISSIONS.ORGANIZATION_VIEW}>
@@ -379,6 +395,10 @@ const router = createBrowserRouter([
               {
                 path: ROUTE_PATHS.SUPER_ADMIN_WITHDRAWALS,
                 element: <WithdrawalsPage />,
+              },
+              {
+                path: ROUTE_PATHS.SUPER_ADMIN_COUPONS,
+                element: <CouponManagementPage mode="platform" />,
               },
               {
                 path: ROUTE_PATHS.SUPER_ADMIN_ANALYTICS,

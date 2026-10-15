@@ -40,6 +40,11 @@ export function mapFinancialPosition(position = {}) {
     refunds: fromMinorUnits(position.refundsMinor),
     refundedAmount: fromMinorUnits(position.refundsMinor),
     netRevenue: fromMinorUnits(position.netRevenueMinor),
+    organizerEligibleRevenue: fromMinorUnits(position.organizerEligibleRevenueMinor),
+    organizerEntitlementReversal: fromMinorUnits(position.organizerEntitlementReversalMinor),
+    organizerNetRevenue: fromMinorUnits(position.organizerNetRevenueMinor ?? position.netRevenueMinor),
+    platformFundedDiscount: fromMinorUnits(position.platformFundedDiscountMinor),
+    platformFundedSubsidyReversal: fromMinorUnits(position.platformFundedSubsidyReversalMinor),
     completedWithdrawals: fromMinorUnits(position.completedWithdrawalsMinor),
     pendingWithdrawals: fromMinorUnits(position.reservedWithdrawalsMinor),
     committedWithdrawals: fromMinorUnits(
@@ -87,4 +92,3 @@ export function mapFinanceWithdrawal(withdrawalDocument) {
     updatedAt: withdrawal.updatedAt || null,
   };
 }
-

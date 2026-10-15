@@ -16,8 +16,10 @@ import {
   TICKET_VALIDATION_OUTCOME,
 } from "../src/constants/ticketing.constants.js";
 import { EVENT_STATUS } from "../src/constants/eventStatus.constants.js";
+import { COUPON_FUNDING_TYPES } from "../src/constants/coupon.constants.js";
 import { USER_ROLES } from "../src/constants/roles.constants.js";
 import * as ticketingService from "../src/services/ticketing.service.js";
+import * as couponPricingService from "../src/services/couponPricing.service.js";
 import ticketingRoutes from "../src/routes/ticketing.routes.js";
 import { buildPaymentCallbackUrl } from "../src/utils/payment.util.js";
 import {
@@ -1909,4 +1911,178 @@ test("checkout authoritatively rejects a published event after its actual end ti
   assert.match(result.error, /not available|ended/i);
   assert.equal(initializationCalls, 0);
   assert.equal(state.ticketType.soldQuantity, 2);
+});
+
+function couponCheckoutDependencies(coupon, overrides = {}) {
+  const redemptions = { reserved: 0, redeemed: 0, released: 0 };
+  const base = createDependencies({
+    mongoose: {
+      connection: { readyState: 1 },
+      async startSession() {
+        return {
+          async withTransaction(callback) { return callback({}); },
+          async endSession() {},
+        };
+      },
+    },
+    couponPricingService,
+    couponRepository: {
+      async findCouponByCode() { return coupon; },
+      async countCouponRedemptions() { return 0; },
+      async reserveCouponRedemption() { redemptions.reserved += 1; return { _id: "redemption-1" }; },
+      async redeemCouponRedemptionForOrder() { redemptions.redeemed += 1; return { _id: "redemption-1" }; },
+      async releaseCouponRedemptionForOrder() { redemptions.released += 1; return { _id: "redemption-1" }; },
+      async releaseExpiredCouponReservations() { return 0; },
+    },
+    ...overrides,
+  });
+  return { ...base, redemptions };
+}
+
+function couponCheckoutPayload(couponCode = "SAVE10") {
+  return {
+    eventId: ids.event,
+    customerInfo: { name: "Ada Buyer", email: "ada@example.com", phone: "+2348012345678" },
+    items: [{ ticketTypeId: ids.ticketType, quantity: 1 }],
+    couponCode,
+    idempotencyKey: `coupon-${couponCode.toLowerCase()}-checkout`,
+  };
+}
+
+for (const fundingType of Object.values(COUPON_FUNDING_TYPES)) {
+  test(`coupon checkout persists ${fundingType.toLowerCase()} pricing and finalizes once`, async () => {
+    const { dependencies, state, redemptions } = couponCheckoutDependencies({
+      _id: "64b64b64b64b64b64b64b651",
+      code: "SAVE10",
+      fundingType,
+      discountPercent: 10,
+      event: ids.event,
+      ticketTypes: [],
+      customers: [],
+      status: "ACTIVE",
+      redemptionCount: 0,
+    });
+
+    const checkout = await ticketingService.createCheckoutOrder(ids.customer, couponCheckoutPayload(), dependencies);
+    assert.equal(checkout.order.total, 2250);
+    assert.equal(checkout.order.originalSubtotal, 2500);
+    assert.equal(checkout.order.discountAmount, 250);
+    assert.equal(checkout.order.coupon.fundingType, fundingType);
+    assert.equal(checkout.payment.providerConfigured, true);
+    assert.equal(redemptions.reserved, 1);
+
+    await ticketingService.verifyPayment(ids.customer, checkout.payment.reference, dependencies);
+    assert.equal(redemptions.redeemed, 1);
+    assert.equal(state.tickets.length, 1);
+    assert.equal(state.order.paymentStatus, PAYMENT_STATUS.PAID);
+  });
+}
+
+test("a 100 percent coupon completes the existing free-order path without Paystack", async () => {
+  let paystackCalls = 0;
+  const { dependencies, state, redemptions } = couponCheckoutDependencies({
+    _id: "64b64b64b64b64b64b64b652",
+    code: "FREE100",
+    fundingType: COUPON_FUNDING_TYPES.PLATFORM_FUNDED,
+    discountPercent: 100,
+    event: ids.event,
+    ticketTypes: [],
+    customers: [],
+    status: "ACTIVE",
+    redemptionCount: 0,
+  }, {
+    paystackService: {
+      async initializeTransaction() { paystackCalls += 1; throw new Error("Paystack must not be called"); },
+    },
+  });
+
+  const checkout = await ticketingService.createCheckoutOrder(ids.customer, couponCheckoutPayload("FREE100"), dependencies);
+  assert.equal(checkout.payment.free, true);
+  assert.equal(paystackCalls, 0);
+  assert.equal(redemptions.reserved, 1);
+  assert.equal(redemptions.redeemed, 1);
+  assert.equal(state.order.paymentStatus, PAYMENT_STATUS.PAID);
+  assert.equal(state.tickets.length, 1);
+});
+
+test("failed Paystack initialization releases the coupon reservation", async () => {
+  const { dependencies, state, redemptions } = couponCheckoutDependencies({
+    _id: "64b64b64b64b64b64b64b653",
+    code: "FAIL10",
+    fundingType: COUPON_FUNDING_TYPES.ORGANIZER_FUNDED,
+    discountPercent: 10,
+    event: ids.event,
+    ticketTypes: [],
+    customers: [],
+    status: "ACTIVE",
+    redemptionCount: 0,
+  }, {
+    paystackService: {
+      async initializeTransaction() { return { configured: true, status: false, message: "provider unavailable" }; },
+    },
+  });
+
+  const result = await ticketingService.createCheckoutOrder(ids.customer, couponCheckoutPayload("FAIL10"), dependencies);
+  assert.equal(result.statusCode, 502);
+  assert.equal(redemptions.reserved, 1);
+  assert.equal(redemptions.released, 1);
+  assert.equal(state.order.paymentStatus, PAYMENT_STATUS.FAILED);
+});
+
+test("concurrent coupon checkout reservations enforce the usage limit", async () => {
+  let remainingReservations = 1;
+  let successfulReservations = 0;
+  const { dependencies } = couponCheckoutDependencies({
+    _id: "64b64b64b64b64b64b64b654",
+    code: "LIMIT1",
+    fundingType: COUPON_FUNDING_TYPES.PLATFORM_FUNDED,
+    discountPercent: 10,
+    event: ids.event,
+    ticketTypes: [],
+    customers: [],
+    status: "ACTIVE",
+    redemptionCount: 0,
+  }, {
+    couponRepository: {
+      async findCouponByCode() {
+        return {
+          _id: "64b64b64b64b64b64b64b654",
+          code: "LIMIT1",
+          fundingType: COUPON_FUNDING_TYPES.PLATFORM_FUNDED,
+          discountPercent: 10,
+          event: ids.event,
+          ticketTypes: [],
+          customers: [],
+          status: "ACTIVE",
+          redemptionCount: 0,
+          maxRedemptions: 1,
+        };
+      },
+      async countCouponRedemptions() { return 0; },
+      async reserveCouponRedemption() {
+        if (remainingReservations === 0) return null;
+        remainingReservations -= 1;
+        successfulReservations += 1;
+        return { _id: "redemption-limited" };
+      },
+      async releaseCouponRedemptionForOrder() { return { _id: "redemption-limited" }; },
+      async releaseExpiredCouponReservations() { return 0; },
+    },
+  });
+
+  const [first, second] = await Promise.all([
+    ticketingService.createCheckoutOrder(ids.customer, {
+      ...couponCheckoutPayload("LIMIT1"),
+      idempotencyKey: "coupon-limit-first",
+    }, dependencies),
+    ticketingService.createCheckoutOrder(ids.customer, {
+      ...couponCheckoutPayload("LIMIT1"),
+      idempotencyKey: "coupon-limit-second",
+    }, dependencies),
+  ]);
+
+  const results = [first, second];
+  assert.equal(results.filter((result) => result.statusCode === 409).length, 1);
+  assert.equal(results.filter((result) => result.order).length, 1);
+  assert.equal(successfulReservations, 1);
 });

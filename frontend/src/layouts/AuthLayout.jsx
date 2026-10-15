@@ -9,7 +9,7 @@ function AuthLayout() {
       <PageContainer className="relative flex min-h-screen items-center justify-center py-8 sm:py-12">
         <div className="w-full max-w-xl space-y-6">
           <div className="flex justify-center">
-            <BrandLogo to={null} />
+            <BrandLogo />
           </div>
           <Outlet />
         </div>

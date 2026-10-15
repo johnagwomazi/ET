@@ -177,11 +177,19 @@ export async function getOrganizationFinancialAggregation(organizationId, eventI
       $group: {
         _id: null,
         grossSales: { $sum: "$total" },
+        organizerEligibleRevenue: { $sum: { $ifNull: ["$organizerEligibleRevenue", "$total"] } },
+        platformFundedDiscount: { $sum: { $ifNull: ["$platformFundedDiscount", 0] } },
         refundedAmount: { $sum: "$refundedAmount" },
         paidOrders: { $sum: { $cond: [{ $eq: ["$paymentStatus", "PAID"] }, 1, 0] } },
       },
     },
   ]);
 
-  return summary || { grossSales: 0, refundedAmount: 0, paidOrders: 0 };
+  return summary || {
+    grossSales: 0,
+    organizerEligibleRevenue: 0,
+    platformFundedDiscount: 0,
+    refundedAmount: 0,
+    paidOrders: 0,
+  };
 }

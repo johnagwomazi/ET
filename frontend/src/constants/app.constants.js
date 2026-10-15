@@ -52,7 +52,7 @@ if (configuredBackendOrigin) {
   validateHttpUrl(configuredBackendOrigin, "VITE_BACKEND_ORIGIN");
 }
 
-export const APP_NAME = import.meta.env.VITE_APP_NAME || "Eventidor";
+export const APP_NAME = "Eventidor";
 export const APP_ENV = import.meta.env.MODE;
 export const API_URL = configuredApiUrl;
 export const BACKEND_ORIGIN = getConfiguredBackendOrigin();

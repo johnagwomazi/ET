@@ -139,7 +139,7 @@ test("organization analytics stays concise and View opens scoped event performan
 
   await expect(page.getByRole("heading", { name: "Organization performance" })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByLabel("Date range")).toBeVisible();
-  await expect(page.getByLabel("Event")).toHaveValue("");
+  await expect(page.getByLabel("Event", { exact: true })).toHaveValue("");
   await expect(page.getByRole("button", { name: "Refresh" })).toBeVisible();
   await expect(page.getByText("Gross sales", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Tickets remaining", { exact: true })).toBeVisible();

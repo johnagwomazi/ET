@@ -12,6 +12,7 @@ import {
   CreditCard,
   Landmark,
   UserCog,
+  TicketPercent,
 } from "lucide-react";
 import { ROUTE_PATHS } from "../routes/routePaths";
 import { USER_ROLES } from "./roles.constants";
@@ -48,6 +49,11 @@ export const SUPER_ADMIN_NAVIGATION = {
       label: "Platform Analytics",
       icon: ChartColumn,
       to: ROUTE_PATHS.SUPER_ADMIN_ANALYTICS,
+    },
+    {
+      label: "Coupons",
+      icon: TicketPercent,
+      to: ROUTE_PATHS.SUPER_ADMIN_COUPONS,
     },
   ],
   overflow: [
@@ -91,6 +97,13 @@ export const ADMIN_NAVIGATION = {
       icon: Landmark,
       to: ROUTE_PATHS.ORGANIZATION_FINANCE,
       permission: ORGANIZATION_PERMISSIONS.SETTINGS_VIEW,
+      roles: [USER_ROLES.ADMIN],
+    },
+    {
+      label: "Coupons",
+      icon: TicketPercent,
+      to: ROUTE_PATHS.ORGANIZATION_COUPONS,
+      permission: ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE,
       roles: [USER_ROLES.ADMIN],
     },
     {
@@ -146,6 +159,11 @@ export const CUSTOMER_NAVIGATION = {
       label: "History",
       icon: Clock3,
       to: ROUTE_PATHS.CUSTOMER_HISTORY,
+    },
+    {
+      label: "Rewards",
+      icon: TicketPercent,
+      to: ROUTE_PATHS.CUSTOMER_REWARDS,
     },
   ],
   overflow: [],

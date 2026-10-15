@@ -9,6 +9,7 @@ import ticketingRoutes from "./ticketing.routes.js";
 import paymentRoutes from "./payment.routes.js";
 import notificationRoutes from "./notification.routes.js";
 import guestTicketRoutes from "./guestTicket.routes.js";
+import couponRoutes from "./coupon.routes.js";
 
 const router = express.Router();
 
@@ -22,5 +23,6 @@ router.use("/ticketing", ticketingRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/tickets", guestTicketRoutes);
+router.use("/coupons", couponRoutes);
 
 export default router;

@@ -158,21 +158,21 @@ test("Admin resolves, confirms, saves, and withdraws to a saved commercial bank"
   await expect(requestButton).toBeDisabled();
 
   await page.getByRole("button", { name: "Add bank account" }).click();
-  await page.getByLabel("Bank").selectOption({ label: "Guaranty Trust Bank" });
+  await page.getByLabel("Bank", { exact: true }).selectOption({ label: "Guaranty Trust Bank" });
   await page.getByLabel("Account number").fill("0123456789");
   await page.getByRole("button", { name: "Verify account" }).click();
 
-  await expect(page.getByText("ACME EVENTS LIMITED")).toBeVisible();
+  await expect(page.getByRole("dialog").getByText("ACME EVENTS LIMITED", { exact: true })).toBeVisible();
   await expect(page.getByText("******6789")).toBeVisible();
   await expect(page.getByText(/recipient.?code|Paystack bank code/i)).toHaveCount(0);
   await page.getByRole("button", { name: "Confirm and save account" }).click();
 
-  await expect(page.getByText("Verified")).toBeVisible();
+  await expect(page.getByText("Verified", { exact: true })).toBeVisible();
   await expect(page.getByText(/ACME EVENTS LIMITED.*Guaranty Trust Bank.*\*\*\*\*\*\*6789/)).toBeVisible();
   await expect(requestButton).toBeEnabled();
   await requestButton.click();
   await expect(page.getByText("Withdraw to")).toBeVisible();
-  await expect(page.getByText("ACME EVENTS LIMITED")).toBeVisible();
+  await expect(page.getByRole("dialog").getByText("ACME EVENTS LIMITED", { exact: true })).toBeVisible();
   await page.getByLabel("Withdrawal amount").fill("250000");
   await page.getByRole("button", { name: "Submit request" }).click();
 
@@ -195,7 +195,7 @@ test("failed account resolution is clear and usable on mobile", async ({ page })
   await installApiMocks(page, { resolveFails: true });
   await page.goto("/organization/finance");
   await page.getByRole("button", { name: "Add bank account" }).click();
-  await page.getByLabel("Bank").selectOption("058");
+  await page.getByLabel("Bank", { exact: true }).selectOption("058");
   await page.getByLabel("Account number").fill("0123456789");
   await page.getByRole("button", { name: "Verify account" }).click();
   await expect(page.getByText("Unable to verify this account. Check the bank and account number.")).toBeVisible();

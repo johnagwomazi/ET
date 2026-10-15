@@ -148,12 +148,47 @@ async function aggregateOrderSummary(scope, range, options = {}) {
 
   const [summary] = await applyAggregateSession(Order.aggregate([
     { $match: buildOrderMatch(scope, range) },
-    { $project: { currency: 1, selectedItems } },
+    { $project: { currency: 1, coupon: 1, selectedItems } },
     {
       $project: {
         currency: 1,
         grossSalesMinor: {
           $sum: { $map: { input: "$selectedItems", as: "item", in: moneyToMinorExpression("$$item.total") } },
+        },
+        organizerEligibleRevenueMinor: {
+          $sum: {
+            $map: {
+              input: "$selectedItems",
+              as: "item",
+              in: moneyToMinorExpression({
+                $cond: [
+                  { $eq: ["$coupon.fundingType", "PLATFORM_FUNDED"] },
+                  { $ifNull: ["$$item.originalTotal", "$$item.total"] },
+                  { $ifNull: ["$$item.discountedTotal", "$$item.total"] },
+                ],
+              }),
+            },
+          },
+        },
+        platformFundedDiscountMinor: {
+          $sum: {
+            $map: {
+              input: "$selectedItems",
+              as: "item",
+              in: {
+                $cond: [
+                  { $eq: ["$coupon.fundingType", "PLATFORM_FUNDED"] },
+                  moneyToMinorExpression({
+                    $subtract: [
+                      { $ifNull: ["$$item.originalTotal", "$$item.total"] },
+                      { $ifNull: ["$$item.discountedTotal", "$$item.total"] },
+                    ],
+                  }),
+                  0,
+                ],
+              },
+            },
+          },
         },
         ticketsSold: { $sum: { $map: { input: "$selectedItems", as: "item", in: "$$item.quantity" } } },
       },
@@ -162,6 +197,8 @@ async function aggregateOrderSummary(scope, range, options = {}) {
       $group: {
         _id: null,
         grossSalesMinor: { $sum: "$grossSalesMinor" },
+        organizerEligibleRevenueMinor: { $sum: "$organizerEligibleRevenueMinor" },
+        platformFundedDiscountMinor: { $sum: "$platformFundedDiscountMinor" },
         ticketsSold: { $sum: "$ticketsSold" },
         successfulOrders: { $sum: 1 },
         currencies: { $addToSet: "$currency" },
@@ -169,15 +206,39 @@ async function aggregateOrderSummary(scope, range, options = {}) {
     },
   ]), options);
 
-  return summary || { grossSalesMinor: 0, ticketsSold: 0, successfulOrders: 0, currencies: [] };
+  return summary || {
+    grossSalesMinor: 0,
+    organizerEligibleRevenueMinor: 0,
+    platformFundedDiscountMinor: 0,
+    ticketsSold: 0,
+    successfulOrders: 0,
+    currencies: [],
+  };
 }
 
 async function aggregateRefundSummary(scope, range, options = {}) {
   const [summary] = await applyAggregateSession(Refund.aggregate([
     { $match: buildRefundMatch(scope, range) },
-    { $group: { _id: null, refundsMinor: { $sum: moneyToMinorExpression("$amount") }, successfulRefunds: { $sum: 1 } } },
+    {
+      $group: {
+        _id: null,
+        refundsMinor: { $sum: moneyToMinorExpression("$amount") },
+        organizerEntitlementReversalMinor: {
+          $sum: moneyToMinorExpression({ $ifNull: ["$organizerEntitlementReversal", "$amount"] }),
+        },
+        platformFundedSubsidyReversalMinor: {
+          $sum: moneyToMinorExpression("$platformFundedSubsidyReversal"),
+        },
+        successfulRefunds: { $sum: 1 },
+      },
+    },
   ]), options);
-  return summary || { refundsMinor: 0, successfulRefunds: 0 };
+  return summary || {
+    refundsMinor: 0,
+    organizerEntitlementReversalMinor: 0,
+    platformFundedSubsidyReversalMinor: 0,
+    successfulRefunds: 0,
+  };
 }
 
 async function aggregateAttendanceSummary(scope, range) {
@@ -250,12 +311,19 @@ export async function getOrganizationFinancialTotals(organizationId, options = {
 
   const grossSalesMinor = Math.round(Number(orders.grossSalesMinor || 0));
   const refundsMinor = Math.round(Number(refunds.refundsMinor || 0));
+  const organizerEligibleRevenueMinor = Math.round(Number(orders.organizerEligibleRevenueMinor || 0));
+  const organizerEntitlementReversalMinor = Math.round(Number(refunds.organizerEntitlementReversalMinor || 0));
 
   return {
     currency: orders.currencies?.length === 1 ? orders.currencies[0] : "NGN",
     grossSalesMinor,
+    organizerEligibleRevenueMinor,
+    platformFundedDiscountMinor: Math.round(Number(orders.platformFundedDiscountMinor || 0)),
     refundsMinor,
+    organizerEntitlementReversalMinor,
+    platformFundedSubsidyReversalMinor: Math.round(Number(refunds.platformFundedSubsidyReversalMinor || 0)),
     netRevenueMinor: grossSalesMinor - refundsMinor,
+    organizerNetRevenueMinor: organizerEligibleRevenueMinor - organizerEntitlementReversalMinor,
   };
 }
 

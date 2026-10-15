@@ -40,6 +40,7 @@ export const PAYMENT_STATUS_META = {
   CANCELED: { label: "Canceled", tone: "danger" },
   ACTIVE: { label: "Active", tone: "success" },
   INACTIVE: { label: "Inactive", tone: "neutral" },
+  DISABLED: { label: "Disabled", tone: "neutral" },
 };
 
 export const DEFAULT_STATUS_META = {

@@ -27,6 +27,9 @@ function validateContact(contact) {
 }
 
 function getCheckoutErrorMessage(error) {
+  if (error?.status === 400 && /coupon|discount|eligible|expired/i.test(error.message || "")) {
+    return error.message;
+  }
   if (error?.code === "PAYSTACK_INLINE_ERROR") {
     return `${error.message} No charge was made. Please try again.`;
   }
@@ -46,13 +49,15 @@ function getCheckoutErrorMessage(error) {
 function CheckoutPage() {
   const navigate = useNavigate();
   const currentUser = useSessionStore((state) => state.currentUser);
-  const [selection, setSelection] = useState(null);
+  const [selection, setSelection] = useState(() => loadCheckoutSelection());
   const [customerInfo, setCustomerInfo] = useState({ name: "", phone: "", email: "" });
   const [attendees, setAttendees] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutNotice, setCheckoutNotice] = useState(null);
   const [customerErrors, setCustomerErrors] = useState({});
   const [attendeeErrors, setAttendeeErrors] = useState([]);
+  const [couponCode, setCouponCode] = useState("");
+  const [pricing, setPricing] = useState(null);
 
   useEffect(() => {
     const stored = loadCheckoutSelection();
@@ -120,7 +125,9 @@ function CheckoutPage() {
         customerInfo,
         items,
         idempotencyKey: selection.idempotencyKey,
+        ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
       });
+      setPricing(response?.order || null);
 
       const paymentReference = response?.payment?.reference || "";
       if (!paymentReference) {
@@ -190,10 +197,35 @@ function CheckoutPage() {
                 </div>
               ))}
               <div className="flex items-center justify-between border-t border-slate-800 pt-3">
-                <span className="text-sm text-slate-400">Total</span>
-                <span className="text-xl font-semibold text-white">{formatMoney(total, currency)}</span>
+                <span className="text-sm text-slate-400">Original subtotal</span>
+                <span className="text-sm font-semibold text-white">{formatMoney(pricing?.originalSubtotal ?? total, currency)}</span>
+              </div>
+              {pricing?.discountAmount ? (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-emerald-300">Coupon discount</span>
+                  <span className="font-semibold text-emerald-300">-{formatMoney(pricing.discountAmount, currency)}</span>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between border-t border-slate-800 pt-3">
+                <span className="text-sm text-slate-400">Payable</span>
+                <span className="text-xl font-semibold text-white">{formatMoney(pricing?.customerPayableAmount ?? total, currency)}</span>
               </div>
             </div>
+          </Card>
+
+          <Card className="space-y-3 border-slate-800/70 bg-slate-950/70">
+            <div>
+              <h2 className="text-base font-semibold text-white">Have a coupon?</h2>
+              <p className="mt-1 text-sm text-slate-400">The server validates eligibility and calculates the final price.</p>
+            </div>
+            <Input
+              label="Coupon code"
+              value={couponCode}
+              onChange={(event) => { setCouponCode(event.target.value.toUpperCase()); setPricing(null); }}
+              placeholder="Enter coupon code"
+              autoComplete="off"
+              maxLength={40}
+            />
           </Card>
 
           <div className="grid gap-4 md:grid-cols-3">

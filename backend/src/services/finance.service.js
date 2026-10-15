@@ -92,13 +92,21 @@ export async function calculateOrganizationFinancialPosition(organizationId, dep
   ]);
   const completedWithdrawalsMinor = sumStatusAmounts(withdrawalTotals, WITHDRAWAL_COMPLETED_STATUSES);
   const reservedWithdrawalsMinor = sumStatusAmounts(withdrawalTotals, WITHDRAWAL_RESERVED_STATUSES);
-  const rawAvailableMinor = Number(revenue.netRevenueMinor || 0) - completedWithdrawalsMinor - reservedWithdrawalsMinor;
+  const organizerNetRevenueMinor = revenue.organizerNetRevenueMinor === undefined
+    ? Number(revenue.netRevenueMinor || 0)
+    : Number(revenue.organizerNetRevenueMinor || 0);
+  const rawAvailableMinor = organizerNetRevenueMinor - completedWithdrawalsMinor - reservedWithdrawalsMinor;
 
   return {
     currency: revenue.currency || DEFAULT_CURRENCY,
     grossSalesMinor: Math.round(Number(revenue.grossSalesMinor || 0)),
     refundsMinor: Math.round(Number(revenue.refundsMinor || 0)),
     netRevenueMinor: Math.round(Number(revenue.netRevenueMinor || 0)),
+    organizerEligibleRevenueMinor: Math.round(Number(revenue.organizerEligibleRevenueMinor ?? revenue.netRevenueMinor ?? 0)),
+    organizerEntitlementReversalMinor: Math.round(Number(revenue.organizerEntitlementReversalMinor || 0)),
+    organizerNetRevenueMinor: Math.round(organizerNetRevenueMinor),
+    platformFundedDiscountMinor: Math.round(Number(revenue.platformFundedDiscountMinor || 0)),
+    platformFundedSubsidyReversalMinor: Math.round(Number(revenue.platformFundedSubsidyReversalMinor || 0)),
     completedWithdrawalsMinor,
     reservedWithdrawalsMinor,
     availableBalanceMinor: Math.max(0, rawAvailableMinor),
@@ -518,7 +526,7 @@ export async function approveWithdrawal(withdrawalId, reviewerId, payload = {}, 
     if (!withdrawal.providerRecipientCode) return serviceError("This request has no saved payout destination. Reject it and ask the organization to submit a new request.", HTTP_STATUS.CONFLICT);
     const position = await calculateOrganizationFinancialPosition(organizationId, dependencies);
     const obligationsMinor = position.completedWithdrawalsMinor + position.reservedWithdrawalsMinor;
-    if (obligationsMinor > position.netRevenueMinor) {
+    if (obligationsMinor > (position.organizerNetRevenueMinor ?? position.netRevenueMinor)) {
       return serviceError("Current net revenue no longer covers reserved withdrawals", HTTP_STATUS.CONFLICT);
     }
 

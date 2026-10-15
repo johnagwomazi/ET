@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import QRCode from "qrcode";
 import envConfig from "../config/env.config.js";
 import { EVENT_STATUS } from "../constants/eventStatus.constants.js";
+import { COUPON_FUNDING_TYPES } from "../constants/coupon.constants.js";
 import { HTTP_STATUS } from "../constants/httpStatus.constants.js";
 import { ORGANIZATION_PERMISSIONS } from "../constants/organizationPermissions.constants.js";
 import { USER_ROLES } from "../constants/roles.constants.js";
@@ -23,6 +24,8 @@ import * as eventManagerAssignmentRepository from "../repositories/eventManagerA
 import * as eventRepository from "../repositories/event.repository.js";
 import * as orderRepository from "../repositories/order.repository.js";
 import * as paymentEventRepository from "../repositories/paymentEvent.repository.js";
+import * as couponRepository from "../repositories/coupon.repository.js";
+import * as couponRewardRepository from "../repositories/couponReward.repository.js";
 import * as refundRepository from "../repositories/refund.repository.js";
 import * as ticketRepository from "../repositories/ticket.repository.js";
 import * as ticketTypeRepository from "../repositories/ticketType.repository.js";
@@ -31,6 +34,8 @@ import * as emailService from "./email.service.js";
 import * as notificationService from "./notification.service.js";
 import * as analyticsService from "./analytics.service.js";
 import * as financeService from "./finance.service.js";
+import * as couponPricingService from "./couponPricing.service.js";
+import * as couponService from "./coupon.service.js";
 import logger from "../lib/logger.js";
 import { buildPaginationMeta, buildPaginationOptions, escapeRegex } from "../utils/query.util.js";
 import { buildPaymentCallbackUrl } from "../utils/payment.util.js";
@@ -63,6 +68,10 @@ const defaultDependencies = {
   paystackService,
   emailService,
   notificationService,
+  couponRepository,
+  couponRewardRepository,
+  couponPricingService,
+  couponService,
   mongoose,
 };
 
@@ -139,8 +148,78 @@ async function releaseReservedEventCapacity(eventId, organizationId, quantity, d
   await dependencies.eventRepository.releaseEventTicketCapacity(eventId, organizationId, quantity);
 }
 
+async function releaseCouponForOrder(orderId, dependencies) {
+  if (!orderId || !dependencies.couponRepository?.releaseCouponRedemptionForOrder || !canUseTransactions(dependencies)) return null;
+  return runInTransaction(dependencies, (session) => (
+    dependencies.couponRepository.releaseCouponRedemptionForOrder(orderId, { session })
+  ));
+}
+
+async function releaseExpiredCoupons(dependencies) {
+  if (!dependencies.couponRepository?.releaseExpiredCouponReservations || !canUseTransactions(dependencies)) return 0;
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+  return runInTransaction(dependencies, (session) => (
+    dependencies.couponRepository.releaseExpiredCouponReservations(cutoff, { session })
+  ));
+}
+
 function providerFailureStatus(payment) {
   return payment?.configured ? HTTP_STATUS.BAD_GATEWAY : HTTP_STATUS.SERVICE_UNAVAILABLE;
+}
+
+function roundMoney(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
+export function buildRefundAccounting(order, refundAmount) {
+  const paidAmount = Math.max(0, Number(order.customerPayableAmount ?? order.total ?? 0));
+  const eligibleRevenue = Math.max(0, Number(order.organizerEligibleRevenue ?? order.total ?? 0));
+  const platformSubsidy = Math.max(0, Number(order.platformFundedDiscount || 0));
+  const ratio = paidAmount > 0 ? Math.min(1, Number(refundAmount) / paidAmount) : 0;
+  const items = Array.isArray(order.items) ? order.items : [];
+  const lines = items.map((item) => {
+    const paidLine = Math.max(0, Number(item.discountedTotal ?? item.total ?? 0));
+    const originalLine = Math.max(0, Number(item.originalTotal ?? item.total ?? 0));
+    const platformLine = order.coupon?.fundingType === COUPON_FUNDING_TYPES.PLATFORM_FUNDED
+      ? Math.max(0, originalLine - paidLine)
+      : 0;
+    const organizerLine = order.coupon?.fundingType === COUPON_FUNDING_TYPES.PLATFORM_FUNDED
+      ? originalLine
+      : Math.max(0, Number(item.discountedTotal ?? item.total ?? 0));
+    return { item, paidLine, organizerLine, platformLine };
+  });
+  const paidLinesTotal = lines.reduce((sum, line) => sum + line.paidLine, 0) || paidAmount;
+  let allocatedCustomer = 0;
+  let allocatedOrganizer = 0;
+  let allocatedPlatform = 0;
+  const lineAllocations = lines.map((line, index) => {
+    const isLast = index === lines.length - 1;
+    const customerRefund = isLast
+      ? roundMoney(Number(refundAmount) - allocatedCustomer)
+      : roundMoney(Number(refundAmount) * line.paidLine / paidLinesTotal);
+    const organizerReversal = isLast
+      ? roundMoney(eligibleRevenue * ratio - allocatedOrganizer)
+      : roundMoney(eligibleRevenue * ratio * (line.organizerLine / (lines.reduce((sum, item) => sum + item.organizerLine, 0) || eligibleRevenue || 1)));
+    const platformReversal = isLast
+      ? roundMoney(platformSubsidy * ratio - allocatedPlatform)
+      : roundMoney(platformSubsidy * ratio * (line.platformLine / (lines.reduce((sum, item) => sum + item.platformLine, 0) || platformSubsidy || 1)));
+    allocatedCustomer += customerRefund;
+    allocatedOrganizer += organizerReversal;
+    allocatedPlatform += platformReversal;
+    return {
+      ticketType: getDocumentId(line.item.ticketType),
+      quantity: Number(line.item.quantity || 0),
+      customerRefund,
+      organizerEntitlementReversal: organizerReversal,
+      platformFundedSubsidyReversal: platformReversal,
+    };
+  });
+
+  return {
+    organizerEntitlementReversal: roundMoney(eligibleRevenue * ratio),
+    platformFundedSubsidyReversal: roundMoney(platformSubsidy * ratio),
+    lineAllocations,
+  };
 }
 
 function logPaymentError(operation, error, context = {}) {
@@ -460,12 +539,37 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
     return { error: "Event is not available for checkout", statusCode: HTTP_STATUS.BAD_REQUEST };
   }
 
+  await releaseExpiredCoupons(dependencies).catch((error) => {
+    logger.warn(`[coupon.cleanup] ${error?.message || "Expired coupon cleanup failed"}`);
+  });
+
+  const organizationId = getDocumentId(event.organization);
+  let couponPricing = null;
+  if (payload.couponCode) {
+    try {
+      couponPricing = await dependencies.couponPricingService.calculateCouponPricing({
+        couponCode: payload.couponCode,
+        customerId,
+        eventId: payload.eventId,
+        organizationId,
+        items: payload.items,
+      }, dependencies);
+    } catch (error) {
+      return {
+        error: error?.code === "COUPON_NOT_ELIGIBLE" ? error.message : "Coupon could not be applied",
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+      };
+    }
+  }
+
   const orderReference = createReference("ord");
   const paymentReference = createReference("pay");
   const reservedItems = [];
   const totalRequestedQuantity = payload.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-  const organizationId = getDocumentId(event.organization);
   const transactionUsed = canUseTransactions(dependencies);
+  if (couponPricing?.coupon && !transactionUsed) {
+    return { error: "Coupon checkout is temporarily unavailable", statusCode: HTTP_STATUS.SERVICE_UNAVAILABLE };
+  }
   let reservationCommitted = false;
   let providerInitialized = false;
   let eventCapacityReserved = false;
@@ -473,6 +577,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
   try {
     const result = await runInTransaction(dependencies, async (session) => {
       const orderItems = [];
+      const pricingByTicketType = new Map((couponPricing?.items || []).map((item) => [String(item.ticketTypeId), item]));
       let subtotal = 0;
       let orderCurrency = null;
 
@@ -523,16 +628,37 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
         }
 
         reservedItems.push({ ticketTypeId: item.ticketTypeId, quantity: item.quantity });
-        const lineTotal = Number(ticketType.price || 0) * Number(item.quantity || 0);
-        subtotal += lineTotal;
+        const pricedLine = pricingByTicketType.get(String(item.ticketTypeId));
+        const originalLineTotal = pricedLine
+          ? pricedLine.originalTotal
+          : Number(ticketType.price || 0) * Number(item.quantity || 0);
+        const discountedLineTotal = pricedLine
+          ? pricedLine.discountedTotal
+          : originalLineTotal;
+        if (!couponPricing) subtotal += originalLineTotal;
         orderItems.push({
           ticketType: item.ticketTypeId,
           name: ticketType.name,
           quantity: item.quantity,
-          unitPrice: Number(ticketType.price || 0),
-          total: lineTotal,
+          unitPrice: discountedLineTotal / Number(item.quantity || 1),
+          total: discountedLineTotal,
+          originalUnitPrice: pricedLine?.originalUnitPrice ?? Number(ticketType.price || 0),
+          originalTotal: originalLineTotal,
+          discountAmount: pricedLine?.discountAmount ?? 0,
+          discountedTotal: discountedLineTotal,
+          couponEligible: Boolean(pricedLine?.couponEligible),
         });
       }
+
+      const orderPricing = couponPricing || {
+        originalSubtotal: subtotal,
+        discountAmount: 0,
+        customerPayableAmount: subtotal,
+        platformFundedDiscount: 0,
+        organizerFundedDiscount: 0,
+        organizerEligibleRevenue: subtotal,
+        coupon: null,
+      };
 
       const order = await dependencies.orderRepository.createOrder(
         {
@@ -543,9 +669,16 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
           source: TICKET_SOURCE.PAID,
           event: payload.eventId,
           items: orderItems,
-          subtotal,
+          subtotal: orderPricing.originalSubtotal,
           fees: 0,
-          total: subtotal,
+          total: orderPricing.customerPayableAmount,
+          originalSubtotal: orderPricing.originalSubtotal,
+          discountAmount: orderPricing.discountAmount,
+          customerPayableAmount: orderPricing.customerPayableAmount,
+          platformFundedDiscount: orderPricing.platformFundedDiscount,
+          organizerFundedDiscount: orderPricing.organizerFundedDiscount,
+          organizerEligibleRevenue: orderPricing.organizerEligibleRevenue,
+          coupon: orderPricing.coupon || undefined,
           currency: orderCurrency || DEFAULT_CURRENCY,
           paymentStatus: PAYMENT_STATUS.PENDING,
           orderStatus: ORDER_STATUS.PENDING,
@@ -560,6 +693,18 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
         },
         { session }
       );
+
+      if (couponPricing?.coupon) {
+        if (!dependencies.couponRepository?.reserveCouponRedemption) {
+          throw checkoutFailure("Coupon redemption is temporarily unavailable", HTTP_STATUS.SERVICE_UNAVAILABLE);
+        }
+        const redemption = await dependencies.couponRepository.reserveCouponRedemption({
+          couponId: couponPricing.coupon.id,
+          customerId,
+          orderId: order._id,
+        }, { session });
+        if (!redemption) throw checkoutFailure("Coupon redemption limit has been reached", HTTP_STATUS.CONFLICT);
+      }
 
       return { order };
     });
@@ -591,6 +736,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
         if (failedOrder) {
           await releaseReservedInventory(reservedItems, dependencies);
           await releaseReservedEventCapacity(payload.eventId, organizationId, totalRequestedQuantity, dependencies);
+          await releaseCouponForOrder(failedOrder._id, dependencies);
         }
         return paidResult;
       }
@@ -640,6 +786,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
       if (failedOrder) {
         await releaseReservedInventory(reservedItems, dependencies);
         await releaseReservedEventCapacity(payload.eventId, organizationId, totalRequestedQuantity, dependencies);
+        await releaseCouponForOrder(failedOrder._id, dependencies);
       }
       logger.warn(`[checkout.initialize] orderReference=${orderReference} paymentReference=${paymentReference}: ${payment?.message || "Paystack initialization failed"}`);
       return {
@@ -690,6 +837,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
         if (eventCapacityReserved) {
           await releaseReservedEventCapacity(payload.eventId, organizationId, totalRequestedQuantity, dependencies);
         }
+        if (failedOrder) await releaseCouponForOrder(failedOrder._id, dependencies);
       }
     }
 
@@ -818,7 +966,28 @@ export async function markOrderPaidFromProvider(paymentReference, providerPayloa
       return { error: "Order is not payable", statusCode: HTTP_STATUS.CONFLICT };
     }
 
+    if (paidOrder.coupon?.id) {
+      const redemption = await dependencies.couponRepository?.redeemCouponRedemptionForOrder?.(
+        paidOrder._id,
+        { session }
+      );
+      if (!redemption) {
+        throw new Error("Coupon redemption could not be finalized");
+      }
+      const coupon = await dependencies.couponRepository?.findCouponById?.(paidOrder.coupon.id, {}, { session });
+      if (coupon?.rewardRule?.nextPurchaseOnly) {
+        const reward = await dependencies.couponRewardRepository?.redeemRewardForCustomerAndCoupon?.(
+          paidOrder.customer,
+          paidOrder.coupon.id,
+          paidOrder._id,
+          { session }
+        );
+        if (!reward) throw new Error("Coupon reward could not be finalized");
+      }
+    }
+
     const issuance = await buildTicketsForOrder(paidOrder, dependencies, session);
+    await dependencies.couponService?.issueRewardsForPaidOrder?.(paidOrder, dependencies, { session });
     notificationContext = { order: paidOrder, tickets: issuance.tickets };
 
     return {
@@ -914,6 +1083,7 @@ export async function verifyPayment(customerId, reference, dependencies = defaul
         (currentOrder.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
         dependencies
       );
+      await releaseCouponForOrder(order._id, dependencies);
     }
 
     return {
@@ -970,6 +1140,18 @@ export async function handlePaystackWebhook(rawBody, signature, payload, depende
     let result;
     if (event === "charge.success") {
       result = await markOrderPaidFromProvider(reference, payload.data, dependencies);
+    } else if (event === "charge.failed") {
+      const failedOrder = await dependencies.orderRepository.updateOrderByPaymentReferenceAndStatus?.(
+        reference,
+        [PAYMENT_STATUS.PENDING, PAYMENT_STATUS.INITIALIZED],
+        {
+          paymentStatus: PAYMENT_STATUS.FAILED,
+          orderStatus: ORDER_STATUS.FAILED,
+          failedAt: new Date(),
+        }
+      );
+      if (failedOrder) await releaseCouponForOrder(failedOrder._id, dependencies);
+      result = { processed: true, failed: Boolean(failedOrder) };
     } else if (typeof event === "string" && event.startsWith("transfer.")) {
       const transferHandler = dependencies.financeService || financeService;
       result = await transferHandler.handleTransferWebhook(event, payload.data);
@@ -1707,6 +1889,8 @@ export async function createOrderRefund(organizationId, actorUserId, orderRefere
     return { error: "Refund amount exceeds refundable balance", statusCode: HTTP_STATUS.BAD_REQUEST };
   }
 
+  const refundAccounting = buildRefundAccounting(order, refundAmount);
+
   const reservedOrder = await dependencies.orderRepository.reserveOrderRefund(order.reference, refundAmount);
   if (!reservedOrder) {
     return { error: "Refund amount exceeds refundable balance", statusCode: HTTP_STATUS.CONFLICT };
@@ -1722,6 +1906,9 @@ export async function createOrderRefund(organizationId, actorUserId, orderRefere
       event: getDocumentId(order.event),
       requestedBy: actorUserId,
       amount: refundAmount,
+      organizerEntitlementReversal: refundAccounting.organizerEntitlementReversal,
+      platformFundedSubsidyReversal: refundAccounting.platformFundedSubsidyReversal,
+      lineAllocations: refundAccounting.lineAllocations,
       reason: payload.reason,
       status: REFUND_STATUS.PROCESSING,
     });

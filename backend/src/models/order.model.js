@@ -28,6 +28,11 @@ const orderItemSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    originalUnitPrice: { type: Number, min: 0, default: null, immutable: true },
+    originalTotal: { type: Number, min: 0, default: null, immutable: true },
+    discountAmount: { type: Number, min: 0, default: null, immutable: true },
+    discountedTotal: { type: Number, min: 0, default: null, immutable: true },
+    couponEligible: { type: Boolean, default: false, immutable: true },
   },
   { _id: false }
 );
@@ -93,6 +98,17 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       required: true,
       min: 0,
+    },
+    originalSubtotal: { type: Number, min: 0, default: null, immutable: true },
+    discountAmount: { type: Number, min: 0, default: null, immutable: true },
+    customerPayableAmount: { type: Number, min: 0, default: null, immutable: true },
+    platformFundedDiscount: { type: Number, min: 0, default: null, immutable: true },
+    organizerFundedDiscount: { type: Number, min: 0, default: null, immutable: true },
+    organizerEligibleRevenue: { type: Number, min: 0, default: null, immutable: true },
+    coupon: {
+      id: { type: mongoose.Schema.Types.ObjectId, ref: "Coupon", default: null, immutable: true },
+      code: { type: String, default: "", trim: true, uppercase: true, immutable: true },
+      fundingType: { type: String, default: "", trim: true, immutable: true },
     },
     currency: {
       type: String,

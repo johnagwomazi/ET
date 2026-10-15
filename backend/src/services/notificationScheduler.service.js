@@ -6,6 +6,7 @@ import {
   processEndedEventCompletionReminders,
   retryPendingNotificationEmails,
 } from "./notification.service.js";
+import { runCouponReservationCleanup } from "./couponReservationCleanup.service.js";
 
 let workerTimer = null;
 let workerRunning = false;
@@ -14,12 +15,13 @@ export async function runNotificationWorker() {
   if (workerRunning) return { skipped: true };
   workerRunning = true;
   try {
-    const [reminders, completionReminders, emailRetries] = await Promise.all([
+    const [reminders, completionReminders, emailRetries, couponReservations] = await Promise.all([
       processDueEventReminders(),
       processEndedEventCompletionReminders(),
       retryPendingNotificationEmails(),
+      runCouponReservationCleanup(),
     ]);
-    return { reminders, completionReminders, emailRetries };
+    return { reminders, completionReminders, emailRetries, couponReservations };
   } catch (error) {
     logger.error(`Notification worker failed: ${error.message || error}`);
     return { error: true };

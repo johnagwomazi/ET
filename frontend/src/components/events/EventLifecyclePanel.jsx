@@ -494,9 +494,11 @@ function EventLifecyclePanel({ event, canManageLifecycle = false, onEventUpdated
                 <p className="mt-1 text-sm leading-6 text-amber-50/80">Mark it as completed when you're ready. Event records and analytics remain available.</p>
               </div>
             </div>
-            <Button onClick={() => setSelectedAction("complete")} disabled={isActionSubmitting}>
-              Mark as Completed
-            </Button>
+            {availableActions.includes("complete") ? null : (
+              <Button onClick={() => setSelectedAction("complete")} disabled={isActionSubmitting}>
+                Mark as Completed
+              </Button>
+            )}
           </div>
         </Card>
       ) : null}

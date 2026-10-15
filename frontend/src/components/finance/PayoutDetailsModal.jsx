@@ -105,6 +105,7 @@ function PayoutDetailsModal({ open, isSubmitting, submissionError, onClose, onSu
           <span className="text-sm font-medium text-slate-200">Bank</span>
           <select
             autoFocus
+            aria-label="Bank"
             value={bankCode}
             disabled={isLoadingBanks || Boolean(bankError) || isSubmitting}
             aria-invalid={Boolean(errors.bankCode)}

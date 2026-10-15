@@ -94,6 +94,14 @@ export const checkoutSchema = z
       .min(1, "At least one ticket type is required")
       .max(20, "Too many ticket lines"),
     idempotencyKey: z.string().trim().min(8).max(120).optional(),
+    couponCode: z
+      .string()
+      .trim()
+      .min(4)
+      .max(40)
+      .regex(/^[A-Za-z0-9_-]+$/, "Invalid coupon code")
+      .transform((value) => value.toUpperCase())
+      .optional(),
   })
   .strict()
   .superRefine((data, context) => {

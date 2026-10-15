@@ -141,8 +141,26 @@ export function mapOrderResponse(orderDocument) {
       quantity: Number(item.quantity || 0),
       unitPrice: Number(item.unitPrice || 0),
       total: Number(item.total || 0),
+      ...(item.originalUnitPrice !== undefined ? { originalUnitPrice: Number(item.originalUnitPrice || 0) } : {}),
+      ...(item.originalTotal !== undefined ? { originalTotal: Number(item.originalTotal || 0) } : {}),
+      ...(item.discountAmount !== undefined ? { discountAmount: Number(item.discountAmount || 0) } : {}),
+      ...(item.discountedTotal !== undefined ? { discountedTotal: Number(item.discountedTotal || 0) } : {}),
+      ...(item.couponEligible !== undefined ? { couponEligible: Boolean(item.couponEligible) } : {}),
     })),
     subtotal: Number(order.subtotal || 0),
+    ...(order.originalSubtotal !== undefined ? { originalSubtotal: Number(order.originalSubtotal || 0) } : {}),
+    ...(order.discountAmount !== undefined ? { discountAmount: Number(order.discountAmount || 0) } : {}),
+    ...(order.customerPayableAmount !== undefined ? { customerPayableAmount: Number(order.customerPayableAmount || 0) } : {}),
+    ...(order.platformFundedDiscount !== undefined ? { platformFundedDiscount: Number(order.platformFundedDiscount || 0) } : {}),
+    ...(order.organizerFundedDiscount !== undefined ? { organizerFundedDiscount: Number(order.organizerFundedDiscount || 0) } : {}),
+    ...(order.organizerEligibleRevenue !== undefined ? { organizerEligibleRevenue: Number(order.organizerEligibleRevenue || 0) } : {}),
+    ...(order.coupon !== undefined ? {
+      coupon: order.coupon ? {
+        id: getDocumentId(order.coupon.id),
+        code: order.coupon.code || "",
+        fundingType: order.coupon.fundingType || null,
+      } : null,
+    } : {}),
     fees: Number(order.fees || 0),
     total: Number(order.total || 0),
     currency: order.currency || "NGN",
@@ -239,6 +257,13 @@ export function mapRefundResponse(refundDocument) {
     organization: getDocumentId(refund.organization),
     event: getDocumentId(refund.event),
     amount: Number(refund.amount || 0),
+    ...(refund.organizerEntitlementReversal !== undefined
+      ? { organizerEntitlementReversal: Number(refund.organizerEntitlementReversal || 0) }
+      : {}),
+    ...(refund.platformFundedSubsidyReversal !== undefined
+      ? { platformFundedSubsidyReversal: Number(refund.platformFundedSubsidyReversal || 0) }
+      : {}),
+    ...(refund.lineAllocations !== undefined ? { lineAllocations: refund.lineAllocations || [] } : {}),
     reason: refund.reason,
     status: refund.status,
     providerReference: refund.providerReference || "",

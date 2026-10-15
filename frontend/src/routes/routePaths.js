@@ -20,6 +20,7 @@ export const ROUTE_PATHS = {
   CUSTOMER_ORDERS: "/customer/orders",
   CUSTOMER_TICKETS: "/customer/tickets",
   CUSTOMER_NOTIFICATIONS: "/customer/notifications",
+  CUSTOMER_REWARDS: "/customer/rewards",
   ORGANIZATION_ROOT: "/organization",
   ORGANIZATION_DASHBOARD: "/organization/dashboard",
   ORGANIZATION_EVENTS: "/organization/events",
@@ -45,6 +46,8 @@ export const ROUTE_PATHS = {
   SUPER_ADMIN_WITHDRAWALS: "/super-admin/dashboard/withdrawals",
   SUPER_ADMIN_ANALYTICS: "/super-admin/dashboard/analytics",
   SUPER_ADMIN_NOTIFICATIONS: "/super-admin/dashboard/notifications",
+  SUPER_ADMIN_COUPONS: "/super-admin/dashboard/coupons",
+  ORGANIZATION_COUPONS: "/organization/coupons",
   FORBIDDEN: "/forbidden",
   NOT_FOUND: "*",
 };

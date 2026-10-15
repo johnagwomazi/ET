@@ -45,8 +45,8 @@ function createDependencies(role = USER_ROLES.ADMIN, overrides = {}) {
     organization: ids.organization,
     eventName: "Launch Night",
     status: "PUBLISHED",
-    startAt: new Date("2026-09-10T18:00:00.000Z"),
-    endAt: new Date("2026-09-10T22:00:00.000Z"),
+    startAt: new Date("2030-09-10T18:00:00.000Z"),
+    endAt: new Date("2030-09-10T22:00:00.000Z"),
     capacity: 100,
   };
 

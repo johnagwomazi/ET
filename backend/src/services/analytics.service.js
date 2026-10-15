@@ -80,6 +80,10 @@ function paginationFrom(query) {
 export function buildAnalyticsSummary(raw = {}) {
   const grossSales = fromMinorUnits(raw.orders?.grossSalesMinor);
   const refunds = fromMinorUnits(raw.refunds?.refundsMinor);
+  const organizerEligibleRevenue = fromMinorUnits(raw.orders?.organizerEligibleRevenueMinor ?? raw.orders?.grossSalesMinor);
+  const platformFundedDiscount = fromMinorUnits(raw.orders?.platformFundedDiscountMinor);
+  const organizerEntitlementReversal = fromMinorUnits(raw.refunds?.organizerEntitlementReversalMinor);
+  const platformFundedSubsidyReversal = fromMinorUnits(raw.refunds?.platformFundedSubsidyReversalMinor);
   const ticketsSold = Number(raw.orders?.ticketsSold || 0);
   const attendance = Number(raw.attendance?.attendance || 0);
   const ticketLinkedAttendance = Number(raw.attendance?.ticketLinkedAttendance || 0);
@@ -94,6 +98,14 @@ export function buildAnalyticsSummary(raw = {}) {
     grossSales,
     refunds,
     netRevenue: fromMinorUnits((raw.orders?.grossSalesMinor || 0) - (raw.refunds?.refundsMinor || 0)),
+    organizerEligibleRevenue,
+    organizerEntitlementReversal,
+    organizerNetRevenue: fromMinorUnits(
+      (raw.orders?.organizerEligibleRevenueMinor ?? raw.orders?.grossSalesMinor ?? 0) -
+      (raw.refunds?.organizerEntitlementReversalMinor || 0)
+    ),
+    platformFundedDiscount,
+    platformFundedSubsidyReversal,
     ticketsSold,
     successfulOrders: Number(raw.orders?.successfulOrders || 0),
     successfulRefunds: Number(raw.refunds?.successfulRefunds || 0),
