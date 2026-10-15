@@ -26,6 +26,12 @@ export function mapUserResponse(userDocument) {
 
   const user = typeof userDocument.toObject === "function" ? userDocument.toObject() : userDocument;
 
+  const registeredPhone = [user.phone, user.phoneNumber, user.phone_number]
+    .find((value) => typeof value === "string" && value.trim());
+  user.phone = registeredPhone ? registeredPhone.trim() : "";
+  delete user.phoneNumber;
+  delete user.phone_number;
+
   delete user.password;
   delete user.googleSubject;
   delete user.refreshTokenHash;

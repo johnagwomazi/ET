@@ -58,6 +58,10 @@ async function installMocks(page, { user = customer, coupons = [coupon()], rewar
     if (path === "/coupons/rewards") {
       return route.fulfill({ json: response({ rewards: reward ? [{ id: "reward-1", status: "ISSUED", issuedAt: "2026-10-01T00:00:00.000Z", coupon: { code: "REWARD20", discountPercent: 20 } }] : [] }) });
     }
+    if (path === "/ticketing/checkout/price" && method === "POST") {
+      if (checkout?.invalid) return route.fulfill({ status: 400, json: { success: false, message: "Coupon is invalid or expired" } });
+      return route.fulfill({ json: response({ pricing: { originalSubtotal: 5000, discountAmount: 500, customerPayableAmount: 4500 } }) });
+    }
     if (path === "/ticketing/checkout" && method === "POST") {
       if (checkout?.invalid) return route.fulfill({ status: 400, json: { success: false, message: "Coupon is invalid or expired" } });
       return route.fulfill({ json: response({
@@ -71,14 +75,36 @@ async function installMocks(page, { user = customer, coupons = [coupon()], rewar
   return requests;
 }
 
-async function setCheckoutSelection(page) {
-  await page.addInitScript(({ eventId }) => {
+async function setCheckoutSelection(page, quantity = 1) {
+  await page.addInitScript(({ eventId, quantity }) => {
     sessionStorage.setItem("events_checkout_selection", JSON.stringify({
       eventId, eventName: "Coupon Event", idempotencyKey: `coupon-${Date.now()}`,
-      items: [{ ticketTypeId: "64b64b64b64b64b64b64bc07", name: "Regular", quantity: 1, price: 5000, currency: "NGN" }],
+      items: [{ ticketTypeId: "64b64b64b64b64b64b64bc07", name: "Regular", quantity, price: 5000, currency: "NGN" }],
     }));
-  }, { eventId });
+  }, { eventId, quantity });
 }
+
+test("Customer phone aliases autofill buyer and recipient and edited recipient phone is submitted", async ({ page }) => {
+  const registeredPhone = "+2348012345678";
+  const requests = await installMocks(page, {
+    user: { ...customer, phoneNumber: registeredPhone },
+    checkout: {},
+  });
+  await setCheckoutSelection(page);
+  await page.goto("/checkout");
+
+  await expect(page.getByLabel("Phone").nth(0)).toHaveValue(registeredPhone);
+  await expect(page.getByLabel("Phone").nth(1)).toHaveValue(registeredPhone);
+
+  const recipientPhone = "+2348099999999";
+  await page.getByLabel("Phone").nth(1).fill(recipientPhone);
+  await page.getByRole("button", { name: "Pay securely with Paystack" }).click();
+  await expect(page.getByText("Payment verified")).toBeVisible();
+
+  const checkout = requests.find((request) => request.path === "/ticketing/checkout");
+  expect(checkout.body.customerInfo.phone).toBe(registeredPhone);
+  expect(checkout.body.items[0].attendees[0].phone).toBe(recipientPhone);
+});
 
 test("Super Admin can create and disable a platform coupon", async ({ page }) => {
   await installMocks(page, { user: platformAdmin });
@@ -166,6 +192,17 @@ test("Customer applies a valid coupon and sees the server-confirmed payable tota
   const checkout = requests.find((request) => request.path === "/ticketing/checkout");
   expect(checkout.body.couponCode).toBe("SAVE10");
   await expect(page.getByText(/₦4,500|4,500/)).toBeVisible();
+});
+
+test("Customer sees live coupon pricing and can remove the coupon", async ({ page }) => {
+  await installMocks(page, { user: customer, checkout: {} });
+  await setCheckoutSelection(page);
+  await page.goto("/checkout");
+  await page.getByLabel("Coupon code").fill("SAVE10");
+  await expect(page.getByText("Coupon applied", { exact: true })).toBeVisible();
+  await expect(page.getByText(/4,500/)).toBeVisible();
+  await page.getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByText(/5,000/).last()).toBeVisible();
 });
 
 test("Customer receives a useful error for an invalid coupon", async ({ page }) => {

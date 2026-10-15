@@ -533,7 +533,7 @@ test("ticketing validators enforce ticket, checkout, refund, withdrawal, and val
   assert.equal(
     checkoutSchema.safeParse({
       eventId: ids.event,
-      customerInfo: { name: "Ada", phone: "+2348012345678", email: "ada@example.com" },
+      customerInfo: { name: "Ada", email: "ada@example.com" },
       items: [{ ticketTypeId: ids.ticketType, quantity: 1 }],
     }).success,
     true
@@ -564,6 +564,7 @@ test("complimentary ticket payloads require recipients and unique ticket types p
 
 test("marketplace routes allow customers and organization admins but reject unrelated roles", () => {
   const routes = [
+    ["/checkout/price", "post"],
     ["/checkout", "post"],
     ["/payments/verify", "post"],
     ["/orders", "get"],
@@ -1934,6 +1935,34 @@ test("a five-ticket checkout remains one purchase with quantity five", async () 
   assert.equal(state.tickets.length, 5);
 });
 
+test("checkout persists each edited recipient phone and email on the issued ticket", async () => {
+  const { dependencies, state } = createDependencies();
+  const checkout = await ticketingService.createCheckoutOrder(
+    ids.customer,
+    {
+      eventId: ids.event,
+      customerInfo: { name: "Ada Buyer", email: "buyer@example.com", phone: "" },
+      items: [{
+        ticketTypeId: ids.ticketType,
+        quantity: 2,
+        attendees: [
+          { name: "Recipient One", email: "one@example.com", phone: "+2348011111111" },
+          { name: "Recipient Two", email: "two@example.com", phone: "+2348022222222" },
+        ],
+      }],
+      idempotencyKey: "recipient-details-checkout",
+    },
+    dependencies
+  );
+
+  await ticketingService.verifyPayment(ids.customer, checkout.payment.reference, dependencies);
+
+  assert.deepEqual(state.tickets.map((ticket) => ticket.attendee), [
+    { name: "Recipient One", email: "one@example.com", phone: "+2348011111111" },
+    { name: "Recipient Two", email: "two@example.com", phone: "+2348022222222" },
+  ]);
+});
+
 test("checkout authoritatively rejects a published event after its actual end time", async () => {
   let initializationCalls = 0;
   const { dependencies, state } = createDependencies({
@@ -2027,6 +2056,25 @@ for (const fundingType of Object.values(COUPON_FUNDING_TYPES)) {
     assert.equal(state.order.paymentStatus, PAYMENT_STATUS.PAID);
   });
 }
+
+test("coupon pricing preview is server-priced and does not reserve usage", async () => {
+  const { dependencies, redemptions } = couponCheckoutDependencies({
+    _id: "64b64b64b64b64b64b64b655",
+    code: "PREVIEW10",
+    fundingType: COUPON_FUNDING_TYPES.PLATFORM_FUNDED,
+    discountPercent: 10,
+    event: ids.event,
+    ticketTypes: [],
+    customers: [],
+    status: "ACTIVE",
+    redemptionCount: 0,
+  });
+
+  const result = await ticketingService.previewCheckoutPricing(ids.customer, couponCheckoutPayload("PREVIEW10"), dependencies);
+  assert.equal(result.pricing.customerPayableAmount, 2250);
+  assert.equal(result.pricing.discountAmount, 250);
+  assert.equal(redemptions.reserved, 0);
+});
 
 test("a 100 percent coupon completes the existing free-order path without Paystack", async () => {
   let paystackCalls = 0;

@@ -865,6 +865,33 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
   }
 }
 
+export async function previewCheckoutPricing(customerId, payload, dependencies = defaultDependencies) {
+  const customer = customerId ? await dependencies.authRepository.findAuthUserById(customerId) : null;
+  if (!customer) return { error: "Not authorized", statusCode: HTTP_STATUS.UNAUTHORIZED };
+
+  const event = await dependencies.eventRepository.findPublicEventById(payload.eventId);
+  if (!event || !eventPermitsTicketSales(event)) {
+    return { error: "Event is not available for checkout", statusCode: HTTP_STATUS.BAD_REQUEST };
+  }
+
+  const organizationId = getDocumentId(event.organization);
+  try {
+    const pricing = await dependencies.couponPricingService.calculateCouponPricing({
+      couponCode: payload.couponCode,
+      customerId,
+      eventId: payload.eventId,
+      organizationId,
+      items: payload.items,
+    }, dependencies);
+    return { pricing };
+  } catch (error) {
+    return {
+      error: error?.code === "COUPON_NOT_ELIGIBLE" ? error.message : "Coupon could not be applied",
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+    };
+  }
+}
+
 function validateProviderPayment(order, paymentReference, providerPayload) {
   const providerReference = providerPayload?.reference;
   const providerAmount = Number(providerPayload?.amount);

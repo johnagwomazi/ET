@@ -70,12 +70,20 @@ export const ticketTypeUpdateSchema = z
 const checkoutAttendeeSchema = z
   .object({
     name: z.string().trim().min(1).max(120),
+    phone: z.string().trim().max(30).refine((value) => !value || value.length >= 5, "Enter a valid phone number").optional().default(""),
+    email: z.string().trim().email(),
+  })
+  .strict();
+
+const requiredPhoneAttendeeSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
     phone: z.string().trim().min(5).max(30),
     email: z.string().trim().email(),
   })
   .strict();
 
-export const ticketAssignmentSchema = checkoutAttendeeSchema;
+export const ticketAssignmentSchema = requiredPhoneAttendeeSchema;
 
 export const checkoutSchema = z
   .object({
@@ -120,6 +128,8 @@ export const checkoutSchema = z
       }
     });
   });
+
+export const checkoutPricingSchema = checkoutSchema;
 
 export const paymentVerifySchema = z
   .object({

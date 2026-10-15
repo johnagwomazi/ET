@@ -12,6 +12,11 @@ export async function createCheckoutOrder(payload) {
   return unwrapResponse(response);
 }
 
+export async function previewCheckoutPricing(payload, options = {}) {
+  const response = await post("/ticketing/checkout/price", payload, options);
+  return unwrapResponse(response);
+}
+
 export async function verifyPayment(payload, options = {}) {
   const response = await post("/ticketing/payments/verify", payload, options);
   return unwrapResponse(response);

@@ -95,6 +95,16 @@ export async function createCheckoutOrder(req, res) {
   return res.status(HTTP_STATUS.CREATED).json(successResponse("Checkout initialized successfully", result));
 }
 
+export async function previewCheckoutPricing(req, res) {
+  const result = await ticketingService.previewCheckoutPricing(req.auth.userId, req.body);
+
+  if (result.error) {
+    return sendServiceError(res, result);
+  }
+
+  return res.status(HTTP_STATUS.OK).json(successResponse("Checkout pricing calculated", result));
+}
+
 export async function verifyPayment(req, res) {
   const result = await ticketingService.verifyPayment(req.auth.userId, req.body.reference);
 

@@ -6,6 +6,7 @@ import { validate } from "../middleware/validate.middleware.js";
 import { USER_ROLES } from "../constants/roles.constants.js";
 import {
   checkoutSchema,
+  checkoutPricingSchema,
   customerHistoryQuerySchema,
   listQuerySchema,
   paymentVerifySchema,
@@ -23,6 +24,7 @@ ticketingRouter.use(protectRoute);
 const authorizeMarketplaceBuyer = authorizeRoles(USER_ROLES.CUSTOMER, USER_ROLES.ADMIN);
 
 ticketingRouter.get("/history", authorizeMarketplaceBuyer, validate(customerHistoryQuerySchema, "query"), ticketingController.getCustomerHistory);
+ticketingRouter.post("/checkout/price", authorizeMarketplaceBuyer, validate(checkoutPricingSchema), ticketingController.previewCheckoutPricing);
 ticketingRouter.post("/checkout", authorizeMarketplaceBuyer, paymentLimiter, validate(checkoutSchema), ticketingController.createCheckoutOrder);
 ticketingRouter.post("/payments/verify", authorizeMarketplaceBuyer, paymentLimiter, validate(paymentVerifySchema), ticketingController.verifyPayment);
 ticketingRouter.get("/orders", authorizeMarketplaceBuyer, validate(listQuerySchema, "query"), ticketingController.getCustomerOrders);

@@ -16,9 +16,17 @@ import {
   verifyEmailSchema,
 } from "../src/validators/auth.validator.js";
 import { hashToken } from "../src/utils/token.util.js";
+import { mapUserResponse } from "../src/utils/userResponse.util.js";
 
 const customerId = "64b64b64b64b64b64b64b901";
 const organizationId = "64b64b64b64b64b64b64b902";
+
+test("auth user responses expose the registered phone under the canonical phone field", () => {
+  assert.equal(mapUserResponse({ firstName: "Ada", phone: " +2348012345678 " }).phone, "+2348012345678");
+  assert.equal(mapUserResponse({ firstName: "Ada", phone: "", phoneNumber: "+2348099999999" }).phone, "+2348099999999");
+  assert.equal(mapUserResponse({ firstName: "Ada", phone_number: "+2348088888888" }).phone, "+2348088888888");
+  assert.equal(mapUserResponse({ firstName: "Ada" }).phone, "");
+});
 
 function user(overrides = {}) {
   return {

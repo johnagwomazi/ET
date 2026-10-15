@@ -54,6 +54,11 @@ function pricingError(message) {
   return error;
 }
 
+function normalizeCouponCode(code) {
+  const normalized = String(code || "").trim().toUpperCase();
+  return normalized || null;
+}
+
 export async function calculateCouponPricing({
   couponCode,
   coupon: suppliedCoupon,
@@ -66,8 +71,9 @@ export async function calculateCouponPricing({
 }, dependencies = defaultDependencies) {
   if (!Array.isArray(items) || items.length === 0) throw pricingError("At least one ticket item is required");
 
-  const coupon = suppliedCoupon || (couponCode
-    ? await dependencies.couponRepository.findCouponByCode(couponCode)
+  const normalizedCouponCode = normalizeCouponCode(couponCode);
+  const coupon = suppliedCoupon || (normalizedCouponCode
+    ? await dependencies.couponRepository.findCouponByCode(normalizedCouponCode)
     : null);
 
   const serverPricedItems = [];
@@ -94,7 +100,7 @@ export async function calculateCouponPricing({
     });
   }
 
-  if (!couponCode && !suppliedCoupon) {
+  if (!normalizedCouponCode && !suppliedCoupon) {
     return buildPricingResult(serverPricedItems, originalSubtotalMinor, null);
   }
   if (!coupon || !isCouponCurrentlyUsable(coupon, now)) throw pricingError("Coupon is invalid or expired");
@@ -175,4 +181,4 @@ function buildPricingResult(items, originalSubtotalMinor, coupon, overrides = {}
   };
 }
 
-export { fromMinorUnits, parseDecimal, roundedPercentageDiscount, toMinorUnits };
+export { fromMinorUnits, normalizeCouponCode, parseDecimal, roundedPercentageDiscount, toMinorUnits };
