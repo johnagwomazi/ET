@@ -37,6 +37,12 @@ async function installMocks(page, { user = customer, coupons = [coupon()], rewar
 
     if (path === "/auth/me") return route.fulfill({ json: response({ user, organizationPermissions: ["ORGANIZATION_UPDATE", "ORGANIZATION_VIEW", "DASHBOARD_VIEW"] }) });
     if (path === "/notifications/unread-count") return route.fulfill({ json: response({ unreadCount: 0 }) });
+    if (path === "/events/discover") return route.fulfill({ json: response({ events: [{ id: "64b64b64b64b64b64b64bc10", eventName: "Launch Event", category: "Concert", venue: { name: "Main Hall" } }], pagination: { page: 1, totalPages: 1, totalItems: 1 } }) });
+    if (path === "/events/64b64b64b64b64b64b64bc10/ticket-types") return route.fulfill({ json: response({ ticketTypes: [{ id: "64b64b64b64b64b64b64bc11", name: "VIP", price: 12000, currency: "NGN" }, { id: "64b64b64b64b64b64b64bc12", name: "Regular", price: 5000, currency: "NGN" }] }) });
+    if (path === `/organizations/me/events/${eventId}`) return route.fulfill({ json: response({ event: { id: eventId, eventName: "Organizer Event", status: "PUBLISHED" } }) });
+    if (path === `/organizations/me/events/${eventId}/ticket-types`) return route.fulfill({ json: response({ ticketTypes: [{ id: "64b64b64b64b64b64b64bc11", name: "VIP", price: 12000, currency: "NGN" }, { id: "64b64b64b64b64b64b64bc12", name: "Regular", price: 5000, currency: "NGN" }] }) });
+    if (path === "/organizations/me/members") return route.fulfill({ json: response({ members: [{ id: "64b64b64b64b64b64b64bc06", firstName: "Ada", lastName: "Customer", email: "ada@example.com", role: "CUSTOMER" }], pagination: { page: 1, totalPages: 1, totalItems: 1 } }) });
+    if (path === "/admin/users") return route.fulfill({ json: response({ users: [{ _id: "64b64b64b64b64b64b64bc13", firstName: "Ada", lastName: "Customer", email: "ada@example.com", role: "CUSTOMER" }], pagination: { page: 1, totalPages: 1, totalItems: 1 } }) });
     if (path === "/coupons/platform" && method === "GET") return route.fulfill({ json: response({ coupons: currentCoupons, pagination: { page: 1, totalPages: 1, totalItems: currentCoupons.length } }) });
     if (path === "/coupons/organization" && method === "GET") return route.fulfill({ json: response({ coupons: currentCoupons, pagination: { page: 1, totalPages: 1, totalItems: currentCoupons.length } }) });
     if ((path === "/coupons/platform" || path === "/coupons/organization") && method === "POST") {
@@ -78,6 +84,7 @@ test("Super Admin can create and disable a platform coupon", async ({ page }) =>
   await installMocks(page, { user: platformAdmin });
   await page.goto("/super-admin/dashboard/coupons");
   await page.getByRole("button", { name: "New coupon" }).click();
+  await page.getByRole("button", { name: /Platform-wide coupon/ }).click();
   await page.getByLabel("Custom code (optional)").fill("SAVE10");
   await page.getByLabel("Discount percentage").fill("10");
   await page.getByRole("button", { name: "Create coupon" }).click();
@@ -87,14 +94,58 @@ test("Super Admin can create and disable a platform coupon", async ({ page }) =>
 });
 
 test("Organization Admin can create an organizer-funded coupon", async ({ page }) => {
-  await installMocks(page, { user: organizationAdmin, coupons: [] });
-  await page.goto("/organization/coupons");
-  await page.getByRole("button", { name: "New coupon" }).click();
+  const requests = await installMocks(page, { user: organizationAdmin, coupons: [] });
+  await page.goto(`/organization/coupons?eventId=${eventId}`);
+  await expect(page.getByLabel("Custom code (optional)")).toBeVisible();
   await page.getByLabel("Custom code (optional)").fill("ORG10");
   await page.getByLabel("Discount percentage").fill("10");
-  await page.getByRole("button", { name: "Create coupon" }).click();
+  await page.locator("form").getByRole("button", { name: "Create coupon" }).click();
   await expect(page.getByText("ORG10", { exact: true })).toBeVisible();
   await expect(page.getByText(/Organizer-funded discounts reduce eligible organizer revenue/)).toBeVisible();
+  const request = requests.find((item) => item.path === "/coupons/organization" && item.method === "POST");
+  expect(request.body.fundingType).toBe("ORGANIZER_FUNDED");
+  expect(request.body.eventId).toBe(eventId);
+});
+
+test("Organization Admin can create a private customer giveaway", async ({ page }) => {
+  const requests = await installMocks(page, { user: organizationAdmin, coupons: [] });
+  await page.goto(`/organization/coupons?eventId=${eventId}`);
+  await page.getByRole("button", { name: "Private Customer Giveaway" }).click();
+  await page.getByLabel("Search organization customers").fill("ada@example.com");
+  await page.getByRole("button", { name: /Ada Customer/ }).click();
+  await page.getByLabel("Custom code (optional)").fill("PRIVATE10");
+  await page.locator("form").getByRole("button", { name: "Create coupon" }).click();
+  const request = requests.find((item) => item.path === "/coupons/organization" && item.method === "POST");
+  expect(request.body.fundingType).toBe("ORGANIZER_FUNDED");
+  expect(request.body.customerIds).toEqual([customer._id]);
+});
+
+test("Super Admin creates an event coupon from event and ticket selections", async ({ page }) => {
+  const requests = await installMocks(page, { user: platformAdmin, coupons: [] });
+  await page.goto("/super-admin/dashboard/coupons");
+  await page.getByRole("button", { name: "New coupon" }).click();
+  await page.getByRole("button", { name: /Event coupon/ }).click();
+  await page.getByRole("button", { name: /Launch Event/ }).click();
+  await expect(page.getByText("VIP", { exact: true })).toBeVisible();
+  await page.getByLabel("Discount percentage").fill("25");
+  await page.getByRole("button", { name: "Create coupon" }).click();
+  const request = requests.find((item) => item.path === "/coupons/platform" && item.method === "POST");
+  expect(request.body.eventId).toBe("64b64b64b64b64b64b64bc10");
+  expect(request.body.ticketTypeIds).toBeUndefined();
+});
+
+test("Super Admin creates a private customer coupon through search and selection", async ({ page }) => {
+  const requests = await installMocks(page, { user: platformAdmin, coupons: [] });
+  await page.goto("/super-admin/dashboard/coupons");
+  await page.getByRole("button", { name: "New coupon" }).click();
+  await page.getByRole("button", { name: /Private customer coupon/ }).click();
+  await page.getByLabel("Search registered customers").fill("ada@example.com");
+  await page.getByRole("button", { name: /Ada Customer/ }).click();
+  await page.getByLabel("Custom code (optional)").fill("PRIVATE25");
+  await page.getByRole("button", { name: "Create coupon" }).click();
+  const request = requests.find((item) => item.path === "/coupons/platform" && item.method === "POST");
+  expect(request.body.customerIds).toEqual(["64b64b64b64b64b64b64bc13"]);
+  expect(request.body.code).toBe("PRIVATE25");
 });
 
 test("Customer and manager roles cannot access coupon management", async ({ page }) => {

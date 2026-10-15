@@ -85,6 +85,7 @@ async function installMocks(page) {
 
 async function expectPostponedActions(page) {
   await expect(page.getByRole("button", { name: "Resume", exact: true })).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("button", { name: "Create Coupon", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Postpone", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Mark as Completed", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Cancel Event", exact: true })).toBeVisible();

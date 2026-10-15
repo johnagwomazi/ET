@@ -2,6 +2,7 @@ import Coupon from "../models/coupon.model.js";
 import CouponRedemption from "../models/couponRedemption.model.js";
 import Order from "../models/order.model.js";
 import { COUPON_REDEMPTION_STATUS, COUPON_STATUS } from "../constants/coupon.constants.js";
+import { trustedOperator } from "../utils/trustedFilter.util.js";
 
 function applySession(query, options = {}) {
   return options.session ? query.session(options.session) : query;
@@ -104,10 +105,10 @@ export async function reserveCouponRedemption({ couponId, customerId, orderId },
       _id: couponId,
       status: COUPON_STATUS.ACTIVE,
       $and: [
-        { $or: [{ startsAt: null }, { startsAt: { $lte: now } }] },
-        { $or: [{ endsAt: null }, { endsAt: { $gt: now } }] },
-        { $expr: { $or: [{ $eq: ["$maxRedemptions", null] }, { $lt: ["$redemptionCount", "$maxRedemptions"] }] } },
-        { $or: [{ customers: { $size: 0 } }, { customers: customerId }] },
+        { $or: [{ startsAt: null }, { startsAt: trustedOperator({ $lte: now }) }] },
+        { $or: [{ endsAt: null }, { endsAt: trustedOperator({ $gt: now }) }] },
+        { $expr: trustedOperator({ $or: [{ $eq: ["$maxRedemptions", null] }, { $lt: ["$redemptionCount", "$maxRedemptions"] }] }) },
+        { $or: [{ customers: trustedOperator({ $size: 0 }) }, { customers: customerId }] },
       ],
     },
     { $inc: { redemptionCount: 1 } },
@@ -181,7 +182,7 @@ export async function releaseExpiredCouponReservations(before, options = {}) {
   if (!options.session) throw new Error("Expired coupon cleanup requires a database transaction session");
   const redemptions = await CouponRedemption.find({
     status: COUPON_REDEMPTION_STATUS.RESERVED,
-    reservedAt: { $lt: before },
+    reservedAt: trustedOperator({ $lt: before }),
   }).select("_id order").populate("order", "paymentStatus orderStatus").session(options.session).limit(100);
 
   let released = 0;

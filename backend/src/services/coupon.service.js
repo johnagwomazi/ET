@@ -7,8 +7,9 @@ import * as couponRepository from "../repositories/coupon.repository.js";
 import * as eventRepository from "../repositories/event.repository.js";
 import * as ticketTypeRepository from "../repositories/ticketType.repository.js";
 import * as couponRewardRepository from "../repositories/couponReward.repository.js";
+import * as userRepository from "../repositories/user.repository.js";
 
-const defaultDependencies = { authRepository, couponRepository, eventRepository, ticketTypeRepository, couponRewardRepository };
+const defaultDependencies = { authRepository, couponRepository, eventRepository, ticketTypeRepository, couponRewardRepository, userRepository };
 
 function getId(value) {
   if (!value) return null;
@@ -72,6 +73,21 @@ async function validateOrganizerScope(organizationId, payload, dependencies) {
       organizationId
     );
     if (!ticketType) return serviceError("Ticket type does not belong to this organization", HTTP_STATUS.FORBIDDEN);
+  }
+
+  if ((payload.customerIds || []).length > 0 && dependencies.userRepository?.findOrganizationMembers) {
+    const customers = await dependencies.userRepository.findOrganizationMembers(
+      {
+        _id: { $in: payload.customerIds },
+        organization: organizationId,
+        role: USER_ROLES.CUSTOMER,
+        isDeleted: false,
+      },
+      { limit: payload.customerIds.length }
+    );
+    if (customers.length !== payload.customerIds.length) {
+      return serviceError("One or more selected customers do not belong to this organization", HTTP_STATUS.FORBIDDEN);
+    }
   }
 }
 

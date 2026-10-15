@@ -141,7 +141,7 @@ function getFailureResult(error) {
     outcome,
     ticket: error?.data?.ticket || null,
     attendance: error?.data?.attendance || null,
-    reason: TICKET_VALIDATION_META[outcome]?.message || "The ticket could not be checked.",
+    reason: error?.message || TICKET_VALIDATION_META[outcome]?.message || "The ticket could not be checked.",
   };
 }
 

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Gift, Plus, RefreshCw, Save } from "lucide-react";
+import { Gift, Plus, RefreshCw, Save, TicketPercent } from "lucide-react";
+import { ROUTE_PATHS } from "../../routes/routePaths";
 import Button from "../ui/Button";
 import Card from "../ui/Card";
 import Input from "../ui/Input";
@@ -30,6 +32,7 @@ function toDateOrNull(value) {
 }
 
 function AdminTicketManagementPanel({ event, canManage = false }) {
+  const navigate = useNavigate();
   const eventId = event?._id || event?.id;
   const [ticketTypes, setTicketTypes] = useState([]);
   const [inventory, setInventory] = useState(null);
@@ -164,9 +167,17 @@ function AdminTicketManagementPanel({ event, canManage = false }) {
           <h3 className="mt-1 text-lg font-semibold text-white">Ticket management</h3>
           <p className="mt-2 text-sm text-slate-400">Create and update ticket types while preserving historical order prices.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" onClick={loadTicketTypes} isLoading={isLoading}><RefreshCw className="h-4 w-4" />Refresh</Button>
           <Button variant="secondary" size="sm" onClick={() => setComplimentaryOpen(true)} disabled={!ticketTypes.length || ["CANCELED", "COMPLETED"].includes(event?.status)}><Gift className="h-4 w-4" />Complimentary</Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate(`${ROUTE_PATHS.ORGANIZATION_COUPONS}?eventId=${encodeURIComponent(eventId)}`)}
+            disabled={!eventId || ["CANCELED", "COMPLETED"].includes(event?.status)}
+          >
+            <TicketPercent className="h-4 w-4" />Create Coupon
+          </Button>
           <Button size="sm" onClick={openCreate}><Plus className="h-4 w-4" />New ticket</Button>
         </div>
       </div>

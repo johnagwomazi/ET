@@ -83,8 +83,8 @@ function createDependencies(overrides = {}) {
     eventName: "Launch Night",
     status: EVENT_STATUS.PUBLISHED,
     organization,
-    startAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    endAt: new Date(Date.now() + 26 * 60 * 60 * 1000),
+    startAt: new Date(Date.now() - 60 * 60 * 1000),
+    endAt: new Date(Date.now() + 60 * 60 * 1000),
     capacity: 100,
     allocatedTicketQuantity: 2,
   };
@@ -1198,6 +1198,52 @@ test("manager ticket check-in validates event scope and records attendance once"
   assert.equal(dependencies.eventAttendanceRepository.records.length, 1);
 });
 
+test("check-in schedule uses inclusive boundaries and server-side event time", () => {
+  const startAt = new Date("2026-01-15T12:00:00.000Z");
+  const endAt = new Date("2026-01-15T14:00:00.000Z");
+  const event = { status: EVENT_STATUS.PUBLISHED, startAt, endAt };
+
+  assert.match(
+    ticketingService.getEventCheckInTimeValidation(event, new Date(startAt.getTime() - 1)),
+    /Check-in is not available yet\. This event starts on .*13:00/,
+  );
+  assert.equal(ticketingService.getEventCheckInTimeValidation(event, startAt), null);
+  assert.equal(ticketingService.getEventCheckInTimeValidation(event, new Date("2026-01-15T13:00:00.000Z")), null);
+  assert.equal(ticketingService.getEventCheckInTimeValidation(event, endAt), null);
+  assert.match(
+    ticketingService.getEventCheckInTimeValidation(event, new Date(endAt.getTime() + 1)),
+    /Check-in has closed\. This event ended on/,
+  );
+});
+
+test("QR and manual check-in validation reject tickets before the event starts", async () => {
+  const { dependencies, state } = createDependencies();
+  await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
+  state.event.startAt = new Date(Date.now() + 60 * 60 * 1000);
+  state.event.endAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  dependencies.now = () => new Date();
+
+  const qrResult = await ticketingService.validateEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    { token: state.tickets[0].qrToken },
+    dependencies,
+  );
+  const manualResult = await ticketingService.validateEventTicket(
+    ids.organization,
+    ids.manager,
+    ids.event,
+    { code: state.tickets[1].checkInCode },
+    dependencies,
+  );
+
+  assert.equal(qrResult.outcome, TICKET_VALIDATION_OUTCOME.EVENT_NOT_CHECKIN_ELIGIBLE);
+  assert.match(qrResult.reason, /Check-in is not available yet/);
+  assert.equal(manualResult.outcome, TICKET_VALIDATION_OUTCOME.EVENT_NOT_CHECKIN_ELIGIBLE);
+  assert.match(manualResult.reason, /Check-in is not available yet/);
+});
+
 test("Phase 5 ticket validation returns stable outcomes without exposing QR secrets", async () => {
   const { dependencies, state } = createDependencies();
   await ticketingService.verifyPayment(ids.customer, "pay_test", dependencies);
@@ -1272,6 +1318,10 @@ test("Phase 5 ticket validation rejects invalid ticket, order, type, and event s
     {
       expected: TICKET_VALIDATION_OUTCOME.EVENT_NOT_CHECKIN_ELIGIBLE,
       mutate(state) { state.event.status = EVENT_STATUS.CANCELED; },
+    },
+    {
+      expected: TICKET_VALIDATION_OUTCOME.EVENT_NOT_CHECKIN_ELIGIBLE,
+      mutate(state) { state.event.status = EVENT_STATUS.POSTPONED; },
     },
   ];
 

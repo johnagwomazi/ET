@@ -229,6 +229,8 @@ function logPaymentError(operation, error, context = {}) {
     .join(" ");
   const message = `[${operation}]${identifiers ? ` ${identifiers}` : ""}: ${error?.message || String(error)}`;
   const loggedError = new Error(message);
+  loggedError.name = error?.name || "CheckoutError";
+  if (error?.code) loggedError.code = error.code;
   if (error?.stack && process.env.NODE_ENV !== "production") loggedError.stack = `${loggedError.stack}\nCaused by: ${error.stack}`;
   logger.error(loggedError);
 }
@@ -573,9 +575,11 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
   let reservationCommitted = false;
   let providerInitialized = false;
   let eventCapacityReserved = false;
+  let checkoutStage = "transaction_start";
 
   try {
     const result = await runInTransaction(dependencies, async (session) => {
+      checkoutStage = "reserve_inventory_and_build_order";
       const orderItems = [];
       const pricingByTicketType = new Map((couponPricing?.items || []).map((item) => [String(item.ticketTypeId), item]));
       let subtotal = 0;
@@ -695,6 +699,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
       );
 
       if (couponPricing?.coupon) {
+        checkoutStage = "reserve_coupon_redemption";
         if (!dependencies.couponRepository?.reserveCouponRedemption) {
           throw checkoutFailure("Coupon redemption is temporarily unavailable", HTTP_STATUS.SERVICE_UNAVAILABLE);
         }
@@ -711,6 +716,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
     reservationCommitted = true;
 
     if (Number(result.order.total || 0) === 0) {
+      checkoutStage = "complete_free_order";
       const paidResult = await markOrderPaidFromProvider(
         paymentReference,
         {
@@ -753,6 +759,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
       };
     }
 
+    checkoutStage = "initialize_paystack";
     const payment = await dependencies.paystackService.initializeTransaction({
       email: payload.customerInfo.email,
       amount: result.order.total,
@@ -794,6 +801,7 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
         statusCode: providerFailureStatus(payment),
       };
     }
+    checkoutStage = "persist_payment_initialization";
     const updatedOrder = await dependencies.orderRepository.updateOrderByReference(orderReference, {
       paymentStatus: payment?.status ? PAYMENT_STATUS.INITIALIZED : PAYMENT_STATUS.PENDING,
       metadata: {
@@ -818,7 +826,13 @@ export async function createCheckoutOrder(customerId, payload, dependencies = de
     if (error?.checkoutResult) {
       logger.warn(`[checkout] orderReference=${orderReference} paymentReference=${paymentReference}: ${error.message}`);
     } else {
-      logPaymentError("checkout", error, { orderReference, paymentReference });
+      logPaymentError("checkout", error, {
+        orderReference,
+        paymentReference,
+        stage: checkoutStage,
+        errorName: error?.name,
+        errorCode: error?.code,
+      });
     }
     if ((!transactionUsed || reservationCommitted) && !providerInitialized) {
       const failedOrder = reservationCommitted
@@ -1528,6 +1542,33 @@ function isEventCheckInEligible(event) {
   return event?.status === EVENT_STATUS.PUBLISHED;
 }
 
+const CHECK_IN_DISPLAY_TIME_ZONE = "Africa/Lagos";
+
+function formatCheckInSchedule(value, event) {
+  return new Intl.DateTimeFormat("en-NG", {
+    dateStyle: "full",
+    timeStyle: "short",
+    timeZone: event?.timeZone || event?.timezone || CHECK_IN_DISPLAY_TIME_ZONE,
+  }).format(value);
+}
+
+export function getEventCheckInTimeValidation(event, now = new Date()) {
+  if (!(event?.startAt instanceof Date) || Number.isNaN(event.startAt.getTime())
+    || !(event?.endAt instanceof Date) || Number.isNaN(event.endAt.getTime())) {
+    return "Event schedule is not available for check-in";
+  }
+
+  if (now < event.startAt) {
+    return `Check-in is not available yet. This event starts on ${formatCheckInSchedule(event.startAt, event)}.`;
+  }
+
+  if (now > event.endAt) {
+    return `Check-in has closed. This event ended on ${formatCheckInSchedule(event.endAt, event)}.`;
+  }
+
+  return null;
+}
+
 async function getEventTicketOperatorContext(organizationId, actorUserId, eventId, dependencies, options = {}) {
   const [actorUser, event] = await Promise.all([
     dependencies.authRepository.findAuthUserById(actorUserId),
@@ -1608,6 +1649,19 @@ async function getEventTicketValidation(organizationId, actorUserId, eventId, pa
     return buildTicketValidationResult(
       TICKET_VALIDATION_OUTCOME.EVENT_NOT_CHECKIN_ELIGIBLE,
       "Event is not eligible for check-in",
+      null,
+      HTTP_STATUS.BAD_REQUEST
+    );
+  }
+
+  const checkInTimeError = getEventCheckInTimeValidation(
+    context.event,
+    typeof dependencies.now === "function" ? dependencies.now() : new Date()
+  );
+  if (checkInTimeError) {
+    return buildTicketValidationResult(
+      TICKET_VALIDATION_OUTCOME.EVENT_NOT_CHECKIN_ELIGIBLE,
+      checkInTimeError,
       null,
       HTTP_STATUS.BAD_REQUEST
     );

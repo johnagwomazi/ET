@@ -54,6 +54,8 @@ const NotFoundPage = lazy(() => import("../pages/NotFoundPage"));
 const GuestTicketPage = lazy(() => import("../pages/GuestTicketPage"));
 const InvitationPage = lazy(() => import("../pages/InvitationPage"));
 const CouponManagementPage = lazy(() => import("../pages/coupons/CouponManagementPage"));
+const OrganizerCouponManagementPage = lazy(() => import("../pages/coupons/OrganizerCouponManagementPage"));
+const SuperAdminCouponManagementPage = lazy(() => import("../pages/coupons/SuperAdminCouponManagementPage"));
 const CustomerRewardsPage = lazy(() => import("../pages/customer/CustomerRewardsPage"));
 
 const router = createBrowserRouter([
@@ -315,7 +317,7 @@ const router = createBrowserRouter([
                 element: (
                   <RoleRoute allowedRoles={[USER_ROLES.ADMIN]}>
                     <PermissionRoute permission={ORGANIZATION_PERMISSIONS.ORGANIZATION_UPDATE}>
-                      <CouponManagementPage mode="organization" />
+                      <OrganizerCouponManagementPage />
                     </PermissionRoute>
                   </RoleRoute>
                 ),
@@ -398,7 +400,7 @@ const router = createBrowserRouter([
               },
               {
                 path: ROUTE_PATHS.SUPER_ADMIN_COUPONS,
-                element: <CouponManagementPage mode="platform" />,
+                element: <SuperAdminCouponManagementPage />,
               },
               {
                 path: ROUTE_PATHS.SUPER_ADMIN_ANALYTICS,

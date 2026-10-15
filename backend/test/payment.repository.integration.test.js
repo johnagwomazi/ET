@@ -21,6 +21,8 @@ import Ticket from "../src/models/ticket.model.js";
 import TicketType from "../src/models/ticketType.model.js";
 import User from "../src/models/user.model.js";
 import Withdrawal from "../src/models/withdrawal.model.js";
+import Coupon from "../src/models/coupon.model.js";
+import CouponRedemption from "../src/models/couponRedemption.model.js";
 import * as authRepository from "../src/repositories/auth.repository.js";
 import * as eventRepository from "../src/repositories/event.repository.js";
 import * as orderRepository from "../src/repositories/order.repository.js";
@@ -30,10 +32,12 @@ import * as refundRepository from "../src/repositories/refund.repository.js";
 import * as ticketRepository from "../src/repositories/ticket.repository.js";
 import * as ticketTypeRepository from "../src/repositories/ticketType.repository.js";
 import * as withdrawalRepository from "../src/repositories/withdrawal.repository.js";
+import * as couponRepository from "../src/repositories/coupon.repository.js";
+import * as couponPricingService from "../src/services/couponPricing.service.js";
 import * as ticketingService from "../src/services/ticketing.service.js";
 
 const databaseName = `evt_pay_test_${process.pid}_${Date.now().toString(36)}`;
-const collections = [Event, Order, Organization, PaymentEvent, Refund, Ticket, TicketType, User, Withdrawal];
+const collections = [Event, Order, Organization, PaymentEvent, Refund, Ticket, TicketType, User, Withdrawal, Coupon, CouponRedemption];
 
 function ids() {
   return {
@@ -352,6 +356,79 @@ test("failed Paystack initialization releases real inventory exactly once", asyn
   assert.equal(result.statusCode, 502);
   assert.equal(order.paymentStatus, PAYMENT_STATUS.FAILED);
   assert.equal((await TicketType.findById(ticketType._id)).soldQuantity, 0);
+});
+
+test("coupon checkout reserves against real MongoDB and initializes Paystack", async () => {
+  const customer = await User.create({
+    firstName: "Coupon",
+    lastName: "Buyer",
+    email: "coupon-buyer@example.com",
+    password: "not-used-in-this-test",
+    role: "CUSTOMER",
+    isEmailVerified: true,
+    accountStatus: "ACTIVE",
+  });
+  const organization = await Organization.create({
+    organizationName: "Coupon Checkout Organization",
+    businessEmail: "coupon-checkout@example.com",
+  });
+  const event = await Event.create({
+    eventName: "Coupon Checkout Event",
+    slug: "coupon-checkout-event",
+    startAt: new Date(Date.now() + 86400000),
+    endAt: new Date(Date.now() + 90000000),
+    capacity: 20,
+    status: EVENT_STATUS.PUBLISHED,
+    organization: organization._id,
+    createdBy: customer._id,
+  });
+  const ticketType = await createTicketType({
+    event: event._id,
+    organization: organization._id,
+    createdBy: customer._id,
+    quantity: 4,
+  });
+  const coupon = await couponRepository.createCoupon({
+    code: "MONGO10",
+    fundingType: "PLATFORM_FUNDED",
+    createdBy: customer._id,
+    discountPercent: 10,
+    event: event._id,
+    ticketTypes: [],
+    customers: [],
+    status: "ACTIVE",
+    maxRedemptions: 2,
+  });
+  const dependencies = {
+    mongoose,
+    authRepository,
+    eventRepository,
+    orderRepository,
+    ticketTypeRepository,
+    couponRepository,
+    couponPricingService,
+    paystackService: {
+      async initializeTransaction() {
+        return {
+          configured: true,
+          status: true,
+          data: { authorization_url: "https://checkout.paystack.test/coupon", access_code: "coupon" },
+        };
+      },
+    },
+  };
+
+  const result = await ticketingService.createCheckoutOrder(customer._id, {
+    eventId: event._id.toString(),
+    customerInfo: { name: "Coupon Buyer", phone: "+2348012345678", email: customer.email },
+    items: [{ ticketTypeId: ticketType._id.toString(), quantity: 1 }],
+    couponCode: coupon.code,
+    idempotencyKey: "mongo-coupon-checkout-key",
+  }, dependencies);
+
+  assert.equal(result.payment.authorizationUrl, "https://checkout.paystack.test/coupon");
+  assert.equal(result.order.total, 2250);
+  assert.equal(await CouponRedemption.countDocuments({ coupon: coupon._id, status: "RESERVED" }), 1);
 });
 
 test("browser verification and webhook race issue tickets and notifications exactly once", async () => {
